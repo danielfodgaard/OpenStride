@@ -4,7 +4,7 @@ import os
 import re
 from pathlib import Path
 
-from app.models import ActivitySummary, PlanFile
+from app.models import ActivitySummary, PlanFile, ReviewFile
 
 DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
@@ -88,3 +88,16 @@ def list_activities(plan_id: str) -> list[ActivitySummary]:
         for path in sorted((DATA_DIR / "activities").glob("*.json"))  # ids start with the start time
     ]
     return [activity for activity in activities if activity.plan_id == plan_id]
+
+
+def review_path(activity_id: str) -> Path:
+    return DATA_DIR / "reviews" / f"{safe_id(activity_id)}.json"
+
+
+def save_review(review_file: ReviewFile) -> None:
+    write_json(review_path(review_file.activity_id), review_file.model_dump_json(indent=2))
+
+
+def load_review(activity_id: str) -> ReviewFile | None:
+    path = review_path(activity_id)
+    return ReviewFile.model_validate_json(path.read_text()) if path.exists() else None

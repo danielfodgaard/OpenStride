@@ -7,7 +7,7 @@ import fitdecode
 import gpxpy
 from gpxpy.gpx import GPXException
 
-from app import lifecycle, storage
+from app import generator, lifecycle, review, storage
 from app.models import ActivitySummary, Lap, Match, PlanFile
 
 MOVING_KM_PER_S = 0.0005  # below 0.5 m/s the runner has stopped
@@ -275,8 +275,19 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
             continue
         activity.match = match_activity(activity, plan_file)
         storage.save_activity(activity)
-        results.append({"file": name, "status": "imported", "activity": activity.model_dump(mode="json")})
+        result = {"file": name, "status": "imported", "activity": activity.model_dump(mode="json")}
+        try:
+            review.review_activity(activity)
+        except generator.GenerationError as error:
+            # The run is saved either way; the review can be re-run.
+            result["message"] = f"{name}: imported, but the review failed: {error}"
+        results.append(result)
     return results
+
+
+def with_review(activity: ActivitySummary) -> dict:
+    review_file = storage.load_review(activity.id)
+    return activity.model_dump(mode="json") | {"review": review_file.model_dump(mode="json") if review_file else None}
 
 
 def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[int, int] | None) -> ActivitySummary:

@@ -23,6 +23,10 @@ class FakeClient:
         self.prompts = []
         self.messages = self
 
+    def create(self, **kwargs):
+        self.prompts.append(kwargs["messages"][0]["content"])
+        return self.replies.pop(0)
+
     def stream(self, **kwargs):
         self.prompts.append(kwargs["messages"][0]["content"])
         final = SimpleNamespace(get_final_message=lambda: self.replies.pop(0))

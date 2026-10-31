@@ -68,16 +68,36 @@ function actualText(activity) {
 }
 
 // One activity per line: a session can have several, e.g. a run split in two.
-function actualCell(activities) {
+function actualCell(activities, controls) {
   const cell = el("div");
-  for (const activity of activities) cell.append(el("div", actualText(activity)));
+  for (const activity of activities) {
+    cell.append(el("div", actualText(activity)));
+    if (activity.user_note) cell.append(el("div", `Note: ${activity.user_note}`));
+    if (activity.rpe) cell.append(el("div", `RPE ${activity.rpe}`));
+    if (controls) cell.append(controls(activity));
+  }
   return cell;
 }
 
-function weekRows(week, activities) {
+function reviewCell(activities) {
+  const cell = el("div");
+  for (const { review } of activities) {
+    if (!review) continue;
+    const box = el("details");
+    box.append(el("summary", `${review.review.completion} — ${review.review.headline}`));
+    const points = el("ul");
+    for (const text of review.review.observations) points.append(el("li", text));
+    for (const text of review.review.flags) points.append(el("li", `Flag: ${text}`));
+    box.append(points);
+    cell.append(box);
+  }
+  return cell;
+}
+
+function weekRows(week, activities, controls) {
   const onWeekDay = (i) => activities.filter((a) => a.date === addDays(week.start_date, i) && a.match.session_index === -1);
   const unplannedRow = (activity, i) => [
-    activity.date, DAYS[i], "unplanned", activity.source_file, "", "", "", activity.user_note, actualText(activity), "",
+    activity.date, DAYS[i], "unplanned", activity.source_file, "", "", "", "", actualCell([activity], controls), reviewCell([activity]),
   ];
   return DAYS.flatMap((day, i) => {
     const sessions = week.sessions.filter((s) => s.day === day);
@@ -93,8 +113,8 @@ function weekRows(week, activities) {
         s.duration_min ? `${s.duration_min} min` : "",
         s.target_pace,
         details(s),
-        actualCell(matched),
-        "",
+        actualCell(matched, controls),
+        reviewCell(matched),
       ];
     });
     if (!rows.length) rows.push([addDays(week.start_date, i), day, "Rest", "", "", "", "", "", "", ""]);
@@ -103,7 +123,8 @@ function weekRows(week, activities) {
 }
 
 // `actuals` adds the Actual and Review columns; `activities` are this plan's imported runs.
-function renderPlan(planFile, { actuals = false, activities = [] } = {}) {
+// `controls(activity)` optionally returns edit controls for a run.
+function renderPlan(planFile, { actuals = false, activities = [], controls } = {}) {
   if (!["1.0", "2.0"].includes(planFile?.schema_version)) {
     throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0 or 2.0`);
   }
@@ -130,7 +151,7 @@ function renderPlan(planFile, { actuals = false, activities = [] } = {}) {
   for (const week of plan.weeks) {
     nodes.push(el("h2", `Week ${week.week_number} — ${week.phase} — ${week.start_date} — ${week.planned_km} km`));
     nodes.push(el("p", week.focus));
-    const rows = weekRows(week, activities);
+    const rows = weekRows(week, activities, controls);
     nodes.push(actuals ? table(ACTUAL_COLUMNS, rows) : table(COLUMNS, rows.map((row) => row.slice(0, COLUMNS.length))));
   }
   const planDays = new Set(plan.weeks.flatMap((week) => DAYS.map((_, i) => addDays(week.start_date, i))));

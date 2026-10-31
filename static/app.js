@@ -240,6 +240,46 @@ async function plansView() {
   );
 }
 
+// Edit a run's note, RPE and match, or re-run its review.
+function activityControls(activity, planFile) {
+  const box = el("details");
+  box.append(el("summary", "Edit"));
+  const status = statusLine();
+  const note = el("input");
+  note.value = activity.user_note;
+  note.setAttribute("aria-label", "Note");
+  const rpe = el("select");
+  rpe.setAttribute("aria-label", "RPE");
+  rpe.add(new Option("RPE not given", "0"));
+  for (let i = 1; i <= 10; i += 1) rpe.add(new Option(String(i), String(i)));
+  rpe.value = String(activity.rpe);
+  const match = el("select");
+  match.setAttribute("aria-label", "Planned session");
+  match.add(new Option("Unplanned", "0:-1"));
+  for (const week of planFile.plan.weeks) {
+    week.sessions.forEach((session, index) => {
+      match.add(new Option(`${session.date} ${session.title}`, `${week.week_number}:${index}`));
+    });
+  }
+  match.value = `${activity.match.week_number}:${activity.match.session_index}`;
+  const path = `/api/activities/${encodeURIComponent(activity.id)}`;
+  const save = button("Save", status, async () => {
+    const [week_number, session_index] = match.value.split(":").map(Number);
+    await api(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_note: note.value, rpe: Number(rpe.value), match: { week_number, session_index } }),
+    });
+    await route();
+  });
+  const rerun = button("Re-run review", status, async () => {
+    await api(`${path}/review`, { method: "POST" });
+    await route();
+  }, "Reviewing…");
+  box.append(note, rpe, match, save, rerun, status);
+  return box;
+}
+
 function importSection(status) {
   const files = el("input");
   files.type = "file";
@@ -301,7 +341,11 @@ async function planView(id) {
   nodes.push(status, planDiv());
   if (planStatus === "active") nodes.push(importSection(statusLine()));
   main.replaceChildren(...nodes);
-  fullRender(planFile, status, { actuals: !isDraft, activities });
+  fullRender(planFile, status, {
+    actuals: !isDraft,
+    activities,
+    controls: planStatus === "active" ? (activity) => activityControls(activity, planFile) : undefined,
+  });
 }
 
 async function homeView() {

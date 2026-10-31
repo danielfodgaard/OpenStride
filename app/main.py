@@ -8,9 +8,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, lifecycle, storage
+from app import activities, lifecycle, review, storage
 from app.generator import GenerationError, generate_plan
-from app.models import ActivitySummary, PlanFile, PlanRequest
+from app.models import ActivitySummary, PlanFile, PlanRequest, ReviewFile
 
 load_dotenv()
 
@@ -107,14 +107,19 @@ def upload_activities(files: list[UploadFile], user_note: str = Form(""), rpe: i
 
 
 @app.get("/api/activities")
-def get_activities(plan_id: str) -> list[ActivitySummary]:
-    return storage.list_activities(plan_id)
+def get_activities(plan_id: str) -> list[dict]:
+    return [activities.with_review(activity) for activity in storage.list_activities(plan_id)]
 
 
 @app.patch("/api/activities/{activity_id}")
 def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
     match = edit.match and (edit.match.week_number, edit.match.session_index)
     return activities.edit(activity_id, edit.user_note, edit.rpe, match)
+
+
+@app.post("/api/activities/{activity_id}/review")
+def rerun_review(activity_id: str) -> ReviewFile:
+    return review.review_activity(storage.load_activity(activity_id))
 
 
 # Mounted last so it never shadows API routes; html=True serves index.html at /.

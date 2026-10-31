@@ -186,3 +186,25 @@ class ActivitySummary(BaseModel):
     user_note: str
     rpe: int
     match: Match
+
+
+class RunReview(BaseModel):
+    completion: Literal["as_planned", "partly", "missed_targets", "unplanned"]
+    headline: str
+    observations: list[str]
+    flags: list[str]
+    effort: Literal["easier_than_planned", "as_planned", "harder_than_planned"]
+
+
+class ReviewMeta(BaseModel):
+    """Envelope for every saved LLM output other than a plan."""
+
+    model: str
+    created_at: str
+    usage: Usage
+
+
+class ReviewFile(BaseModel):
+    activity_id: str
+    review: RunReview
+    meta: ReviewMeta

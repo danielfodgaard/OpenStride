@@ -32,6 +32,13 @@ class GenerationError(Exception):
     """A failure with a message fit to show the runner."""
 
 
+def make_client() -> anthropic.Anthropic:
+    # Only the offline demo runs without a key. The SDK would fail with an obscure TypeError.
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise GenerationError("This needs an API key, and none is set.")
+    return anthropic.Anthropic()
+
+
 def call_claude(client, model, system, user_prompt, output_model, usage, max_tokens=MAX_TOKENS, stream=True):
     """One structured Claude call. Adds to `usage`; returns an `output_model` instance."""
     request = dict(
@@ -79,7 +86,7 @@ def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
 
 def build_plan(request, system, make_prompt, client, today, plan_id=None) -> PlanFile:
     """Generate, validate with one retry, and wrap in a PlanFile. `make_prompt` shapes the user prompt."""
-    client = client or anthropic.Anthropic()
+    client = client or make_client()
     model = os.environ.get("PLAN_MODEL") or os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL  # v1 name
     today = today or clock.today()
     now = datetime.now(timezone.utc)
