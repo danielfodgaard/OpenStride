@@ -9,7 +9,7 @@ Base the assessment on the planned-vs-actual table, the runs, their reviews and 
 observations are short points on what has happened. suggestions are short and for the athlete to consider; they are never applied automatically."""
 
 
-def build_user_prompt(plan_file: PlanFile, table: dict, activities: list[dict], today) -> str:
+def build_user_prompt(plan_file: PlanFile, table: dict, activities: list[dict], metrics: str, today) -> str:
     return f"""Today: {today.isoformat()}
 
 Original request:
@@ -24,5 +24,8 @@ Current plan, version {plan_file.meta.version}:
 Planned vs actual:
 {json.dumps(table, indent=2)}
 
-Every run so far, with its review, the athlete's notes and RPE:
-{json.dumps(activities, indent=2)}"""
+Every session so far, with its review, the athlete's notes and RPE:
+{json.dumps(activities, indent=2)}
+
+Training metrics (load, fitness, fatigue, form, weekly volume, trends):
+{metrics}"""

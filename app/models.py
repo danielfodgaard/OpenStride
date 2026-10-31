@@ -211,6 +211,8 @@ class ActivitySummary(BaseModel):
     user_note: str
     rpe: int
     match: Match
+    modality: Literal["run", "cross"] = "run"
+    sport: str = "running"
 
 
 class RunReview(BaseModel):
@@ -272,3 +274,54 @@ class ProgressFile(BaseModel):
     plan_id: str
     summary: ProgressSummary
     meta: ReviewMeta
+
+
+class DayLoad(BaseModel):
+    date: date
+    load: float
+    ctl: float
+    atl: float
+    tsb: float
+    km: float
+
+
+class WeekVolume(BaseModel):
+    week_number: int
+    start_date: date
+    planned_km: float
+    actual_km: float
+    planned_sessions: int
+    completed_sessions: int
+    planned_strength: int
+    completed_strength: int
+    planned_cross_min: float
+    actual_cross_min: float
+
+
+class TrendPoint(BaseModel):
+    date: date
+    activity_id: str
+    type: str
+    distance_km: float
+    avg_pace_s: int
+    avg_hr: int
+    efficiency: float
+
+
+class Snapshot(BaseModel):
+    ctl: float
+    atl: float
+    tsb: float
+    ctl_7d_change: float
+    weekly_km_4wk_avg: float
+    easy_pace_4wk_avg_s: int
+    easy_hr_4wk_avg: int
+
+
+class Metrics(BaseModel):
+    as_of: date
+    days: list[DayLoad]
+    weeks: list[WeekVolume]
+    easy_runs: list[TrendPoint]
+    quality_runs: list[TrendPoint]
+    current: Snapshot

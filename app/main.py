@@ -11,9 +11,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, lifecycle, progress, review, storage
+from app import activities, adapt, lifecycle, metrics, progress, review, storage
 from app.generator import GenerationError, generate_plan
-from app.models import ActivitySummary, PlanFile, PlanRequest, ProgressFile, Proposal, ReviewFile
+from app.models import ActivitySummary, Metrics, PlanFile, PlanRequest, ProgressFile, Proposal, ReviewFile
 
 load_dotenv()
 
@@ -189,6 +189,11 @@ def get_progress(plan_id: str) -> dict:
 @app.post("/api/plans/{plan_id}/progress/summary")
 def create_progress_summary(plan_id: str) -> ProgressFile:
     return progress.summarise(plan_id)
+
+
+@app.get("/api/plans/{plan_id}/metrics")
+def get_metrics(plan_id: str) -> Metrics:
+    return metrics.refresh(lifecycle.require_plan(plan_id))
 
 
 @app.get("/api/plans/{plan_id}/usage")

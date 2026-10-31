@@ -11,7 +11,7 @@ Keep it short and concrete, with real numbers. observations has 1 to 4 short poi
 Use completion "unplanned" when no session was planned."""
 
 
-def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile, recent: list[ActivitySummary]) -> str:
+def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile, recent: list[ActivitySummary], metrics: str) -> str:
     session = None
     if activity.match.session_index >= 0:
         week = next(w for w in plan_file.plan.weeks if w.week_number == activity.match.week_number)
@@ -28,4 +28,7 @@ Athlete's reference paces:
 {plan_file.paces.model_dump_json(indent=2)}
 
 Previous 7 days of runs:
-{history}"""
+{history}
+
+Training metrics (load, fitness, fatigue, form, weekly volume, trends):
+{metrics}"""

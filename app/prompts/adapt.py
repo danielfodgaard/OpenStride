@@ -16,7 +16,7 @@ Rules:
 - rationale is 2-4 sentences: why change or why not. Paces may differ from the reference if the athlete context justifies it."""
 
 
-def build_user_prompt(plan_file: PlanFile, activities: list[dict], scope_weeks: list[int], today, user_context: str) -> str:
+def build_user_prompt(plan_file: PlanFile, activities: list[dict], metrics: str, scope_weeks: list[int], today, user_context: str) -> str:
     return f"""Today: {today.isoformat()}
 Scope weeks: {json.dumps(scope_weeks)}
 
@@ -32,5 +32,8 @@ Reference paces:
 Current plan, version {plan_file.meta.version}:
 {plan_file.plan.model_dump_json(indent=2)}
 
-Every run so far, with its review, the athlete's notes and RPE:
-{json.dumps(activities, indent=2)}"""
+Every session so far, with its review, the athlete's notes and RPE:
+{json.dumps(activities, indent=2)}
+
+Training metrics (load, fitness, fatigue, form, weekly volume, trends):
+{metrics}"""

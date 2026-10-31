@@ -2,7 +2,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 
-from app import activities, clock, generator, lifecycle, storage
+from app import activities, clock, generator, lifecycle, metrics, storage
 from app.models import PlanFile, ProgressFile, ProgressSummary, Proposal, ReviewMeta, Usage
 from app.prompts.progress import SYSTEM_PROMPT, build_user_prompt
 
@@ -31,7 +31,7 @@ def planned_vs_actual(plan_file: PlanFile) -> dict:
             "week_number": week.week_number,
             "start_date": week.start_date.isoformat(),
             "planned_km": week.planned_km,
-            "actual_km": round(sum(run.distance_km for run in in_week), 2),
+            "actual_km": round(sum(run.distance_km for run in in_week if run.modality == "run"), 2),
             "sessions_planned": len(week.sessions),
             "sessions_completed": len({run.match.session_index for run in in_week if run.match.session_index >= 0}),
         } | {completion: 0 for completion in COMPLETIONS}
@@ -55,7 +55,7 @@ def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
     runs = [activities.with_review(run) for run in storage.list_activities(plan_id)]
     model = os.environ.get("PROGRESS_MODEL") or DEFAULT_MODEL
     usage = Usage(input_tokens=0, output_tokens=0)
-    prompt = build_user_prompt(plan_file, planned_vs_actual(plan_file), runs, today or clock.today())
+    prompt = build_user_prompt(plan_file, planned_vs_actual(plan_file), runs, metrics.for_prompt(plan_file), today or clock.today())
     summary = generator.call_claude(
         client or generator.make_client(),
         model,

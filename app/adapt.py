@@ -2,7 +2,7 @@
 import os
 from datetime import datetime, timezone
 
-from app import activities, clock, generator, lifecycle, storage
+from app import activities, clock, generator, lifecycle, metrics, storage
 from app.models import (
     AdaptationResult,
     HistoryEntry,
@@ -54,7 +54,7 @@ def create_proposal(plan_id: str, scope: str, user_context: str, client=None, to
     today = today or clock.today()
     weeks = compute_scope_weeks(plan_file, scope, today)
     runs = [activities.with_review(a) for a in storage.list_activities(plan_id)]
-    prompt = build_user_prompt(plan_file, runs, weeks, today, user_context)
+    prompt = build_user_prompt(plan_file, runs, metrics.for_prompt(plan_file), weeks, today, user_context)
     client = client or generator.make_client()
     model = os.environ.get("ADAPT_MODEL") or DEFAULT_MODEL
     usage = Usage(input_tokens=0, output_tokens=0)
@@ -90,6 +90,7 @@ def replace_plan(new: PlanFile) -> None:
     lifecycle.write_version(new)
     storage.save_plan(new)
     activities.rematch(new)
+    metrics.refresh(new)
 
 
 def accept(proposal_id: str, today=None) -> PlanFile:
