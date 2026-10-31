@@ -242,17 +242,17 @@ def closest_session(sessions, distance_km: float) -> tuple[int, int] | None:
     return week_number, index
 
 
-def sessions_on(plan_file: PlanFile, day) -> list:
+def sessions_on(plan_file: PlanFile, day, modality: str) -> list:
     return [
         (week.week_number, index, session)
         for week in plan_file.plan.weeks
         for index, session in enumerate(week.sessions)
-        if session.date == day
+        if session.date == day and session.modality == modality
     ]
 
 
 def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
-    found = closest_session(sessions_on(plan_file, activity.date), activity.distance_km)
+    found = closest_session(sessions_on(plan_file, activity.date, activity.modality), activity.distance_km)
     if found is None:
         return Match()
     return Match(planned_date=activity.date.isoformat(), week_number=found[0], session_index=found[1])
@@ -288,20 +288,32 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
 
 def rematch(plan_file: PlanFile) -> None:
     """After a new plan version, point matches at the same planned day. Keeps manual matches."""
-    for activity in storage.list_activities(plan_file.meta.id):
-        if not activity.match.planned_date:
+    saves = [
+        *((a, storage.save_activity) for a in storage.list_activities(plan_file.meta.id)),
+        *((m, storage.save_manual) for m in storage.list_manual(plan_file.meta.id)),
+    ]
+    for entry, save in saves:
+        if not entry.match.planned_date:
             continue
-        day = date.fromisoformat(activity.match.planned_date)
-        found = closest_session(sessions_on(plan_file, day), activity.distance_km)
-        match = Match(planned_date=activity.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
-        if match != activity.match:
-            activity.match = match
-            storage.save_activity(activity)
+        day = date.fromisoformat(entry.match.planned_date)
+        found = closest_session(sessions_on(plan_file, day, entry.modality), entry.distance_km)
+        match = Match(planned_date=entry.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
+        if match != entry.match:
+            entry.match = match
+            save(entry)
 
 
 def with_review(activity: ActivitySummary) -> dict:
     review_file = storage.load_review(activity.id)
     return activity.model_dump(mode="json") | {"review": review_file.model_dump(mode="json") if review_file else None}
+
+
+def planned_match(plan_file: PlanFile, week_number: int, index: int) -> Match:
+    """A match the user chose by hand. It has to point at a real session."""
+    week = next((w for w in plan_file.plan.weeks if w.week_number == week_number), None)
+    if week is None or not 0 <= index < len(week.sessions):
+        raise lifecycle.Conflict("That planned session doesn't exist.")
+    return Match(planned_date=week.sessions[index].date.isoformat(), week_number=week_number, session_index=index)
 
 
 def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[int, int] | None) -> ActivitySummary:
@@ -316,14 +328,7 @@ def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[
         if index == -1:
             activity.match = Match()
         else:
-            week = next((w for w in plan_file.plan.weeks if w.week_number == week_number), None)
-            if week is None or not 0 <= index < len(week.sessions):
-                raise lifecycle.Conflict("That planned session doesn't exist.")
-            activity.match = Match(
-                planned_date=week.sessions[index].date.isoformat(),
-                week_number=week_number,
-                session_index=index,
-            )
+            activity.match = planned_match(plan_file, week_number, index)
     storage.save_activity(activity)
     metrics.refresh(plan_file)
     return activity

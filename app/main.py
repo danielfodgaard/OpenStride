@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
+from datetime import date as Date
 from pathlib import Path
 from typing import Literal
 
@@ -11,9 +12,20 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, lifecycle, metrics, progress, review, storage
+from app import activities, adapt, lifecycle, logbook, metrics, progress, review, storage
 from app.generator import GenerationError, generate_plan
-from app.models import ActivitySummary, Metrics, PlanFile, PlanRequest, ProgressFile, Proposal, ReviewFile
+from app.models import (
+    ActivitySummary,
+    ManualActivity,
+    Metrics,
+    Modality,
+    PlanFile,
+    PlanRequest,
+    ProgressFile,
+    Proposal,
+    ReviewFile,
+    Step,
+)
 
 load_dotenv()
 
@@ -64,6 +76,29 @@ class MatchEdit(BaseModel):
 class ActivityEdit(BaseModel):
     user_note: str | None = None
     rpe: int | None = Field(default=None, ge=0, le=10)
+    match: MatchEdit | None = None
+
+
+class ManualInput(BaseModel):
+    date: Date
+    modality: Modality
+    title: str = ""
+    duration_min: int = Field(ge=0, le=1440)
+    distance_km: float = Field(default=0, ge=0, allow_inf_nan=False)
+    rpe: int = Field(default=0, ge=0, le=10)
+    note: str = ""
+    details: list[Step] = []
+
+
+class ManualEdit(BaseModel):
+    date: Date | None = None
+    modality: Modality | None = None
+    title: str | None = None
+    duration_min: int | None = Field(default=None, ge=0, le=1440)
+    distance_km: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    rpe: int | None = Field(default=None, ge=0, le=10)
+    note: str | None = None
+    details: list[Step] | None = None
     match: MatchEdit | None = None
 
 
@@ -127,13 +162,30 @@ def upload_activities(files: list[UploadFile], user_note: str = Form(""), rpe: i
 
 @app.get("/api/activities")
 def get_activities(plan_id: str) -> list[dict]:
-    return [activities.with_review(activity) for activity in storage.list_activities(plan_id)]
+    return logbook.all_items(plan_id)
 
 
 @app.patch("/api/activities/{activity_id}")
 def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
     match = edit.match and (edit.match.week_number, edit.match.session_index)
     return activities.edit(activity_id, edit.user_note, edit.rpe, match)
+
+
+@app.post("/api/plans/{plan_id}/manual")
+def log_session(plan_id: str, body: ManualInput) -> ManualActivity:
+    return logbook.create(plan_id, body.model_dump())
+
+
+@app.patch("/api/manual/{manual_id}")
+def edit_session(manual_id: str, body: ManualEdit) -> ManualActivity:
+    changes = body.model_dump(exclude_unset=True, exclude={"match"})
+    match = body.match and (body.match.week_number, body.match.session_index)
+    return logbook.edit(manual_id, changes, match)
+
+
+@app.delete("/api/manual/{manual_id}", status_code=204)
+def delete_session(manual_id: str) -> None:
+    logbook.delete(manual_id)
 
 
 @app.post("/api/activities/{activity_id}/review")

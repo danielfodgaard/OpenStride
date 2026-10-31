@@ -3,7 +3,7 @@ import os
 from datetime import timedelta
 
 from app import generator, lifecycle, metrics, storage
-from app.models import ActivitySummary, ReviewFile, ReviewMeta, RunReview, Usage
+from app.models import ActivitySummary, ManualActivity, ReviewFile, ReviewMeta, RunReview, Usage
 from app.prompts.review import SYSTEM_PROMPT, build_user_prompt
 
 DEFAULT_MODEL = "claude-haiku-5-5"
@@ -15,6 +15,11 @@ def recent_activities(activity: ActivitySummary) -> list[ActivitySummary]:
     return [a for a in storage.list_activities(activity.plan_id) if start <= a.date and a.start_time < activity.start_time]
 
 
+def recent_manual(activity: ActivitySummary) -> list[ManualActivity]:
+    start = activity.date - timedelta(days=7)
+    return [m for m in storage.list_manual(activity.plan_id) if start <= m.date <= activity.date]
+
+
 def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
     plan_file = lifecycle.require_active(activity.plan_id)
     model = os.environ.get("REVIEW_MODEL") or DEFAULT_MODEL
@@ -23,7 +28,7 @@ def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
         client or generator.make_client(),
         model,
         SYSTEM_PROMPT,
-        build_user_prompt(activity, plan_file, recent_activities(activity), metrics.for_prompt(plan_file)),
+        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file)),
         RunReview,
         usage,
         max_tokens=MAX_TOKENS,

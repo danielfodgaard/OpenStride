@@ -1,8 +1,8 @@
 """Planned-vs-actual arithmetic, an on-demand LLM summary, and what the plan has cost so far."""
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from app import activities, clock, generator, lifecycle, metrics, storage
+from app import clock, generator, lifecycle, logbook, metrics, storage
 from app.models import PlanFile, ProgressFile, ProgressSummary, Proposal, ReviewMeta, Usage
 from app.prompts.progress import SYSTEM_PROMPT, build_user_prompt
 
@@ -18,25 +18,20 @@ PRICES = {
 
 
 def planned_vs_actual(plan_file: PlanFile) -> dict:
-    runs = storage.list_activities(plan_file.meta.id)
+    done = metrics.entries(plan_file.meta.id)
     weeks = []
     for week in plan_file.plan.weeks:
-        last_day = week.start_date + timedelta(days=6)
-        in_week = [
-            run for run in runs
-            if run.match.week_number == week.week_number
-            or (run.match.session_index == -1 and week.start_date <= run.date <= last_day)
-        ]
+        here = [entry for entry in done if metrics.in_week(entry, week)]
         row = {
             "week_number": week.week_number,
             "start_date": week.start_date.isoformat(),
             "planned_km": week.planned_km,
-            "actual_km": round(sum(run.distance_km for run in in_week if run.modality == "run"), 2),
+            "actual_km": round(sum(entry.km for entry in here if entry.modality == "run"), 2),
             "sessions_planned": len(week.sessions),
-            "sessions_completed": len({run.match.session_index for run in in_week if run.match.session_index >= 0}),
+            "sessions_completed": len({entry.match.session_index for entry in here if entry.match.session_index >= 0}),
         } | {completion: 0 for completion in COMPLETIONS}
-        for run in in_week:
-            review_file = storage.load_review(run.id)
+        for entry in here:
+            review_file = storage.load_review(entry.id)
             if review_file:
                 row[review_file.review.completion] += 1
         weeks.append(row)
@@ -52,7 +47,7 @@ def latest_summary(plan_id: str) -> ProgressFile | None:
 
 def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
     plan_file = lifecycle.require_active(plan_id)
-    runs = [activities.with_review(run) for run in storage.list_activities(plan_id)]
+    runs = logbook.all_items(plan_id)
     model = os.environ.get("PROGRESS_MODEL") or DEFAULT_MODEL
     usage = Usage(input_tokens=0, output_tokens=0)
     prompt = build_user_prompt(plan_file, planned_vs_actual(plan_file), runs, metrics.for_prompt(plan_file), today or clock.today())

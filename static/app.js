@@ -248,19 +248,7 @@ async function plansView() {
   );
 }
 
-// Edit a run's note, RPE and match, or re-run its review.
-function activityControls(activity, planFile) {
-  const box = el("details");
-  box.append(el("summary", "Edit"));
-  const status = statusLine();
-  const note = el("input");
-  note.value = activity.user_note;
-  note.setAttribute("aria-label", "Note");
-  const rpe = el("select");
-  rpe.setAttribute("aria-label", "RPE");
-  rpe.add(new Option("RPE not given", "0"));
-  for (let i = 1; i <= 10; i += 1) rpe.add(new Option(String(i), String(i)));
-  rpe.value = String(activity.rpe);
+function matchSelect(activity, planFile) {
   const match = el("select");
   match.setAttribute("aria-label", "Planned session");
   match.add(new Option("Unplanned", "0:-1"));
@@ -270,13 +258,72 @@ function activityControls(activity, planFile) {
     });
   }
   match.value = `${activity.match.week_number}:${activity.match.session_index}`;
-  const path = `/api/activities/${encodeURIComponent(activity.id)}`;
+  return match;
+}
+
+function chosenMatch(select) {
+  const [week_number, session_index] = select.value.split(":").map(Number);
+  return { week_number, session_index };
+}
+
+function rpeSelect() {
+  const rpe = el("select");
+  rpe.setAttribute("aria-label", "RPE");
+  rpe.add(new Option("RPE not given", "0"));
+  for (let i = 1; i <= 10; i += 1) rpe.add(new Option(String(i), String(i)));
+  return rpe;
+}
+
+function manualControls(entry, planFile) {
+  const box = el("details");
+  box.append(el("summary", "Edit"));
+  const status = statusLine();
+  const note = el("input");
+  note.value = entry.note;
+  note.setAttribute("aria-label", "Note");
+  const duration = el("input");
+  duration.type = "number";
+  duration.min = "0";
+  duration.value = entry.duration_min;
+  duration.setAttribute("aria-label", "Duration in minutes");
+  const rpe = rpeSelect();
+  rpe.value = String(entry.rpe);
+  const match = matchSelect(entry, planFile);
+  const path = `/api/manual/${encodeURIComponent(entry.id)}`;
   const save = button("Save", status, async () => {
-    const [week_number, session_index] = match.value.split(":").map(Number);
     await api(path, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_note: note.value, rpe: Number(rpe.value), match: { week_number, session_index } }),
+      body: JSON.stringify({ note: note.value, duration_min: Number(duration.value), rpe: Number(rpe.value), match: chosenMatch(match) }),
+    });
+    await route();
+  });
+  const remove = button("Delete", status, async () => {
+    if (!confirm(`Delete "${entry.title}"?`)) return;
+    await api(path, { method: "DELETE" });
+    await route();
+  });
+  box.append(note, duration, rpe, match, save, remove, status);
+  return box;
+}
+
+// Edit a run's note, RPE and match, or re-run its review.
+function activityControls(activity, planFile) {
+  const box = el("details");
+  box.append(el("summary", "Edit"));
+  const status = statusLine();
+  const note = el("input");
+  note.value = activity.user_note;
+  note.setAttribute("aria-label", "Note");
+  const rpe = rpeSelect();
+  rpe.value = String(activity.rpe);
+  const match = matchSelect(activity, planFile);
+  const path = `/api/activities/${encodeURIComponent(activity.id)}`;
+  const save = button("Save", status, async () => {
+    await api(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_note: note.value, rpe: Number(rpe.value), match: chosenMatch(match) }),
     });
     await route();
   });
@@ -325,6 +372,125 @@ function importSection(status) {
   const uploadLine = el("p");
   uploadLine.append(upload);
   section.append(el("h2", "Import runs"), labelled("Files", files), labelled("Note", note), labelled("RPE", rpe), uploadLine, status);
+  return section;
+}
+
+// One exercise in the logbook form.
+function exerciseRow(list, step = {}) {
+  const row = el("p");
+  row.className = "exercise";
+  const field = (name, type, value) => {
+    const input = el("input");
+    input.type = type;
+    input.name = name;
+    input.value = value;
+    input.setAttribute("aria-label", name);
+    return input;
+  };
+  const remove = el("button", "Remove");
+  remove.type = "button";
+  remove.addEventListener("click", () => row.remove());
+  row.append(
+    field("exercise", "text", step.description ?? ""), " sets ",
+    field("sets", "number", step.repeat ?? 3), " reps ",
+    field("reps", "number", step.reps ?? 10), " load ",
+    field("load", "text", step.load ?? ""), " ", remove,
+  );
+  list.append(row);
+}
+
+function readExercises(list) {
+  return [...list.querySelectorAll(".exercise")].map((row) => {
+    const value = (name) => row.querySelector(`[name=${name}]`).value;
+    return {
+      repeat: Number(value("sets")), description: value("exercise"), distance_km: 0, duration_min: 0,
+      target_pace: "", reps: Number(value("reps")), load: value("load"),
+    };
+  }).filter((step) => step.description.trim());
+}
+
+function logSection(planFile, today) {
+  const section = el("section");
+  const status = statusLine();
+  const labelled = (text, control, id) => {
+    control.id = id;
+    const label = el("label", `${text} `);
+    label.htmlFor = id;
+    const line = el("p");
+    line.append(label, control);
+    return line;
+  };
+  const input = (type) => {
+    const node = el("input");
+    node.type = type;
+    return node;
+  };
+  const date = input("date");
+  date.value = today;
+  date.max = today;
+  const modality = el("select");
+  modality.add(new Option("Strength", "strength"));
+  modality.add(new Option("Cross-training", "cross"));
+  modality.add(new Option("Run", "run"));
+  const title = input("text");
+  const duration = input("number");
+  duration.min = "0";
+  const distance = input("number");
+  distance.min = "0";
+  distance.step = "any";
+  const rpe = rpeSelect();
+  const note = input("text");
+  const exercises = el("div");
+  const exerciseBox = el("div");
+  const addExercise = el("button", "Add exercise");
+  addExercise.type = "button";
+  addExercise.addEventListener("click", () => exerciseRow(exercises));
+  exerciseBox.append(el("p", "Exercises"), exercises, addExercise);
+
+  // Prefill from the planned session that day, when there is one.
+  const prefill = () => {
+    const session = planFile.plan.weeks.flatMap((w) => w.sessions)
+      .find((s) => s.date === date.value && (s.modality ?? "run") === modality.value);
+    title.value = session?.title ?? "";
+    duration.value = session?.duration_min || "";
+    distance.value = session?.distance_km || "";
+    exercises.replaceChildren();
+    exerciseBox.hidden = modality.value !== "strength";
+    if (modality.value === "strength") for (const step of session?.steps ?? []) exerciseRow(exercises, step);
+  };
+  date.addEventListener("change", prefill);
+  modality.addEventListener("change", prefill);
+  prefill();
+
+  const save = button("Log session", status, async () => {
+    if (!date.value) throw new Error("Choose a date.");
+    await postJson(`/api/plans/${encodeURIComponent(planFile.meta.id)}/manual`, {
+      date: date.value,
+      modality: modality.value,
+      title: title.value,
+      duration_min: Math.round(Number(duration.value)),
+      distance_km: Number(distance.value),
+      rpe: Number(rpe.value),
+      note: note.value,
+      details: modality.value === "strength" ? readExercises(exercises) : [],
+    });
+    await route();
+  });
+  const saveLine = el("p");
+  saveLine.append(save);
+  section.append(
+    el("h2", "Log a session"),
+    labelled("Date", date, "log-date"),
+    labelled("Type", modality, "log-modality"),
+    labelled("Title", title, "log-title"),
+    labelled("Duration (min)", duration, "log-duration"),
+    labelled("Distance (km)", distance, "log-distance"),
+    labelled("RPE", rpe, "log-rpe"),
+    labelled("Note", note, "log-note"),
+    exerciseBox,
+    saveLine,
+    status,
+  );
   return section;
 }
 
@@ -430,7 +596,7 @@ function summaryView({ summary }) {
   return box;
 }
 
-function progressSection(planFile, progress) {
+function progressSection(planFile, progress, metrics) {
   const section = el("section");
   const status = statusLine();
   const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "As planned", "Partly", "Missed targets", "Unplanned"];
@@ -446,6 +612,8 @@ function progressSection(planFile, progress) {
   askLine.append(ask);
   section.append(
     el("h2", "Progress"),
+    ...drawProgressCharts(metrics, planFile.request.race_date),
+    el("h3", "Planned vs actual"),
     table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]),
     askLine,
     status,
@@ -503,6 +671,7 @@ async function planView(id) {
   const isActive = planFile.meta.status === "active";
   const proposals = isActive ? await api(`/api/plans/${encoded}/proposals`) : [];
   const progress = isActive ? await api(`/api/plans/${encoded}/progress`) : null;
+  const metrics = isActive ? await api(`/api/plans/${encoded}/metrics`) : null;
   const usage = await api(`/api/plans/${encoded}/usage`);
   if (token !== routeToken) return;
   const status = statusLine();
@@ -517,13 +686,15 @@ async function planView(id) {
     nodes.push(actions);
   }
   nodes.push(status, planDiv());
-  if (isActive) nodes.push(importSection(statusLine()), adaptSection(planFile, proposals), progressSection(planFile, progress));
+  if (isActive) nodes.push(importSection(statusLine()), logSection(planFile, metrics.as_of), adaptSection(planFile, proposals), progressSection(planFile, progress, metrics));
   nodes.push(usageFooter(usage));
   main.replaceChildren(...nodes);
   fullRender(planFile, status, {
     actuals: !isDraft,
     activities,
-    controls: planStatus === "active" ? (activity) => activityControls(activity, planFile) : undefined,
+    controls: isActive
+      ? (activity) => (activity.manual ? manualControls(activity, planFile) : activityControls(activity, planFile))
+      : undefined,
   });
 }
 

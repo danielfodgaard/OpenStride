@@ -325,3 +325,17 @@ class Metrics(BaseModel):
     easy_runs: list[TrendPoint]
     quality_runs: list[TrendPoint]
     current: Snapshot
+
+
+class ManualActivity(BaseModel):
+    id: str
+    plan_id: str
+    date: date
+    modality: Modality
+    title: str
+    duration_min: int
+    distance_km: float
+    rpe: int
+    note: str
+    details: list[Step]
+    match: Match

@@ -2,7 +2,7 @@
 import os
 from datetime import datetime, timezone
 
-from app import activities, clock, generator, lifecycle, metrics, storage
+from app import activities, clock, generator, lifecycle, logbook, metrics, storage
 from app.models import (
     AdaptationResult,
     HistoryEntry,
@@ -53,7 +53,7 @@ def create_proposal(plan_id: str, scope: str, user_context: str, client=None, to
     plan_file = lifecycle.require_active(plan_id)
     today = today or clock.today()
     weeks = compute_scope_weeks(plan_file, scope, today)
-    runs = [activities.with_review(a) for a in storage.list_activities(plan_id)]
+    runs = logbook.all_items(plan_id)
     prompt = build_user_prompt(plan_file, runs, metrics.for_prompt(plan_file), weeks, today, user_context)
     client = client or generator.make_client()
     model = os.environ.get("ADAPT_MODEL") or DEFAULT_MODEL

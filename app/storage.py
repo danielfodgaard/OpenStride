@@ -4,7 +4,7 @@ import os
 import re
 from pathlib import Path
 
-from app.models import ActivitySummary, PlanFile, Proposal, ReviewFile
+from app.models import ActivitySummary, ManualActivity, PlanFile, Proposal, ReviewFile
 
 DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
@@ -109,6 +109,36 @@ def new_proposal_id(plan_id: str, base: str) -> str:
         suffix += 1
         proposal_id = f"{base}-{suffix}"
     return proposal_id
+
+
+def manual_dir(plan_id: str) -> Path:
+    return plan_dir(plan_id) / "manual_activities"
+
+
+def new_manual_id(plan_id: str, day) -> str:
+    number = 1
+    while (manual_dir(plan_id) / f"manual_{day}_{number}.json").exists():
+        number += 1
+    return f"manual_{day}_{number}"
+
+
+def save_manual(entry: ManualActivity) -> None:
+    write_json(manual_dir(entry.plan_id) / f"{safe_id(entry.id)}.json", entry.model_dump_json(indent=2))
+
+
+def load_manual(manual_id: str) -> ManualActivity:
+    for path in (DATA_DIR / "plans").glob(f"*/manual_activities/{safe_id(manual_id)}.json"):
+        return ManualActivity.model_validate_json(path.read_text())
+    raise NotFound(manual_id)
+
+
+def list_manual(plan_id: str) -> list[ManualActivity]:
+    paths = sorted(manual_dir(plan_id).glob("*.json"))
+    return [ManualActivity.model_validate_json(path.read_text()) for path in paths]
+
+
+def delete_manual(entry: ManualActivity) -> None:
+    (manual_dir(entry.plan_id) / f"{safe_id(entry.id)}.json").unlink()
 
 
 def save_proposal(proposal: Proposal) -> None:

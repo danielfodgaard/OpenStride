@@ -66,6 +66,10 @@ function formatDuration(seconds) {
 }
 
 function actualText(activity) {
+  if (activity.manual) {
+    return ["Done", activity.duration_min ? `${activity.duration_min} min` : "",
+      activity.distance_km ? `${activity.distance_km} km` : "", activity.rpe ? `RPE ${activity.rpe}` : ""].filter(Boolean).join(" · ");
+  }
   const parts = [`${activity.distance_km.toFixed(2)} km`, formatDuration(activity.moving_time_s), activity.avg_pace];
   if (activity.avg_hr) parts.push(`${activity.avg_hr} bpm`);
   return parts.join(" · ");
@@ -76,8 +80,9 @@ function actualCell(activities, controls) {
   const cell = el("div");
   for (const activity of activities) {
     cell.append(el("div", actualText(activity)));
-    if (activity.user_note) cell.append(el("div", `Note: ${activity.user_note}`));
-    if (activity.rpe) cell.append(el("div", `RPE ${activity.rpe}`));
+    const note = activity.manual ? activity.note : activity.user_note;
+    if (note) cell.append(el("div", `Note: ${note}`));
+    if (activity.rpe && !activity.manual) cell.append(el("div", `RPE ${activity.rpe}`));
     if (controls) cell.append(controls(activity));
   }
   return cell;
@@ -85,7 +90,8 @@ function actualCell(activities, controls) {
 
 function reviewCell(activities) {
   const cell = el("div");
-  for (const { review } of activities) {
+  for (const { review, summary } of activities) {
+    if (summary) cell.append(el("div", summary));
     if (!review) continue;
     const box = el("details");
     box.append(el("summary", `${review.review.completion} — ${review.review.headline}`));
@@ -101,7 +107,7 @@ function reviewCell(activities) {
 function weekRows(week, activities, controls) {
   const onWeekDay = (i) => activities.filter((a) => a.date === addDays(week.start_date, i) && a.match.session_index === -1);
   const unplannedRow = (activity, i) => [
-    activity.date, DAYS[i], "unplanned", activity.source_file, "", "", "", "", actualCell([activity], controls), reviewCell([activity]),
+    activity.date, DAYS[i], "unplanned", activity.manual ? activity.title : activity.source_file, "", "", "", "", actualCell([activity], controls), reviewCell([activity]),
   ];
   return DAYS.flatMap((day, i) => {
     const sessions = week.sessions.filter((s) => s.day === day);
@@ -162,7 +168,7 @@ function renderPlan(planFile, { actuals = false, activities = [], controls } = {
   const outside = activities.filter((a) => !planDays.has(a.date));
   if (outside.length) {
     nodes.push(el("h2", "Runs outside the plan dates"));
-    nodes.push(table(["Date", "File", "Actual"], outside.map((a) => [a.date, a.source_file, actualText(a)])));
+    nodes.push(table(["Date", "File", "Actual"], outside.map((a) => [a.date, a.manual ? a.title : a.source_file, actualText(a)])));
   }
   nodes.push(el("p", `Model: ${meta.model} — created ${meta.created_at} — tokens: ${meta.usage.input_tokens} in, ${meta.usage.output_tokens} out`));
   document.getElementById("plan").replaceChildren(...nodes);

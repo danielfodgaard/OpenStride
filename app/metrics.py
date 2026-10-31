@@ -33,8 +33,14 @@ class Entry:
 
 def entries(plan_id: str) -> list[Entry]:
     return [
-        Entry(a.id, a.date, a.modality, a.moving_time_s / 60, a.distance_km, a.avg_hr, a.match)
-        for a in storage.list_activities(plan_id)
+        *(
+            Entry(a.id, a.date, a.modality, a.moving_time_s / 60, a.distance_km, a.avg_hr, a.match)
+            for a in storage.list_activities(plan_id)
+        ),
+        *(
+            Entry(m.id, m.date, m.modality, m.duration_min, m.distance_km, 0, m.match)
+            for m in storage.list_manual(plan_id)
+        ),
     ]
 
 
