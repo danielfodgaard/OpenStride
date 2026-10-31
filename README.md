@@ -1,178 +1,133 @@
 # OpenStride
 
-Open-source running coach. Generate a training plan with strength and cross-training, import the runs you actually do, get each one reviewed, follow your fitness on charts, talk to your coach, and adapt the plan when you choose to.
+**An open-source running coach: a Runna-style training app where the coaching is done by an LLM and the app is a thin layer of JSON on top.**
 
-## Design principle
+> Built in one day (31 October 2026) at Autonomous SG 2026 for the NUS Hackers challenge: pick an expensive, opaque app, figure out how it works, and build an open version. MIT licensed.
 
-OpenStride is a thin app on top of the LLM. The LLM makes every coaching judgment. Code only:
+---
 
-- parses files and does arithmetic and dates (facts),
-- defines JSON schemas and renders them (structure),
-- runs thin checks whose errors go back to the LLM to fix (verification), and never fixes a plan itself,
-- controls when the LLM is asked and lets you approve the result (control).
+## TL;DR
 
-The LLM gets as much context as is relevant: the full request, the plan, every run summary, review, logged session and note, and the same metrics table the charts draw from. Nothing changes the plan unless you press Accept on a proposal; the chat can only ask for one.
-
-## What blocks a plan and what doesn't
-
-Errors are facts and limits you set yourself. They go back to Claude to fix: sessions on available days, session counts, the proposal's scope weeks, past sessions untouched, the race fixed, and in a proposal, every removed or downgraded session having its own change entry with a reason.
-
-Warnings are coaching judgments. They never block anything and appear above a proposal's diff so you see the trade-off before accepting: hard runs on consecutive days and volume jumps, always. The long run on `long_run_day` is an error when a plan is generated, because you asked for it in the form, and only a warning in a proposal, so a one-off move is allowed.
-
-## Install and phone access
-
-### Install and run
-
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
-
-    cp .env.example .env   # then set ANTHROPIC_API_KEY
-    uv run openstride
-
-Open http://127.0.0.1:8000. `uv run` creates the environment from `pyproject.toml`, the only list of dependencies. Data lives in `data/`, including every uploaded file in `data/activities/raw/`. Settings are in `.env`: `OPENSTRIDE_HOST`, `OPENSTRIDE_PORT`, `OPENSTRIDE_DATA_DIR`, `OPENSTRIDE_PASSWORD` and `OPENSTRIDE_ALLOW_OPEN`.
-
-Or with Docker, which keeps the same `./data` folder and restarts by itself:
-
-    cp .env.example .env   # then set ANTHROPIC_API_KEY
-    docker compose up -d
-
-`GET /api/health` returns the status, the version and whether the data folder is writable.
-
-### Phone access
-
-Phone and laptop use one server over HTTPS. Nothing syncs: both talk to the same OpenStride, and the laptop must be on and running it. The recommended way is Tailscale, which needs no public port and gives a valid certificate:
-
-1. Install Tailscale on the laptop and the phone, and log in with the same account on both.
-2. Once per tailnet: in the [admin console](https://login.tailscale.com/admin/dns), enable MagicDNS and HTTPS Certificates. The script tells you if this is missing.
-3. Start OpenStride, then run `scripts/phone-access.sh` (Windows: `powershell -File scripts\phone-access.ps1`). If you changed the port, set `OPENSTRIDE_PORT` for the script too. If Tailscale answers "Access denied", run `sudo tailscale set --operator=$USER` once, then the script again.
-4. Open the printed `https://<machine>.<tailnet>.ts.net` URL on the phone and use Add to Home Screen.
-
-The server stays bound to localhost; only devices in your tailnet can reach it. `scripts/phone-access-off.sh` (or `.ps1`) turns it off, and clears any other `tailscale serve` setting on the machine too. No password is needed unless you share the tailnet with other people.
-
-On a server without Tailscale installed, uncomment the `tailscale` service in `compose.yaml`, follow the notes there, and put `TS_AUTHKEY` in `.env`.
-
-On the same Wi-Fi without Tailscale, `OPENSTRIDE_HOST=0.0.0.0` with a password and `http://<laptop-ip>:8000` works too. It has no HTTPS, so the app can't be installed on the phone and the password crosses the network in the clear. Prefer Tailscale.
-
-### Password
-
-Set `OPENSTRIDE_PASSWORD` for any setup other than localhost or Tailscale. Every page and API route then needs a login, valid for 30 days on that device. Changing the password signs every device out.
-
-The server refuses to listen beyond localhost with no password, because it holds your API key and an open server can spend your money. `OPENSTRIDE_ALLOW_OPEN=1` overrides that; `compose.yaml` sets it because the container must listen on all its interfaces while the only published port is on the host's localhost. If you change `ports:` to publish wider, set a password.
-
-### Two devices at once
-
-Writes are atomic and locked, so phone and laptop can act at the same moment. If a plan changed on the other device after you loaded it, the action is refused with a reload rather than overwriting.
-
-### Backups
-
-`GET /api/backup` downloads `openstride-backup-<date>.zip`: the data folder without lock files, `data/secrets/` and earlier backups. Add `?include_secrets=1` to include secrets, which are tokens, so keep that file private.
-
-`scripts/backup.sh <folder>` writes the same zip to a folder, and is safe while the server runs. For a daily backup at 03:00, in `crontab -e`:
-
-    0 3 * * * PATH=$HOME/.local/bin:$PATH /path/to/OpenStride/scripts/backup.sh $HOME/openstride-backups
-
-To restore, stop the server and unzip into an empty data folder. A backup without secrets means logging in again. Migrations write a backup to `data/backups/` first.
-
-With Docker: `docker compose exec openstride openstride backup /app/data/backups`.
-
-### Running on an always-on server
-
-The laptop can be replaced by a small VPS or home server, using the same `compose.yaml` and `.env`.
-
-- **Through Tailscale (recommended):** no public port. Install Tailscale on the server and run `scripts/phone-access.sh`, or use the sidecar in `compose.yaml`.
-- **Behind Caddy:** automatic HTTPS on a domain you own. Set `OPENSTRIDE_PASSWORD` in `.env`, keep the port on `127.0.0.1` as `compose.yaml` has it, install Caddy on the server, and use this `Caddyfile`:
-
-      openstride.example.com {
-          reverse_proxy 127.0.0.1:8000
-      }
-
-  This one is on the public internet, so the password is not optional, and pick a long one.
-
-## Using the app
-
-OpenStride works the same on a phone and a laptop: three tabs along the bottom on a phone, along the top on a laptop. The theme button in the app bar overrides the system light or dark setting on that device.
-
-- **Workouts**: every recorded workout, newest first by month, across all plans. Import runs and Log a session fold open from here; neither needs an active plan. Without one, workouts are saved as unplanned, and Change match on a workout attaches it to a plan later. When Garmin is set up, Sync from Garmin sits above them with the last sync time.
-- **Plans**: the active plan first (week, km done this week, days to go), then drafts, then past plans.
-- **Plan overview**: the This week card links to the current week and holds the next session as its own row. Below it the fitness chart, the weekly volume chart (each grey bar is the plan, filled up to the km you ran, with the percentage above it), coach chat and progress summary. Adapt plan is folded away with the version line and All versions, and opens by itself when a suggestion is waiting.
-- **Weeks**, from the overview: foldable weeks, the current one open by default, with a linked row per session. Pace zones and the plan's summary and warnings are here. A week's remaining runs can be downloaded as .fit workouts: connect the watch by USB and copy the file into `GARMIN/NewFiles`.
-- **Workout detail**: route, pace and heart-rate charts with a shared hover, and laps (with a Target column when the laps line up with the session's steps) come first, then summary, the plan and the review. A session not yet done opens on the plan, with the watch actions and the Import run and Log session shortcuts.
-- **Footer**: Download backup. With Garmin on, a tickbox adds your Garmin secrets to the backup.
-
-Over HTTPS the app installs to the home screen ("Add to Home Screen"; see Phone access). Once it has been opened online, the app, the active plan and any workout you've opened still open without a connection, under a banner saying how old the data is. Anything that needs the server (import, sync, chat, reviews, plan changes, new plans) is disabled until you're back online. After an update the new version shows from the second time you open the app.
-
-Screenshots from the demo, light and dark:
-
-| Page | Light | Dark |
+| | Runna | OpenStride |
 |---|---|---|
-| Plan overview | ![Plan overview, light](docs/screenshots/overview-light.png) | ![Plan overview, dark](docs/screenshots/overview-dark.png) |
-| Weeks | ![Weeks, light](docs/screenshots/weeks-light.png) | ![Weeks, dark](docs/screenshots/weeks-dark.png) |
-| Workout detail | ![Workout detail, light](docs/screenshots/workout-light.png) | ![Workout detail, dark](docs/screenshots/workout-dark.png) |
-| Workouts | ![Workouts, light](docs/screenshots/workouts-light.png) | ![Workouts, dark](docs/screenshots/workouts-dark.png) |
-| Plans | ![Plans, light](docs/screenshots/plans-light.png) | ![Plans, dark](docs/screenshots/plans-dark.png) |
+| Price | $19.99/month or $119.99/year (US, Oct 2026) | $0 software, MIT licence |
+| Running cost | included | your own Claude API key: ~$0.1 one time cost for a plan and ~$0.44 running (optional) monthly costs for continual assessment (see [cost](#before--after-cost)) |
+| See your whole plan? | only on the annual plan | always: it's a JSON file on your disk |
+| Why did my plan change? | not shown | every change comes with a written reason and a diff you accept or reject |
+| Your data | their servers | a folder on your computer |
 
-Workouts from before v3.1 have no stored file, so their detail page asks you to import the file again. Doing that adds the route and charts to the existing workout.
+---
 
-Upgrading from v1: run `uv run python -m app.migrate` once. It moves `plans/*.json` to `data/plans/<id>/plan.json` as drafts.
+## Why Runna
 
-## Offline demo
+I'm training for a half marathon next year, and like a lot of runners I looked at Runna. It's a good app. It has also become an expensive one.
 
-No API key or network needed:
+- **It costs $19.99 a month or $119.99 a year in the US** (the annual plan works out to $9.99 a month), or $149.99 a year bundled with Strava. ([SensAI, checked 21 Oct 2026](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026); [the5krunner, Oct 2026](https://the5krunner.com/2026/10/14/is-runna-free/))
+- **The free plans are gone.** The beginner plans (New to Running, Return to Running, Path to parkrun) moved behind the paywall on 5 June 2026, so someone doing couch-to-5K now pays the same as a marathoner. ([SensAI](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026); [stack-archive](https://stack-archive.com/blog/is-runna-free-price-trial-strava-bundle-2026/))
+- **The monthly plan only shows you the month you've paid for.** To see your whole build before committing, you need the annual subscription. ([SensAI](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026))
+- **Strava no longer lets you create new running plans on its own site.** New plans come from Runna, which a standard Strava subscription doesn't include. ([stack-archive](https://stack-archive.com/blog/is-runna-free-price-trial-strava-bundle-2026/))
 
-    OPENSTRIDE_DEMO=1 uv run openstride
+And a lot of people pay it:
 
-This serves a throwaway copy of `examples/demo/data`, including route and chart data for every file, with the date pinned to Wednesday 25 November 2026: an active half-marathon plan with strength and cycling, three weeks of runs with real reviews, two logged strength sessions, a cycling file, one bad run with a note, the charts, a chat thread with a pending proposal, and a progress summary. Your `data/` is not touched and every change disappears when the server stops.
+- **1,000,000+ downloads on Google Play** ([store figures via clickyourapp](https://clickyourapp.com/au/charts/app-store/com.runbuddy.prod/)). AppGoblin estimates about 3.9M Android installs, growing by roughly 230,000 a month ([AppGoblin, crawled 29 Oct 2026](https://www.appgoblin.info/apps/com.runbuddy.prod)).
+- **4.9★ from about 35,100 US App Store ratings** ([SensAI, citing the App Store, 21 Oct 2026](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026)).
+- **Owned by Strava**, which had 150M+ registered users when it bought Runna in April 2025 ([Advnture](https://www.advnture.com/tech/apps-software/a-perfect-fit-stravas-150-million-users-get-a-new-running-coach-as-brand-acquires-coaching-app-runna)).
 
-Offline you can open every page, hover the workout charts, read the thread, accept or reject the proposal, view and restore versions, open the chart tables, log a session, delete a workout, and upload `examples/activities/cross/2026-11-12_pool_swim.fit`, which imports with a "review failed" message. Actions that need Claude show an error; with a key in `.env` they work in the demo too.
+---
 
-## Test
+## What I uncovered: how Runna actually works
 
-    uv run pytest
+I didn't decompile anything or touch Runna's servers. Everything below comes from Runna's own public statements and support pages, as compiled by [SensAI's Oct 2026 comparison](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026), which links each claim to its source.
 
-## Importing files
+1. **It's not an LLM.** Runna told TechRadar in February 2026 that its plans are "not created by AI": coaches design the plans and "an algorithm then tailors and adapts those coach-designed plans to each runner."
+2. **Your inputs set a starting point.** Your ability level sets your starting weekly mileage and longest run; recent race times set your initial pace targets.
+3. **Progression is rule-based.** Weekly mileage rises under a fixed ceiling per week. Experienced runners get higher targets, but not faster build rates.
+4. **Adaptation is a suggestion.** As you train, Runna may suggest raising or lowering your pace targets, and you choose whether to accept.
 
-`.fit` and `.gpx` activities are summarised in code and matched to the planned session on the same date: running to runs, other sports to cross-training, and a watch's gym file to strength. The summary, not the raw file, is what reaches the LLM. GPX counts as running unless `<type>` says otherwise, including Strava's numeric types.
+So underneath the subscription, Runna is **a library of coach-written templates, a pace model from race times, a few progression rules, and an accept/decline loop for pace changes.** None of that is hard to compute. Pace models from race times have been public for decades (Jack Daniels' VDOT tables), and mileage ceilings and taper rules are in every coaching book.
 
-Limits to know:
-- File times are UTC. A `.fit` that records its local time uses that; otherwise, as with `.gpx`, the server's time zone applies, so a run while travelling can land on the wrong day. The match can be changed by hand.
-- The same run uploaded as both `.fit` and `.gpx` counts once if the start times are within 60 seconds.
-- A multisport file counts as one activity of its longest sport.
-- Fitness and fatigue start at plan start, from the seed below, so runs before it don't affect them.
+What *is* opaque is the reasoning. Runna will nudge your paces, but it won't tell you why in any detail, and you can't ask it a follow-up question.
 
-## Garmin
+That gave me the idea for the rebuild: **the coaching knowledge Runna encodes as hand-written rules is exactly what a modern LLM already knows.** So instead of re-implementing the rules, OpenStride hands the coaching to the model and keeps the app as thin as possible.
 
-Runs can arrive from Garmin Connect, and planned sessions can go to your watch. Set `GARMIN_MODE` in `.env`, then connect once from a terminal:
+---
 
-    .venv/bin/python -m app.garmin.login
+## The design principle: the LLM coaches, code handles facts
 
-| `GARMIN_MODE` | Sync runs | Send workouts | How it connects |
-|---|---|---|---|
-| `off` (default) | no | no | Download workout .fit still works |
-| `personal_api` | yes | no | Garmin's official, read-only Personal API |
-| `unofficial` | yes | yes | `python-garminconnect`, with your Garmin login |
+Hardcoding coaching logic isn't worth it. Models keep getting better; a rulebook I write today doesn't. So OpenStride sends the model as much context as possible and keeps the app simple.
 
-**`personal_api`.** In Garmin Connect's account settings, create a Personal API key and copy it, since it is shown only once. Paste it at the login prompt. It is saved to `data/secrets/` with mode 600. Keys expire after 30 days to a year; when yours does, create a new one and run the login again. Garmin says this API is for your own data and not for commercial apps serving several users, and it cannot send workouts.
+But "just ask the LLM" breaks in predictable ways: a wrong date, a pace that's 4:14 when it should be 4:41, a plan that schedules a run on a day you said you can't train. On a live demo, one of those costs more than the 30 lines of code that would have prevented it.
 
-**`unofficial`.** **Read this first.** This mode uses `python-garminconnect`, which logs in the way Garmin's mobile app does. Garmin does not sanction it, it can break without notice whenever Garmin changes its login or endpoints, and it sits in a grey area under Garmin's terms. The login asks for your email, password and MFA code in the terminal. The password is used once and never stored. Only the tokens are, in `data/secrets/garmin_tokens.json` with mode 600. They can reach your account, so treat that file like a password; deleting it does not revoke them at Garmin. A rejected token needs the login again.
+So the split is:
 
-**Syncing.** Press **Sync from Garmin**, or set `GARMIN_SYNC_MINUTES` to sync on a timer while the server runs (0 is manual only, minimum 15). Errors show in the status and never stop the server. Runs and other sports go through the same steps as an uploaded file: matching, review, charts and metrics. Strength sessions become logged sessions with no route. The first sync starts a week before the active plan, or 30 days back with no plan. Later syncs look back 3 days from the last one, so a run the watch uploads up to 3 days late is still found; anything later has to be uploaded by hand. If a review fails, for example on a bad Claude key, the run is still imported, the sync reports a warning, and you can re-run the review. An activity is imported once: if you delete a workout here, sync won't bring it back. If a file has nothing to read, the workout is built from Garmin's summary and marked partial, with no route or charts.
+| The LLM decides | Code does |
+|---|---|
+| Periodisation, weekly volume, session choice, taper | **Facts:** dates, pace arithmetic, parsing .fit/.gpx files into summaries |
+| Whether to adjust the reference paces (and says why) | **Structure:** JSON schemas, and one renderer that always draws a plan the same way |
+| How to read a vague goal ("sub-1:30, stay injury-free") | **Verification:** a thin validator that *reports* problems back to the LLM and never fixes them itself |
+| Run reviews, plan adaptations, coach chat | **Control:** *when* the LLM is asked; you approve every change |
 
-**Workouts on the watch.** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug, so test yours. In `unofficial` mode, **Send to Garmin** uploads the workout, schedules it on the session date and sends it to your last-used device, and it also reaches the watch at its next sync if that send fails. Sending a session again replaces its old Garmin workout. After a plan change, the weeks page offers to re-send only what changed. Past and completed sessions are not sent. Strength and cross sessions are not exported.
+Two consequences:
 
-**Secrets** live only in `data/secrets/`. They are never logged, sent to Claude, or written to plan or activity files.
+- **The app gets better when the model does.** Change the model name in `.env` and the coaching improves, with no code changes.
+- **Every decision is explainable.** The model has to return structured JSON with a `rationale` field, so you always see the reason behind a change. That's the thing Runna doesn't give you.
 
-## Metrics
+---
 
-`app/metrics.py` computes everything on the charts: load (Banister TRIMP from heart rate, or duration times a type factor without one), fitness (CTL, 42-day average), fatigue (ATL, 7-day average), form (TSB) and weekly volume. Set max and resting heart rate in the form for accurate load; otherwise 208 − 0.7 × age, or 190, and 55 are used. Fitness starts from `current_weekly_km × 1.1`, a rough prior.
+## What it does
 
-## How paces work
+### Plan generation
 
-`app/vdot.py` applies the Daniels–Gilbert formulas to your recent race. Those paces are a reference: Claude may adjust them if your context justifies it, and says why in the summary.
+You describe your goal, a recent race, your current weekly volume, which days you can train, your long-run day, and optionally strength and cross-training sessions.
 
-## Models and cost
+- **Reference paces in code.** OpenStride computes your VDOT from the recent race with the Daniels–Gilbert formulas and derives easy / marathon / threshold / interval / repetition paces. These go to the model as *reference data*. It may adjust them if your context justifies it, and it has to say so in the plan summary.
+- **Structured outputs.** The model returns a plan that must match a strict JSON schema (weeks → sessions → steps).
+- **Errors vs warnings.**
+  - **Errors** are constraints *you* set: sessions only on your available days, the right number of weeks, the race on race day, nothing in the past modified. They go back to the model once, with a "fix these problems" message.
+  - **Warnings** are coaching judgments: back-to-back hard days, a big week-over-week volume jump. They never block anything; they're shown next to the plan so you can see the trade-off.
 
-Set per task in `.env`: `PLAN_MODEL`, `ADAPT_MODEL`, `PROGRESS_MODEL`, `CHAT_MODEL` (default Claude Sonnet 5.5) and `REVIEW_MODEL` (default Claude Haiku 5.5). The v1 name `CLAUDE_MODEL` still works as a fallback for `PLAN_MODEL`.
+  My first version treated "long run on your long-run day" and "no consecutive hard days" as hard rules. Then I asked the coach to swap Thursday and Saturday for one week, and it silently dropped an interval session to satisfy the rules. Those rules were coaching judgments pretending to be facts, so they became warnings.
+- **Plans are drafts until you accept them.** You can regenerate with feedback ("long run on Sunday instead", "too much volume early on"); only an accepted plan becomes your active plan. Old plans are archived, not deleted.
 
-Every saved LLM output records its token usage, and the plan page shows the running total. Measured from real calls on the sample half-marathon plan with three weeks of training logged, at list prices of $2/$10 per million tokens for Sonnet 5.5 and $0.10/$0.50 for Haiku 5.5:
+### Tracking
+
+- **Import .fit and .gpx files** from any watch. Each file is parsed into a compact summary (distance, time, laps, km splits, heart rate, cadence) and matched to the planned session on that date. The raw file never goes to the LLM; the model gets the summary, which keeps each call small and cheap.
+- **Every imported run gets an automatic review** from a small, cheap model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
+- **Strength and cross-training** sessions can be logged by hand or imported (rides and swims match cross-training sessions).
+
+### Adaptation: one bad day shouldn't rewire your plan
+
+**Nothing changes your plan unless you ask, and then accept.**
+
+1. You ask for plan changes, choose a scope (this week / next 2 weeks / rest of plan) and can add context ("calf niggle since Tuesday").
+2. The model gets everything: the plan, every run summary and review, your notes, the scope.
+3. It's told to be conservative. A single bad session is not a reason to change anything, and **"no change recommended" is a valid, good answer.**
+4. If it proposes changes, you get a rationale, a one-line reason per change, and a diff of the affected weeks. Accepting creates a new plan version; you can always restore an older one.
+
+### A coach you can talk to
+
+The coach chat sees your plan, every run, every review and your training-load numbers. Ask "is my easy pace too fast?" and you get an answer that cites your actual runs. Ask "can I swap Thursday and Saturday next week?" and the request goes through the same proposal → diff → accept flow. The chat can never edit your plan directly.
+
+### Training load, in code
+
+Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister-style TRIMP load per session and drawn next to weekly planned-vs-actual volume. The same numbers go into every prompt, so the chat, reviews and adaptations all reason from one set of facts.
+
+---
+
+## How I know it works
+
+- **216 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, proposal merging, chat actions, metrics and the API.
+- **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
+- **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
+- **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
+
+---
+
+## Before / after cost
+
+OpenStride's software is free. The only running cost is your own Claude API usage, at [Anthropic's list prices](https://platform.claude.com/docs/en/about-claude/pricing) (Sonnet 5.5: $2 / $10 per million input / output tokens; Haiku 5.5: $0.10 / $0.50). Hosting is $0: it runs on your own computer.
+
+**Measured per call**, on a sample half-marathon plan with three weeks of training logged:
 
 | Action | Model | Tokens in | Tokens out | Cost |
 |---|---|---|---|---|
@@ -186,8 +141,74 @@ Every saved LLM output records its token usage, and the plan page shows the runn
 | Adaptation from the form, early in the plan | Sonnet 5.5 | 20,164 | 1,691 | $0.057 |
 | Progress summary | Sonnet 5.5 | 51,287 | 4,070 | $0.143 |
 
-Plan generation has not been measured on the default Sonnet 5.5. The same token counts would cost about $0.24, but tokens differ between models. Chat, adaptation and progress input grows with every session logged, because they send the full history.
+Plan generation was measured on Haiku. On the default Sonnet 5.5, the same token counts cost about $0.24 per plan and $0.16 per regeneration.
 
-## License
+**Per user per month**, built from the measured numbers (5 runs a week, one 10-week plan plus one regeneration on Sonnet, spread over its 2.3 months):
 
-MIT
+| Usage | OpenStride | Runna monthly | Runna annual (per month) |
+|---|---|---|---|
+| Light: plan + every run reviewed + a weekly adaptation check | **~$0.1 one time cost for a plan and ~$0.44 running (optional) monthly costs for continual assessment** | $19.99 | $9.99 |
+| Heavy: the above + 4 progress summaries + 20 chat messages + 2 proposals | **~$3.50** | $19.99 | $9.99 |
+| **Saving** | | **82–98%** | **65–96%** |
+
+Chat is most of the heavy-use cost, because every message sends the full plan and history, and that input grows as the plan goes on. Prompt caching (cache reads on Sonnet 5.5 cost 5% of the input price) would cut most of it.
+
+---
+
+## Run it
+
+You need Python 3.11+ and a [Claude API key](https://platform.claude.com/).
+
+```bash
+git clone https://github.com/danielfodgaard/OpenStride.git
+cd OpenStride
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env        # then set ANTHROPIC_API_KEY
+.venv/bin/uvicorn app.main:app
+```
+
+Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSON files in `data/`.
+
+**Offline demo, no API key needed:**
+
+```bash
+OPENSTRIDE_DEMO=1 .venv/bin/uvicorn app.main:app
+```
+
+This serves a throwaway copy of the demo data with the date pinned to 25 November 2026: an active half-marathon plan, three weeks of reviewed runs, logged strength sessions, a cycling file, a chat thread with a pending proposal, and the charts. Your own `data/` is not touched, and every change disappears when the server stops. Actions that need Claude show an error unless a key is set in `.env`.
+
+**Tests:**
+
+```bash
+.venv/bin/pytest
+```
+
+**Models:** set per task in `.env` (`PLAN_MODEL`, `ADAPT_MODEL`, `REVIEW_MODEL`, `PROGRESS_MODEL`, `CHAT_MODEL`) to trade quality for cost.
+
+---
+
+## What's next
+
+- **Daily use:** a mobile-first design and installable app, one server for phone and laptop over Tailscale, automatic run sync from Garmin Connect, and planned sessions sent to the watch as structured workouts.
+- **Nutrition:** race-day fuelling and day-to-day guidance by session type, focused on eating enough for the training load.
+- **Then:** one-command install for technical testers, and eventually a hosted version for everyone else.
+
+---
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). The dependencies are under permissive licences compatible with MIT: FastAPI, Pydantic, the Anthropic SDK, fitdecode and pytest (MIT), uvicorn and python-dotenv (BSD-3-Clause), gpxpy and python-multipart (Apache-2.0). OpenStride isn't affiliated with Runna or Strava; no Runna code, assets or trademarks are used.
+
+---
+
+## Sources
+
+- [SensAI – Runna vs TrainingPeaks 2026](https://www.sensai.fit/blog/runna-vs-trainingpeaks-2026) (prices, how Runna builds and adapts plans, App Store rating; checked 21 Oct 2026)
+- [the5krunner – Is Runna free?](https://the5krunner.com/2026/10/14/is-runna-free/) (prices by region, Oct 2026)
+- [stack-archive – Is Runna free? Price, trial, Strava bundle 2026](https://stack-archive.com/blog/is-runna-free-price-trial-strava-bundle-2026/)
+- [Runna support – How Runna builds your plan around your current fitness](https://support.runna.com/en/articles/15231838-how-does-runna-build-your-training-plan-around-your-current-fitness) (as cited by SensAI)
+- [clickyourapp – Runna store figures (Google Play 1,000,000+ downloads)](https://clickyourapp.com/au/charts/app-store/com.runbuddy.prod/)
+- [AppGoblin – Runna Android install estimate](https://www.appgoblin.info/apps/com.runbuddy.prod) (crawled 29 Oct 2026)
+- [Advnture – Strava's 150 million users get a new running coach](https://www.advnture.com/tech/apps-software/a-perfect-fit-stravas-150-million-users-get-a-new-running-coach-as-brand-acquires-coaching-app-runna)
+- [Anthropic – Claude API pricing](https://platform.claude.com/docs/en/about-claude/pricing)
