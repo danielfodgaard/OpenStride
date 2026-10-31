@@ -113,7 +113,8 @@ def build_weeks(done: list[Entry], plan_file: PlanFile) -> list[WeekVolume]:
         here = [entry for entry in done if in_week(entry, week)]
         matched = {e.match.session_index for e in here if 0 <= e.match.session_index < len(week.sessions)}
         strength = [i for i, s in enumerate(week.sessions) if s.modality == "strength"]
-        unplanned_strength = sum(e.modality == "strength" and e.match.session_index < 0 for e in here)
+        cross = [i for i, s in enumerate(week.sessions) if s.modality == "cross"]
+        unplanned = lambda modality: sum(e.modality == modality and e.match.session_index < 0 for e in here)
         weeks.append(WeekVolume(
             week_number=week.week_number,
             start_date=week.start_date,
@@ -122,9 +123,11 @@ def build_weeks(done: list[Entry], plan_file: PlanFile) -> list[WeekVolume]:
             planned_sessions=len(week.sessions),
             completed_sessions=len(matched),
             planned_strength=len(strength),
-            completed_strength=len(matched & set(strength)) + unplanned_strength,
+            completed_strength=len(matched & set(strength)) + unplanned("strength"),
             planned_cross_min=sum(s.duration_min for s in week.sessions if s.modality == "cross"),
             actual_cross_min=round(sum(e.minutes for e in here if e.modality == "cross"), 1),
+            planned_cross=len(cross),
+            completed_cross=len(matched & set(cross)) + unplanned("cross"),
         ))
     return weeks
 

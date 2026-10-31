@@ -316,6 +316,8 @@ class WeekVolume(BaseModel):
     completed_strength: int
     planned_cross_min: float
     actual_cross_min: float
+    planned_cross: int = 0
+    completed_cross: int = 0
 
 
 class TrendPoint(BaseModel):

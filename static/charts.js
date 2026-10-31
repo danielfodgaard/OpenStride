@@ -149,6 +149,7 @@ function drawBarChart({ title, bars, headers, rows }) {
     svg.append(svgEl("text", { x: MARGIN.left - 6, y: toY(tick) + 4, "text-anchor": "end", "font-size": 11 }, tick));
   }
   const small = slot < 34 ? 7 : 9;
+  const wide = slot >= 60;  // room for "S 2/2 · X 1/1" on one line
   bars.forEach((bar, i) => {
     const middle = MARGIN.left + slot * (i + 0.5);
     const addBar = (x, value, color) => svg.append(svgEl("rect", {
@@ -157,7 +158,7 @@ function drawBarChart({ title, bars, headers, rows }) {
     addBar(middle - barWidth, bar.planned, COLORS.grey);
     if (bar.actual !== null) addBar(middle, bar.actual, COLORS.blue);
     svg.append(svgEl("text", { x: middle, y: height - bottom + 13, "text-anchor": "middle", "font-size": 10 }, bar.label));
-    bar.notes.forEach((note, line) => svg.append(svgEl("text", {
+    (wide ? [bar.notes.join(" · ")] : bar.notes).forEach((note, line) => svg.append(svgEl("text", {
       x: middle, y: height - bottom + 25 + line * 10, "text-anchor": "middle", "font-size": small,
     }, note)));
   });
@@ -174,7 +175,7 @@ function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
 function weekNotes(week) {
   const notes = [];
   if (week.planned_strength || week.completed_strength) notes.push(`S ${week.completed_strength}/${week.planned_strength}`);
-  if (week.planned_cross_min || week.actual_cross_min) notes.push(`X ${Math.round(week.actual_cross_min)}/${Math.round(week.planned_cross_min)}`);
+  if (week.planned_cross || week.completed_cross) notes.push(`X ${week.completed_cross}/${week.planned_cross}`);
   return notes;
 }
 
@@ -198,11 +199,11 @@ function drawProgressCharts(metrics, raceDate) {
       actual: w.start_date > metrics.as_of ? null : w.actual_km,
       notes: weekNotes(w),
     })),
-    headers: ["Week", "Start", "Planned km", "Actual km", "Sessions", "Strength", "Cross min"],
+    headers: ["Week", "Start", "Planned km", "Actual km", "Sessions", "Strength", "Cross", "Cross min"],
     rows: metrics.weeks.map((w) => [
       w.week_number, w.start_date, w.planned_km, w.start_date > metrics.as_of ? "" : w.actual_km,
       `${w.completed_sessions}/${w.planned_sessions}`, `${w.completed_strength}/${w.planned_strength}`,
-      `${w.actual_cross_min}/${w.planned_cross_min}`,
+      `${w.completed_cross}/${w.planned_cross}`, `${w.actual_cross_min}/${w.planned_cross_min}`,
     ]),
   });
 

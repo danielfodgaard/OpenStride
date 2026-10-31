@@ -160,3 +160,17 @@ def test_cycling_is_load_but_not_running_km(plan):
 def test_refresh_writes_the_cache(plan):
     result = metrics.refresh(plan, TODAY)
     assert (storage.plan_dir("plan") / "metrics_cache.json").read_text() == result.model_dump_json(indent=2)
+
+
+def test_strength_and_cross_counts_for_the_chart_notes(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    plan_file = PlanFile.model_validate_json(Path("examples/sample_plan_v3.json").read_text())
+    plan_file.meta.id = "plan"
+    storage.save_plan(plan_file)
+    active = lifecycle.accept("plan")
+    ride = activities.parse_file("a.fit", (SAMPLES / "cross" / "2026-11-04_ride.fit").read_bytes(), "plan")
+    ride.match = activities.match_activity(ride, active)
+    storage.save_activity(ride)
+    week = metrics.compute(active, TODAY).weeks[0]
+    assert (week.completed_cross, week.planned_cross) == (1, 1)
+    assert (week.completed_strength, week.planned_strength) == (0, 2)
