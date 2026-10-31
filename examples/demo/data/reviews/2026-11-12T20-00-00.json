@@ -2,24 +2,25 @@
   "activity_id": "2026-11-12T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 10 km done at 5:44/km, steady and well inside the easy range.",
+    "headline": "Easy 10 km done at a steady 5:44/km, inside the 5:11-6:13 easy band and conversational.",
     "observations": [
-      "Distance 10.01 km matches the 10 km easy target; pace 5:44/km sits inside the 5:11-6:13/km band.",
-      "Every km split was 344 s with average HR 138-142, so pacing was very even and controlled.",
-      "Average HR 140 matches the 4-week easy HR average, and efficiency 1.247 is in line with recent easy runs."
+      "Distance 10.01 km against 10.0 planned, all ten km splits at 5:44/km with no drift.",
+      "Average HR 140 (max 143), in line with recent easy runs at 138-142 bpm.",
+      "Pace sits in the middle-to-slow part of the easy band, which fits the relaxed purpose of the session.",
+      "Cadence 174 spm, consistent with previous runs."
     ],
     "flags": [
-      "No RPE or note was logged, so perceived effort is unknown.",
-      "Training load is low: weekly actual km is far below plan (16 km in week 2, none since), and the CTL is falling to 33.1 from about 43."
+      "RPE and athlete note not logged for this run, so perceived effort is unknown.",
+      "Week 2 is at 16 km of 45 planned, and the last 7 days include a short-cut tempo (6 of planned km, called at RPE 8 with a note about heavy legs); keep an eye on recovery."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:59:08+00:00",
+    "created_at": "2026-10-31T05:13:35+00:00",
     "usage": {
       "input_tokens": 7948,
-      "output_tokens": 255
+      "output_tokens": 301
     }
   }
 }

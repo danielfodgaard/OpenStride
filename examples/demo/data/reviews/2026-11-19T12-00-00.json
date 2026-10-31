@@ -2,25 +2,27 @@
   "activity_id": "2026-11-19T12-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Reps averaged about 4:00/km against a 3:55/km target, with controlled warm-up and cool-down.",
+    "headline": "Session matched the planned distance and structure; reps averaged 4:00/km against a 3:55/km target with HR peaking at 174.",
     "observations": [
-      "The 1.6 km rep block averaged 4:00/km against the 3:55/km target, about 5 s/km slow but close to plan.",
-      "Heart rate in the reps averaged 171 bpm with a 174 bpm peak, so the effort was close to maximal.",
-      "Recovery jogs averaged 6:20/km over 1.2 km, consistent with easy running and a proper recovery.",
-      "Warm-up and cool-down were both 2.0 km at 5:45/km with HR 135-142, which is controlled and easy."
+      "Warm-up 2.0 km at 5:45/km (HR 135) and cool-down 2.0 km at 5:45/km (HR 142) were both easy and within the 5:11-6:13 band.",
+      "The 1.6 km rep block averaged 4:00/km (HR 171), about 5 s/km off the 3:55/km target, so the reps were close to plan.",
+      "The three 0.4 km jogs were covered in 1.2 km at 6:20/km (HR 145), a sensible recovery pace.",
+      "Total distance was 6.8 km, exactly as planned."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so the session's perceived effort is unknown.",
-      "Week 3 volume is well below plan (15.8 km actual vs 43.4 km planned) and CTL has dropped 5.9 over 7 days, so fitness is slipping."
+      "The reps were not lapped separately, so rep-by-rep evenness can't be checked; km splits show 4:00, 4:56 and 6:13, which blends reps and jogs.",
+      "No RPE or athlete note was logged, so effort is judged from HR and pace only.",
+      "Training has stopped since this session: no runs logged from 2026-11-20 to 2026-11-25, and week 3 reached only 15.8 of 43.4 planned km.",
+      "CTL dropped 5.9 over the last 7 days to 40.2, and TSB is -1.5 after this session."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:59:29+00:00",
+    "created_at": "2026-10-31T05:13:54+00:00",
     "usage": {
       "input_tokens": 8371,
-      "output_tokens": 1487
+      "output_tokens": 1667
     }
   }
 }

@@ -2,24 +2,25 @@
   "activity_id": "2026-11-14T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 9 km done on target: 9.00 km at a steady 5:48/km, inside the 5:11-6:13 easy band.",
+    "headline": "Easy 9 km done on plan: 9.00 km at a steady 5:48/km, avg HR 137.",
     "observations": [
-      "Planned easy 9 km; completed 9.004 km in 3130 s, all nine km splits at 5:48/km with no drift.",
-      "Average HR 137 (range 135-139) sits below the 4-week easy average of 139, consistent with relaxed conversational effort.",
-      "Cadence 174 spm matches recent easy runs; efficiency 1.26 is in line with the 1.22-1.27 range of recent easy efforts."
+      "Planned 9 km easy at 5:11-6:13/km; ran 9.00 km in 3130 s at 5:48/km, inside the easy band and close to the 4-week easy average of 5:46/km.",
+      "Every km split was 348 s with HR between 135 and 139, showing very even, controlled effort.",
+      "Avg HR 137 is at the low end of recent easy runs (138-140), and the efficiency index of 1.26 is in line with the recent easy-run trend.",
+      "RPE and athlete note were not logged, so the subjective effort is unknown."
     ],
     "flags": [
-      "RPE was not logged (0), so the athlete's perceived effort is unknown; the note is empty.",
-      "Training load is low after a missed week 2 (only 25 km of 45 planned) and no runs since 2026-11-14 in the data, so the CTL is drifting down from 44.8 to 34.4."
+      "No RPE or note logged for this run, so subjective feel cannot be confirmed.",
+      "Weekly volume is far behind plan (25 km of 45 km in week 2 and no runs in week 3 so far), and CTL has dropped from 45 to 34 over the past week."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:59:11+00:00",
+    "created_at": "2026-10-31T05:13:37+00:00",
     "usage": {
       "input_tokens": 7988,
-      "output_tokens": 321
+      "output_tokens": 342
     }
   }
 }

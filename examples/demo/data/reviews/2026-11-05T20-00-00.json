@@ -2,25 +2,25 @@
   "activity_id": "2026-11-05T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 9 km done at a steady 5:42/km, inside the 5:11-6:13 easy band and at a conversational heart rate.",
+    "headline": "Easy 9 km completed at 5:42/km, inside the 5:11-6:13/km easy band with HR steady at 138 bpm.",
     "observations": [
-      "Distance 8.99 km against 9.0 planned, so the volume target was met.",
-      "Average pace 5:42/km sits in the middle of the easy range; every km split was 342 s, showing very even pacing.",
-      "Average HR 138 with max 141 and cadence 174 spm indicate a relaxed, aerobic effort.",
-      "Efficiency 1.273 is close to the 4-week easy average of 138 bpm and 342 s/km, so no drift from baseline."
+      "Distance 8.99 km against a 9.0 km plan, essentially on target.",
+      "Every km split was 5:42/km (342 s), showing very even, controlled pacing.",
+      "Average HR 138 bpm with max 141 bpm, consistent with relaxed conversational effort.",
+      "Cadence 174 spm and zero elevation gain, a clean and easy run."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so perceived effort is unconfirmed.",
-      "Weekly volume is far behind plan (16.99 km done of 42 planned in week 1) and CTL has fallen from 43 to 26.7, though this run itself was executed well."
+      "No RPE or athlete note was logged, so subjective effort is unknown.",
+      "Weekly volume is far behind plan (16.99 km actual vs 42 km planned), and CTL has fallen from 43 to 26.7 over the last week."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:58:50+00:00",
+    "created_at": "2026-10-31T05:13:15+00:00",
     "usage": {
       "input_tokens": 6155,
-      "output_tokens": 321
+      "output_tokens": 279
     }
   }
 }

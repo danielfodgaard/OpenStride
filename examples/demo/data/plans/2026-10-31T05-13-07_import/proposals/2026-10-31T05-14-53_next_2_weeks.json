@@ -1,33 +1,33 @@
 {
-  "proposal_id": "2026-10-31T05-00-27_next_2_weeks",
-  "plan_id": "2026-10-31T04-58-41_import",
+  "proposal_id": "2026-10-31T05-14-53_next_2_weeks",
+  "plan_id": "2026-10-31T05-13-07_import",
   "based_on_version": 1,
   "scope": "next_2_weeks",
   "scope_weeks": [
     4,
     5
   ],
-  "user_context": "In week 5 (starting 2026-11-30), the athlete travels Thursday Dec 3. Keep the Tuesday Dec 1 tempo (2 x 3 km) and the Sunday Dec 6 long run unchanged. Remove the Thursday Dec 3 intervals (4 x 0.8 km) and do not move them to Saturday or Wednesday, since that would put hard runs on consecutive days. Replace the Wednesday Dec 2 easy ride with an easy 8 km run at easy pace, and move Strength B from Thursday Dec 3 to Wednesday Dec 2. Keep the Saturday Dec 5 easy 8 km. Result: runs on Tue, Wed, Sat and Sun only (4 runs), nothing on Thursday.\n\nFrom chat:\nIs my easy pace too fast?\nSwap Thursday and Saturday next week please, I'm travelling Thursday.",
+  "user_context": "In week 5 (starting 2026-11-30), swap the Thursday 2026-12-03 and Saturday 2026-12-05 sessions: move the 4 x 0.8 km interval run and Strength B from Thursday to Saturday, and move the Easy 8 km run from Saturday to Thursday. Keep all distances, paces and volumes unchanged, leave the Wednesday ride and Sunday long run as they are, and keep at most 4 runs that week.\n\nFrom chat:\nIs my easy pace too fast?\nSwap Thursday and Saturday next week please, I'm travelling Thursday.",
   "status": "pending",
   "acceptable": true,
   "result": {
     "recommendation": "change",
-    "rationale": "Only week 5 needs to change: the athlete travels on Thursday Dec 3, so the Thursday intervals are dropped and not moved, since Wednesday or Saturday would put hard runs on consecutive days. The Wednesday ride becomes an easy 8 km run, Strength B moves to Wednesday, and the Tuesday tempo, Saturday easy run and Sunday long run stay as planned. That gives four runs on Tue, Wed, Sat and Sun, so I did not swap Thursday and Saturday. Easy pace is fine: recent easy runs at 5:42-5:52/km with HR around 138-142 sit inside the 5:11-6:13/km band at a conversational effort, so no slowdown is needed. Week 4 is returned unchanged, with the sessions through today copied as they were.",
+    "rationale": "You asked to swap Thursday and Saturday in week 5 because you travel Thursday, so the 4 x 0.8 km intervals and Strength B move to Saturday 12-05 and the Easy 8 km moves to Thursday 12-03, with distances, paces and volume unchanged. The trade-off is that Saturday's hard intervals and Strength B now sit the day before the Sunday long run, which breaks the usual no-strength-before-long-run and no-hard-run-before-long-run guidance. Keep Saturday's strength light and the reps controlled, and drop the strength if your legs feel heavy on Sunday morning. On your pace question: your easy runs at 5:42-5:52/km and about 140 bpm sit inside the 5:11-6:13 easy band, so they are not too fast. Week 4 is otherwise unchanged.",
     "changes": [
       {
         "week_number": 5,
         "day": "Thu",
-        "summary": "Removed the 4 x 0.8 km intervals because the athlete travels on Dec 3, and did not move them to avoid back-to-back hard runs."
+        "summary": "Easy 8 km run moved here from Saturday, and the intervals and Strength B move off Thursday, because you are travelling Thursday."
       },
       {
         "week_number": 5,
-        "day": "Wed",
-        "summary": "Replaced the 45 min easy ride with an easy 8 km run at easy pace, to keep run volume in the travel week."
+        "day": "Sat",
+        "summary": "4 x 0.8 km intervals moved here from Thursday at your request, so they now fall the day before the long run."
       },
       {
         "week_number": 5,
-        "day": "Wed",
-        "summary": "Moved Strength B from Thursday to Wednesday because the athlete is travelling on Thursday."
+        "day": "Sat",
+        "summary": "Strength B moved here from Thursday at your request, so it now falls the day before the long run; keep it light."
       }
     ],
     "weeks": [
@@ -239,8 +239,8 @@
       {
         "week_number": 5,
         "phase": "build",
-        "focus": "Threshold volume, travel-adjusted week",
-        "planned_km": 43.6,
+        "focus": "Threshold volume",
+        "planned_km": 44.0,
         "sessions": [
           {
             "day": "Tue",
@@ -349,17 +349,76 @@
           },
           {
             "day": "Wed",
+            "type": "cross_training",
+            "modality": "cross",
+            "title": "Easy ride 45 min",
+            "distance_km": 0.0,
+            "duration_min": 45.0,
+            "target_pace": "RPE 4",
+            "description": "Easy spin, replaces easy running volume.",
+            "steps": []
+          },
+          {
+            "day": "Thu",
             "type": "easy",
             "modality": "run",
             "title": "Easy 8 km",
             "distance_km": 8.0,
             "duration_min": 0.0,
             "target_pace": "5:11-6:13/km",
-            "description": "Relaxed, conversational running at easy pace.",
+            "description": "Relaxed, conversational running.",
             "steps": []
           },
           {
-            "day": "Wed",
+            "day": "Sat",
+            "type": "intervals",
+            "modality": "run",
+            "title": "4 × 0.8 km",
+            "distance_km": 8.4,
+            "duration_min": 0.0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 4,
+                "description": "Interval",
+                "distance_km": 0.8,
+                "duration_min": 0.0,
+                "target_pace": "4:09/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              }
+            ]
+          },
+          {
+            "day": "Sat",
             "type": "strength",
             "modality": "strength",
             "title": "Strength B",
@@ -407,17 +466,6 @@
             ]
           },
           {
-            "day": "Sat",
-            "type": "easy",
-            "modality": "run",
-            "title": "Easy 8 km",
-            "distance_km": 8.0,
-            "duration_min": 0.0,
-            "target_pace": "5:11-6:13/km",
-            "description": "Relaxed, conversational running.",
-            "steps": []
-          },
-          {
             "day": "Sun",
             "type": "long",
             "modality": "run",
@@ -434,10 +482,14 @@
   },
   "meta": {
     "model": "claude-sonnet-5-5",
-    "created_at": "2026-10-31T05:00:27+00:00",
+    "created_at": "2026-10-31T05:14:53+00:00",
     "usage": {
-      "input_tokens": 52428,
-      "output_tokens": 4271
+      "input_tokens": 52395,
+      "output_tokens": 4801
     }
-  }
+  },
+  "origin": "chat",
+  "warnings": [
+    "Hard runs on consecutive days: Week 5 Sat and Week 5 Sun"
+  ]
 }

@@ -2,25 +2,24 @@
   "activity_id": "2026-11-07T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 9 km done at a steady 5:50/km, inside the 5:11-6:13 easy band and close to the previous easy run's pace.",
+    "headline": "Easy 9 km completed at 5:50/km, inside the 5:11-6:13/km easy band and close to the previous easy run.",
     "observations": [
-      "Distance 9.01 km against 9.0 planned, so the volume target was hit exactly.",
-      "Every km split was 350 s, so the pace was very even and controlled.",
-      "Pace of 5:50/km sits in the middle of the easy band and is comparable to the 5:42/km easy run on 11-05, which was run with HR 138.",
-      "No HR, cadence, or RPE was recorded, so the conversational effort can't be confirmed from data."
+      "Distance 9.01 km against 9.0 planned, moving time 3150 s, no laps or HR data recorded.",
+      "Every km split was exactly 350 s (5:50/km), a very even, controlled pace consistent with relaxed running.",
+      "Pace is 8 s/km slower than the 11-05 easy run (5:42/km), and the 4-week easy average is 5:46/km, so this sits in the normal easy range."
     ],
     "flags": [
-      "No heart rate or RPE logged, so effort intensity is unverified.",
-      "Weekly volume is well behind plan (26 km done of 42 km planned in week 1) and CTL has dropped from 43 to 27 over the last 3 weeks."
+      "No heart rate, RPE or cadence was logged, so effort cannot be confirmed against the conversational intent.",
+      "Weekly volume is far behind plan (26 of 42 km in week 1 and only 6.5 km/week 4-week average), with CTL down 5.0 over 7 days."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:58:52+00:00",
+    "created_at": "2026-10-31T05:13:18+00:00",
     "usage": {
       "input_tokens": 6570,
-      "output_tokens": 307
+      "output_tokens": 313
     }
   }
 }

@@ -2,27 +2,26 @@
   "activity_id": "2026-11-17T12-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Tempo session completed as prescribed: 5 km at 4:36/km against a 4:37/km target, with easy warm-up and cool-down.",
+    "headline": "Tempo held on target: 5 km at 4:36/km against a 4:37/km prescription, with easy warm-up and cool-down.",
     "observations": [
-      "Warm-up and cool-down each 2 km at 5:45/km, inside the 5:11-6:13 easy band, with HR 136-140.",
-      "Tempo block held 4:36/km across all five km splits, 1 s/km inside target, with steady avg HR 163.",
-      "Efficiency 1.30 matches the 2026-11-03 tempo (1.30) and is well above the 2026-11-10 session (1.09), which was cut short at 6 km.",
-      "Full 9.0 km in 2760 s, with the structure of the planned session carried out."
+      "Tempo lap averaged 4:36/km, 1 s/km inside the 4:37 target, with the five tempo km splits steady at 4:36.",
+      "Warm-up and cool-down ran 5:45/km at HR 136-140, inside the easy zone (5:11-6:13/km).",
+      "Tempo HR averaged 163 (max 166), and aerobic efficiency of 1.304 matches the 2026-11-03 tempo, a strong sign of controlled execution.",
+      "Compared with the 2026-11-10 tempo (cut at 6 km, RPE 8, HR 163 at 5:37/km), this session shows much better pacing discipline."
     ],
     "flags": [
-      "No RPE or athlete note logged, so effort is judged only from pace and HR.",
-      "ATL 55.5 is above CTL 47.2 (TSB -4.3), so fatigue is building.",
-      "Week 3 shows 9.0 of 43.4 planned km, and no runs are logged after this session through 2026-11-25.",
-      "CTL has fallen 7.2 over the last 7 days, so fitness is trending down during the gap."
+      "No RPE or athlete note was logged, so the subjective effort read is missing.",
+      "TSB is -4.3 and ATL (55.5) sits above CTL (47.2) after two long-ish efforts, so fatigue is building into the next block.",
+      "No runs have been logged since 2026-11-17, and CTL has fallen to 38.9, so the fitness trend is down."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:59:21+00:00",
+    "created_at": "2026-10-31T05:13:45+00:00",
     "usage": {
       "input_tokens": 8636,
-      "output_tokens": 1268
+      "output_tokens": 1006
     }
   }
 }

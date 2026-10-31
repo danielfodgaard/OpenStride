@@ -4,23 +4,24 @@
     "completion": "as_planned",
     "headline": "Long run 16 km completed at a steady, controlled 5:47/km, squarely inside the easy band.",
     "observations": [
-      "Distance 15.995 km in 5550 s moving time, avg 5:47/km, which sits within the planned 5:11-6:13/km easy range and well off tempo effort.",
-      "Pace was remarkably even: 15 of 16 splits at 5:48/km, with one 5:38 split at km 9 and no fade over the second half.",
-      "Average HR 142 with max 145 and a tight split-to-split range (140-144) shows the run stayed aerobic and unhurried, matching the 'steady and unhurried' intent.",
-      "Efficiency 1.218 is close to the recent easy-run value of 1.273, consistent with a relaxed effort rather than a push."
+      "Distance 15.995 km in 5550 s moving time (5:47/km), within the planned 5:11-6:13/km easy range.",
+      "Remarkably even pacing: 15 of 16 km splits at 5:48/km, with HR 140-144 throughout, so no drift or fade.",
+      "Average HR 142 bpm, max 145 bpm, consistent with a relaxed aerobic effort and matching the prior easy run HR of 138-140.",
+      "The run fits the brief of steady and unhurried; the single 5:38 split at km 9 is negligible noise."
     ],
     "flags": [
-      "RPE was not logged, so perceived effort cannot be cross-checked against the heart-rate picture.",
-      "Fueling for race day was part of the brief but no note was recorded on fueling or how the run felt."
+      "No RPE or athlete note was logged, so subjective effort and fueling cannot be confirmed.",
+      "Elevation gain of 182 m is not reflected in the planned session; worth noting for future long-run pacing.",
+      "Week 1 completed only 4 of 7 sessions and no strength or cross-training was logged, so the week's load is incomplete."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:58:55+00:00",
+    "created_at": "2026-10-31T05:13:21+00:00",
     "usage": {
       "input_tokens": 7412,
-      "output_tokens": 352
+      "output_tokens": 366
     }
   }
 }

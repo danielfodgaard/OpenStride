@@ -2,27 +2,26 @@
   "activity_id": "2026-11-03T17-30-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Tempo session executed as prescribed: 4 km held at 4:37/km with easy warm-up and cool-down.",
+    "headline": "Tempo session executed to target: 4 km at 4:37/km on the nail, with easy warm-up and cool-down.",
     "observations": [
-      "Tempo block: 4.0 km in 1108 s at 4:37/km, matching the 4:37/km target; km splits 4:36-4:37 were very even.",
-      "Warm-up and cool-down ran at 5:45/km, inside the 5:11-6:13/km easy band, with HR around 135-140 bpm, so the easy portions were controlled.",
-      "Tempo HR averaged 161-162 bpm (session avg 148, max 165), a firm but sustainable effort for a threshold block.",
-      "Total 8.0 km in 2488 s, average 5:11/km, with about 20 m of elevation gain."
+      "Tempo block (2.0 to 6.0 km) ran 1108 s at 4:37/km, matching the 4:37 threshold target; the km splits held 4:36 to 4:37 throughout.",
+      "Tempo HR was steady at 161 to 162 bpm, with max HR 165, which is consistent with a controlled threshold effort.",
+      "Warm-up and cool-down both ran 5:45/km at about 135 to 140 bpm, inside the easy band of 5:11 to 6:13 and not drifting into tempo effort.",
+      "Full 8.0 km in 2488 s, average 5:11/km, average cadence 176 spm, and average HR 148."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so the subjective effort is unknown.",
-      "No runs are recorded after 2026-11-03 in the metrics window to 2026-11-25, and week 1 completed 8.0 of 42.0 planned km.",
-      "CTL fell 4.7 points over 7 days (to 25.7 from 43.7 on the session date), and weekly running averaged 2.0 km over the last 4 weeks.",
-      "Strength and cross-training sessions are also logged as 0 completed across all weeks so far."
+      "No RPE or athlete note was logged, so the perceived effort of this session is unknown.",
+      "No runs were logged after this session through 2026-11-25, and week 1 is at 8.0 of 42 planned km, so the plan is far behind.",
+      "CTL fell from 43.7 to 25.7 over the period, with a 7-day change of -4.7, so fitness is decaying quickly."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:58:47+00:00",
+    "created_at": "2026-10-31T05:13:13+00:00",
     "usage": {
       "input_tokens": 5944,
-      "output_tokens": 872
+      "output_tokens": 880
     }
   }
 }

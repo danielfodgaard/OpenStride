@@ -2,25 +2,25 @@
   "activity_id": "2026-11-21T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 9 km done at 5:46/km, inside the 5:11-6:13 easy band and at a conversational heart rate.",
+    "headline": "Easy 9 km done at 5:46/km and HR 139, squarely inside the easy band and matching the plan.",
     "observations": [
-      "Distance 8.999 km against a 9.0 km plan, so the volume matched.",
-      "Average pace 5:46/km sits inside the easy band; every km split was 5:46 (345-346 s), showing very even pacing.",
-      "Average HR 139 (max 142), in line with the 4-week easy average of 140 and recent easy runs at 137-140.",
-      "Cadence 174 spm, consistent with recent easy runs."
+      "Distance 8.999 km against a 9.0 km plan; all nine km splits held 5:46/km (345-346 s) with no drift.",
+      "Average HR 139 (max 142) sits in the conversational range and is in line with recent easy runs (137-140 bpm).",
+      "Pace of 5:46/km is within the 5:11-6:13/km easy band and slightly quicker than the 4-week easy average of 5:47/km, which is consistent with a relaxed effort.",
+      "Cadence 174 spm and efficiency 1.249 are steady with the previous easy runs, so there are no signs of fatigue."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so perceived effort is unconfirmed.",
-      "Week 3 completed only 3 of 7 sessions (24.8 km of 43.4 planned), and CTL has dropped 4.4 points over 7 days, so recent load is well below plan."
+      "No RPE or athlete note was logged, so subjective effort is unknown.",
+      "Weekly volume is well behind plan (24.8 of 43.4 km in week 3), and the athlete has not logged a run since 21 Nov, so the training block is at risk of falling further behind."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:59:31+00:00",
+    "created_at": "2026-10-31T05:13:57+00:00",
     "usage": {
       "input_tokens": 8237,
-      "output_tokens": 307
+      "output_tokens": 360
     }
   }
 }
