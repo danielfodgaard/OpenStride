@@ -1,10 +1,10 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
-  api, breadcrumb, bulletList, button, downloadButton, el, fullPlanVersionCheck, labelled, line, link, main,
-  planPath, postJson, refresh, stale, statusLine, table, textarea, viewToken,
+  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, el, foldable, fullPlanVersionCheck, labelled,
+  line, link, main, notice, planPath, postJson, refresh, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
-import { DAYS, amountText, dateText } from "./format.js";
-import { drawProgressCharts, snapshotText } from "../charts.js";
+import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
+import { drawProgressCharts } from "../charts.js";
 
 function sessionText(session) {
   if (!session) return "Rest";
@@ -29,6 +29,7 @@ function diffTable(planFile, proposal) {
 function proposalView(proposal, planFile, bases, readOnly = false) {
   const box = el("div");
   const status = statusLine();
+  box.className = "field";
   const { recommendation, rationale, changes } = proposal.result;
   box.append(el("h3", recommendation === "no_change" ? "No change recommended" : "Suggested changes"));
   box.append(el("p", `Weeks ${proposal.scope_weeks.join(", ")} — ${proposal.status}`), el("p", rationale));
@@ -39,14 +40,14 @@ function proposalView(proposal, planFile, bases, readOnly = false) {
     if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
     if (proposal.acceptable && proposal.status === "pending" && !readOnly) {
       const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
-      box.append(line(
+      const plan = planFile.meta.id;
+      box.append(actions(
         button("Accept", status, async () => {
-          await api(`${path}/accept`, { method: "POST" });
+          await api(`${path}/accept`, { method: "POST", plan });
           refresh();
-        }),
-        " ",
+        }, "Working…", "primary"),
         button("Reject", status, async () => {
-          await api(`${path}/reject`, { method: "POST" });
+          await api(`${path}/reject`, { method: "POST", plan });
           refresh();
         }),
       ));
@@ -56,8 +57,11 @@ function proposalView(proposal, planFile, bases, readOnly = false) {
   return box;
 }
 
+function versionLine({ meta }) {
+  return line(`${meta.status} · version ${meta.version} · `, link("All versions", `${planPath(meta.id)}/versions`));
+}
+
 function adaptSection(planFile, proposals, bases) {
-  const section = el("section");
   const status = statusLine();
   const scope = el("select");
   scope.id = "adapt-scope";
@@ -73,8 +77,17 @@ function adaptSection(planFile, proposals, bases) {
     });
     refresh();
   }, "Thinking… this can take a minute");
-  section.append(el("h2", "Adapt plan"), labelled("Scope", scope), labelled("Context", context), line(suggest), status);
   const latest = proposals.find((p) => p.origin !== "chat");
+  const pending = proposals.some((p) => p.origin !== "chat" && p.status === "pending");
+  const section = foldable(
+    "Adapt plan",
+    pending,
+    versionLine(planFile),
+    labelled("Scope", scope),
+    labelled("Context", context),
+    actions(suggest),
+    status,
+  );
   if (latest) section.append(proposalView(latest, planFile, bases));
   return section;
 }
@@ -102,15 +115,15 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   text.id = "chat-text";
   const send = button("Send", status, async () => {
     if (!text.value.trim()) throw new Error("Write a message first.");
-    await postJson(`/api/plans/${encoded}/chat`, { text: text.value });
+    await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
     refresh();
-  }, "The coach is thinking…");
+  }, "The coach is thinking…", "primary");
   const clear = button("Clear chat", status, async () => {
     if (!confirm("Clear the chat? The coach loses this history.")) return;
-    await api(`/api/plans/${encoded}/chat/clear`, { method: "POST" });
+    await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
     refresh();
   });
-  section.append(labelled("Message", text), line(send, " ", clear), status);
+  section.append(labelled("Message", text), actions(send, clear), status);
   return section;
 }
 
@@ -135,7 +148,7 @@ function progressSection(planFile, progress, readOnly) {
       const result = await api(`/api/plans/${encodeURIComponent(planFile.meta.id)}/progress/summary`, { method: "POST" });
       summary.replaceChildren(summaryView(result));
     }, "Summarising…");
-    section.append(line(ask), status);
+    section.append(actions(ask), status);
   }
   section.append(summary, el("h3", "Planned vs actual"), table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]));
   return section;
@@ -143,60 +156,88 @@ function progressSection(planFile, progress, readOnly) {
 
 function usageFooter(usage) {
   const cost = usage.unpriced_models.length ? `$${usage.cost_usd} plus ${usage.unpriced_models.join(", ")}` : `$${usage.cost_usd}`;
-  return el("p", `Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`);
+  const text = el("p", `Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`);
+  text.className = "muted";
+  return text;
 }
+
+export const daysToGo = (days) => (days >= 0 ? `${days} days to go` : "race day has passed");
 
 function headerLines(planFile, status) {
   const { request, meta } = planFile;
-  const toGo = status.days_to_race >= 0 ? `${status.days_to_race} days to go` : "race day has passed";
-  const lines = [
-    el("h1", request.goal_description),
-    el("p", `${request.race_distance_km} km — goal ${request.goal_time ?? "best effort"} — race on ${dateText(request.race_date)} (${toGo})`),
-  ];
-  const encoded = encodeURIComponent(meta.id);
-  lines.push(line(`${meta.status} · version ${meta.version} `, link("All versions", `#/plans/${encoded}/versions`)));
-  return lines;
+  const head = el("div");
+  head.className = "page-head";
+  const sub = el("p", `${request.race_distance_km} km · goal ${request.goal_time ?? "best effort"} · race on ${dateText(request.race_date)} (${daysToGo(status.days_to_race)}) `);
+  sub.className = "sub";
+  sub.append(chip(meta.status));
+  head.append(el("h1", request.goal_description), sub);
+  return head;
 }
 
-function statusSection(status, metrics) {
+function toDateSection(status) {
   const section = el("section");
-  let where = `Week ${status.week_number} of ${status.weeks_total} · ${status.phase} phase`;
-  if (!status.started) where = `Starts in week 1 of ${status.weeks_total}`;
-  else if (status.finished) where = "Plan finished";
-  else if (!status.week_number) where = "Between plan weeks";
-  const facts = [
-    `Running: ${status.km_actual} of ${status.km_planned} km planned to date`,
-    `Sessions: ${status.sessions_completed} of ${status.sessions_planned} planned to date`,
+  const stats = [
+    ["Running to date", `${status.km_actual} / ${status.km_planned}`, "km"],
+    ["Sessions to date", `${status.sessions_completed} / ${status.sessions_planned}`],
   ];
-  if (status.strength_planned) facts.push(`Strength: ${status.strength_completed} of ${status.strength_planned}`);
-  if (status.cross_planned) facts.push(`Cross-training: ${status.cross_completed} of ${status.cross_planned}`);
-  section.append(el("h2", "Status"), el("p", where), bulletList(facts), el("p", snapshotText(metrics.current)));
+  if (status.strength_planned) stats.push(["Strength", `${status.strength_completed} / ${status.strength_planned}`]);
+  if (status.cross_planned) stats.push(["Cross-training", `${status.cross_completed} / ${status.cross_planned}`]);
+  section.append(el("h2", "To date"), statStrip(stats));
   return section;
 }
 
 function doneText(session) {
   const actual = [session.actual_km ? `${session.actual_km} km` : "", `${session.actual_min} min`, session.actual_pace, session.actual_hr ? `${session.actual_hr} bpm` : ""];
-  return `Done: ${actual.filter(Boolean).join(" · ")}`;
+  return actual.filter(Boolean).join(" · ");
 }
 
-function nextUpSection(planFile, next, today, todayDone) {
+function sessionRow(planFile, session, when, facts, done) {
+  const row = link("", `${planPath(planFile.meta.id)}/sessions/${session.week_number}/${session.index}`);
+  row.className = "row-link";
+  const title = el("span", `${when}: ${session.title}`);
+  title.className = "row-title";
+  const meta = el("span", facts);
+  meta.className = "row-meta";
+  row.append(title, meta);
+  if (done) row.append(chip("done"));
+  return row;
+}
+
+// The plan's week to show: the current one, week 1 before the start, none once it's over.
+function shownWeek(status) {
+  if (status.finished) return 0;
+  return status.started ? status.week_number : 1;
+}
+
+export function weekSummary(status, metrics) {
+  const number = shownWeek(status);
+  const week = metrics.weeks.find((w) => w.week_number === number);
+  if (!week) return status.finished ? "Plan finished" : "Between plan weeks";
+  return `${roundKm(week.actual_km)} of ${roundKm(week.planned_km)} km · ${week.completed_sessions} of ${week.planned_sessions} sessions`;
+}
+
+function thisWeekSection(planFile, status, metrics) {
   const section = el("section");
-  if (todayDone) {
-    const href = `${planPath(planFile.meta.id)}/sessions/${todayDone.week_number}/${todayDone.index}`;
-    section.append(el("h2", "Today"), line(link(todayDone.title, href)), el("p", doneText(todayDone)));
+  const number = shownWeek(status);
+  const week = planFile.plan.weeks.find((w) => w.week_number === number);
+  const facts = week ? `Week ${number} of ${status.weeks_total} · ${week.phase} · ${weekSummary(status, metrics)}` : weekSummary(status, metrics);
+  const lead = link(facts, `${planPath(planFile.meta.id)}/weeks${week ? `/${number}` : ""}`);
+  lead.className = "big";
+  section.append(el("h2", "This week"), lead);
+  if (!status.started) section.append(el("p", `Starts ${shortDate(planFile.plan.weeks[0].start_date)}`));
+  const list = el("div");
+  list.className = "plan-list";
+  const { next, today, today_done: todayDone } = status;
+  if (todayDone) list.append(sessionRow(planFile, todayDone, "Today", doneText(todayDone), true));
+  if (next) {
+    const planned = [next.type, amountText(next), next.target_pace].filter(Boolean).join(" · ");
+    list.append(sessionRow(planFile, next, next.date === today ? "Today" : shortDate(next.date), planned));
+  } else {
+    list.append(el("p", "No sessions left on this plan."));
   }
-  section.append(el("h2", "Next up"));
-  if (!next) {
-    section.append(el("p", "No sessions left on this plan."));
-    return section;
-  }
-  const href = `${planPath(planFile.meta.id)}/sessions/${next.week_number}/${next.index}`;
-  const when = next.date === today ? "Today" : dateText(next.date);
-  const planned = [next.type, amountText(next), next.target_pace].filter(Boolean).join(" · ");
-  section.append(line(link(`${when}: ${next.title}`, href)), el("p", planned));
+  section.append(list);
   return section;
 }
-
 
 // Draft actions. `form` is present on the generator page, where field edits count too.
 export function draftActions(planFile, status, form, formRequest) {
@@ -204,26 +245,27 @@ export function draftActions(planFile, status, form, formRequest) {
   const feedback = textarea(3, 50);
   feedback.id = "feedback";
   const accept = button("Accept plan", status, async () => {
-    const active = await fetch("/api/plans/active").then((r) => (r.ok ? r.json() : null));
+    const active = await activePlan();
     if (active && !confirm(`This replaces your current plan '${active.request.goal_description}'`)) return;
-    await api(`/api/plans/${encoded}/accept`, { method: "POST" });
+    await api(`/api/plans/${encoded}/accept`, { method: "POST", plan: planFile.meta.id });
     location.hash = planPath(planFile.meta.id);
-  });
+  }, "Working…", "primary");
   const regenerate = button("Regenerate with feedback", status, async () => {
     if (!feedback.value.trim()) throw new Error("Write some feedback first.");
     await postJson(`/api/plans/${encoded}/regenerate`, {
       feedback: feedback.value.trim(),
       request: form ? formRequest(form) : null,
-    });
+    }, planFile.meta.id);
     refresh();
   }, "Regenerating… this takes about a minute");
   const discard = button("Discard", status, async () => {
     if (!confirm("Discard this draft?")) return;
     await api(`/api/plans/${encoded}`, { method: "DELETE" });
     location.hash = "#/plans";
-  });
+  }, "Working…", "danger");
   const box = el("div");
-  box.append(line(accept, " ", discard), labelled("Feedback", feedback), line(regenerate));
+  box.className = "field";
+  box.append(actions(accept, discard), labelled("Feedback", feedback), actions(regenerate));
   if (!form) box.append(line(link("Edit the form fields for this draft", `#/new/${encoded}`)));
   return box;
 }
@@ -231,8 +273,8 @@ export function draftActions(planFile, status, form, formRequest) {
 // What used to sit above the weekly tables: warnings, summary and pace zones.
 export function planBasics(planFile) {
   const { plan, paces } = planFile;
-  const box = el("div");
-  if (plan.warnings.length) box.append(bulletList(plan.warnings));
+  const box = el("section");
+  for (const warning of plan.warnings) box.append(notice(warning));
   box.append(el("p", plan.summary), table(["Zone", "Pace"], [
     ["Easy", paces.easy],
     ["Marathon", paces.marathon],
@@ -266,22 +308,29 @@ export async function planOverview(id) {
   if (stale(token)) return;
 
   const actionStatus = statusLine();
-  const nodes = [breadcrumb(["All plans", "#/plans"], [planFile.request.goal_description]), ...headerLines(planFile, status)];
+  const nodes = [breadcrumb(["All plans", "#/plans"], [planFile.request.goal_description]), headerLines(planFile, status)];
   const weeksLink = line(link("View weeks", `${planPath(id)}/weeks`));
   if (isDraft) {
-    nodes.push(el("p", "Draft"), draftActions(planFile, actionStatus), actionStatus, planBasics(planFile), weeksLink);
+    const draft = el("section");
+    draft.append(draftActions(planFile, actionStatus), actionStatus);
+    nodes.push(draft, planBasics(planFile), weeksLink, versionLine(planFile));
   } else {
-    if (!isActive) nodes.push(el("p", "Archived"));
+    const [fitness, snapshot, volume] = drawProgressCharts(metrics, planFile.request.race_date);
+    const fitnessCard = el("section");
+    fitnessCard.append(fitness, snapshot);
+    const volumeCard = el("section");
+    volumeCard.append(volume);
     nodes.push(
-      statusSection(status, metrics),
-      nextUpSection(planFile, status.next, status.today, status.today_done),
-      ...drawProgressCharts(metrics, planFile.request.race_date),
+      thisWeekSection(planFile, status, metrics),
+      toDateSection(status),
+      fitnessCard,
+      volumeCard,
       weeksLink,
       chatSection(planFile, messages, proposals, bases, !isActive),
       progressSection(planFile, progress, !isActive),
+      isActive ? adaptSection(planFile, proposals, bases) : versionLine(planFile),
     );
-    if (isActive) nodes.push(adaptSection(planFile, proposals, bases));
   }
-  nodes.push(line(downloadButton(planFile, actionStatus)), usageFooter(usage));
+  nodes.push(actions(downloadButton(planFile, actionStatus)), usageFooter(usage));
   main.replaceChildren(...nodes);
 }

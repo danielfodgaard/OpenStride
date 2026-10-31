@@ -29,6 +29,10 @@ export function dateText(iso) {
   return `${LONG_DAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()].slice(0, 3)} ${date.getUTCFullYear()}`;
 }
 
+export const shortDate = (iso) => dateText(iso).slice(0, -5);
+
+export const roundKm = (km) => Number(km.toFixed(1));
+
 export function monthHeading(iso) {
   const date = asDate(iso);
   return `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
