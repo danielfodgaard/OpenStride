@@ -10,7 +10,9 @@ import secrets
 import tempfile
 import threading
 import uuid
+import zipfile
 from contextlib import contextmanager, nullcontext
+from datetime import date
 from pathlib import Path
 
 from filelock import FileLock
@@ -141,6 +143,34 @@ def session_secret() -> bytes:
             if not path.exists():
                 write_file(path, secrets.token_bytes(32), mode=0o600)
     return path.read_bytes()
+
+
+def write_backup(folder: Path, include_secrets: bool = False) -> Path:
+    """A zip of the data folder, which unzips into a working one.
+
+    Every file in it is whole, but it isn't a snapshot: a write during the backup can leave a
+    plan and its proposals a moment apart. TODO(v4.1): hold the locks if that ever matters.
+    """
+    target = folder / f"openstride-backup-{date.today()}.zip"
+    temporary = folder / f".{target.name}.{uuid.uuid4().hex}.tmp"
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(temporary, "x", zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(DATA_DIR.rglob("*")):
+                relative = path.relative_to(DATA_DIR)
+                if not path.is_file() or path.name.endswith((".lock", ".tmp", ".zip")):
+                    continue
+                if relative.parts[0] == "secrets" and not include_secrets:
+                    continue
+                try:
+                    archive.write(path, relative)
+                except FileNotFoundError:  # deleted on another device since the listing
+                    pass
+        os.replace(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return target
 
 
 def plan_dir(plan_id: str) -> Path:

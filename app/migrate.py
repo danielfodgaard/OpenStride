@@ -12,7 +12,10 @@ V1_PLANS_DIR = Path(__file__).parent.parent / "plans"
 
 def migrate(source: Path = V1_PLANS_DIR) -> list[str]:
     moved = []
-    for path in sorted(source.glob("*.json")):
+    paths = sorted(source.glob("*.json"))
+    if paths:  # every schema change backs up first; the zips sit in data/backups/
+        storage.write_backup(storage.DATA_DIR / "backups")
+    for path in paths:
         plan_file = PlanFile.model_validate_json(path.read_text())
         plan_file.schema_version = SCHEMA_VERSION
         plan_file.meta.status = "draft"

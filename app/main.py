@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from app import activities, adapt, chat, clock, config, lifecycle, logbook, metrics, progress, review, storage
@@ -224,6 +225,13 @@ def login(request: Request, password: str = Form("")) -> RedirectResponse:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "version": APP_VERSION, "data_dir_writable": storage.data_dir_writable()}
+
+
+@app.get("/api/backup")
+def download_backup(include_secrets: bool = False) -> FileResponse:
+    folder = tempfile.mkdtemp()
+    path = storage.write_backup(Path(folder), include_secrets)
+    return FileResponse(path, filename=path.name, background=BackgroundTask(shutil.rmtree, folder))
 
 
 @app.post("/api/plan")
