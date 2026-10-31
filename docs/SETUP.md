@@ -39,7 +39,7 @@ When the key expires, sync reports that Garmin refused it: create a new one and 
 
 Runs and other sports go through the same steps as an uploaded file: matching, review, charts and metrics. Strength sessions become logged sessions with no route. The first sync starts a week before the active plan, or 30 days back with no plan. Later syncs look back 3 days from the last one, so a run the watch uploads up to 3 days late is still found; anything later has to be uploaded by hand. If a review fails, the run is still imported and the sync reports a warning. An activity is imported once: if you delete a workout here, sync won't bring it back.
 
-**Workouts on the watch (experimental: not yet tested against a real Garmin watch).** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug. Strength and cross sessions are not exported.
+**Workouts on the watch.** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug. Strength and cross sessions are not exported.
 
 **Send to Garmin (experimental: not yet tested against a real Garmin account).** The Personal API can't write, so sending uses `python-garminconnect`, which Garmin does not sanction and which can break without notice.
 
