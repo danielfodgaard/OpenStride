@@ -76,7 +76,7 @@ function defaultRaceDate() {
   date.setDate(date.getDate() + 70 + (7 - date.getDay()) % 7);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-form.race_date.value = defaultRaceDate();
+form.elements.race_date.value = defaultRaceDate();
 
 function show(planFile) {
   try {
