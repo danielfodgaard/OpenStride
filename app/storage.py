@@ -32,6 +32,14 @@ def plan_dir(plan_id: str) -> Path:
     return DATA_DIR / "plans" / safe_id(plan_id)
 
 
+def new_plan_id(base: str) -> str:
+    plan_id, suffix = base, 1
+    while plan_dir(plan_id).exists():
+        suffix += 1
+        plan_id = f"{base}-{suffix}"
+    return plan_id
+
+
 def save_plan(plan_file: PlanFile) -> None:
     write_json(plan_dir(plan_file.meta.id) / "plan.json", plan_file.model_dump_json(indent=2))
 
@@ -52,5 +60,8 @@ def list_plans() -> list[dict]:
             "id": data["meta"]["id"],
             "created_at": data["meta"]["created_at"],
             "goal_description": data["request"]["goal_description"],
+            "race_date": data["request"]["race_date"],
+            "status": data["meta"].get("status", "draft"),
+            "version": data["meta"].get("version", 1),
         })
     return plans

@@ -1,5 +1,4 @@
-// The only renderer. A classic script, not a module: modules don't load from file://,
-// and the sample plan must open with no server.
+// The only renderer.
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const COLUMNS = ["Date", "Day", "Type", "Title", "Distance", "Duration", "Target pace", "Details"];
 

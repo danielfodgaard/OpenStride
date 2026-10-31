@@ -5,10 +5,11 @@
 <title>OpenStride</title>
 </head>
 <body>
-<h1>OpenStride</h1>
-<p>Open-source running plans.</p>
+<nav><strong>OpenStride</strong> | <a href="#/">My plan</a> | <a href="#/plans">All plans</a> | <a href="#/new">New plan</a></nav>
+<main id="main"></main>
 
-<form id="form">
+<template id="plan-form">
+<form>
   <p><label>Goal <input name="goal_description" size="50" required value="Sub-1:30 half marathon, want to stay injury free"></label></p>
   <p><label>Race distance
     <select name="race_distance">
@@ -53,143 +54,9 @@
   <p><label>Notes<br><textarea name="notes" rows="3" cols="50">Mostly flat roads. Mild left achilles tightness last spring.</textarea></label></p>
   <p><button type="submit">Generate plan</button></p>
 </form>
-
-<p>
-  <label>Load plan file <input id="load-file" type="file" accept=".json,application/json"></label>
-  <button id="download" type="button">Download JSON</button>
-</p>
-<p><label>Saved plans <select id="saved"><option value="">Choose a plan</option></select></label></p>
-<p id="status" role="status"></p>
-
-<div id="plan"></div>
+</template>
 
 <script src="render.js"></script>
-<script>
-const form = document.getElementById("form");
-const statusLine = document.getElementById("status");
-const saved = document.getElementById("saved");
-let currentPlan = null;
-
-// A fixed date would drift out of the allowed 3-24 week window.
-function defaultRaceDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 70 + (7 - date.getDay()) % 7);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-form.elements.race_date.value = defaultRaceDate();
-
-function show(planFile) {
-  try {
-    renderPlan(planFile);
-    currentPlan = planFile;
-    statusLine.textContent = "";
-  } catch (error) {
-    document.getElementById("plan").replaceChildren();
-    currentPlan = null;
-    statusLine.textContent = `Could not show plan: ${error.message}`;
-  }
-}
-
-async function errorText(response) {
-  const body = await response.json().catch(() => null);
-  if (Array.isArray(body?.detail)) {
-    return body.detail.map((d) => `${d.loc.slice(1).join(".") || "request"}: ${d.msg}`).join("; ");
-  }
-  return body?.detail ?? `Request failed (${response.status})`;
-}
-
-async function refreshSaved() {
-  try {
-    const response = await fetch("/api/plans");
-    if (!response.ok) return;
-    saved.replaceChildren(new Option("Choose a plan", ""));
-    for (const plan of await response.json()) {
-      saved.add(new Option(`${plan.created_at} — ${plan.goal_description}`, plan.id));
-    }
-  } catch {
-    // No server, e.g. index.html opened from disk: loading local files still works.
-  }
-}
-
-function formRequest() {
-  const data = new FormData(form);
-  const distance = data.get("race_distance");
-  return {
-    goal_description: data.get("goal_description"),
-    race_distance_km: Number(distance === "custom" ? data.get("custom_distance") : distance),
-    goal_time: data.get("goal_time").trim() || null,
-    race_date: data.get("race_date"),
-    recent_race_distance_km: Number(data.get("recent_race_distance_km")),
-    recent_race_time: data.get("recent_race_time").trim(),
-    current_weekly_km: Number(data.get("current_weekly_km")),
-    longest_recent_run_km: Number(data.get("longest_recent_run_km")),
-    runs_per_week: Number(data.get("runs_per_week")),
-    available_days: data.getAll("available_days"),
-    long_run_day: data.get("long_run_day"),
-    experience: data.get("experience"),
-    notes: data.get("notes"),
-  };
-}
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = form.querySelector("button[type=submit]");
-  button.disabled = true;
-  statusLine.textContent = "Generating… this takes about a minute";
-  try {
-    const response = await fetch("/api/plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formRequest()),
-    });
-    if (!response.ok) {
-      statusLine.textContent = await errorText(response);
-      return;
-    }
-    show(await response.json());
-    await refreshSaved();
-  } catch (error) {
-    statusLine.textContent = `Could not reach the server: ${error.message}`;
-  } finally {
-    button.disabled = false;
-  }
-});
-
-document.getElementById("load-file").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    show(JSON.parse(await file.text()));
-  } catch (error) {
-    statusLine.textContent = `Could not read ${file.name}: ${error.message}`;
-  }
-  event.target.value = "";  // lets the same file be loaded again
-});
-
-saved.addEventListener("change", async () => {
-  if (!saved.value) return;
-  try {
-    const response = await fetch(`/api/plans/${encodeURIComponent(saved.value)}`);
-    if (response.ok) show(await response.json());
-    else statusLine.textContent = await errorText(response);
-  } catch (error) {
-    statusLine.textContent = `Could not reach the server: ${error.message}`;
-  }
-});
-
-document.getElementById("download").addEventListener("click", () => {
-  if (!currentPlan) {
-    statusLine.textContent = "No plan to download yet.";
-    return;
-  }
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([JSON.stringify(currentPlan, null, 2)], { type: "application/json" }));
-  link.download = `${currentPlan.meta.id}.json`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
-
-refreshSaved();
-</script>
+<script src="app.js"></script>
 </body>
 </html>

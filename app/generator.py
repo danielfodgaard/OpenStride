@@ -17,6 +17,7 @@ from app.models import (
     TrainingPlan,
     Usage,
 )
+from app.prompts import regenerate as regenerate_prompt
 from app.prompts.plan import SYSTEM_PROMPT, build_user_prompt
 from app.validate import soft_warnings, validate_plan
 from app.vdot import compute_paces
@@ -31,31 +32,36 @@ class GenerationError(Exception):
     """A failure with a message fit to show the runner."""
 
 
-def call_claude(client, model: str, user_prompt: str, usage: Usage) -> TrainingPlan:
+def call_claude(client, model, system, user_prompt, output_model, usage, max_tokens=MAX_TOKENS, stream=True):
+    """One structured Claude call. Adds to `usage`; returns an `output_model` instance."""
+    request = dict(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user_prompt}],
+        output_config={"format": {"type": "json_schema", "schema": anthropic.transform_schema(output_model)}},
+    )
     try:
-        with client.messages.stream(
-            model=model,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-            output_config={"format": {"type": "json_schema", "schema": anthropic.transform_schema(TrainingPlan)}},
-        ) as stream:
-            message = stream.get_final_message()
+        if stream:
+            with client.messages.stream(**request) as response:
+                message = response.get_final_message()
+        else:
+            message = client.messages.create(**request)
     except anthropic.APIError as error:
         raise GenerationError(f"The Claude API call failed: {error}") from error
 
     usage.input_tokens += message.usage.input_tokens
     usage.output_tokens += message.usage.output_tokens
     if message.stop_reason == "max_tokens":
-        raise GenerationError("The plan was too long and got cut off. Try a shorter plan.")
+        raise GenerationError("The response was too long and got cut off. Please try again.")
     if message.stop_reason == "refusal":
-        raise GenerationError("Claude declined to generate this plan. Try rewording the goal or notes.")
+        raise GenerationError("Claude declined this request. Try rewording it.")
 
     text = "".join(block.text for block in message.content if block.type == "text")
     try:
-        return TrainingPlan.model_validate_json(text)
+        return output_model.model_validate_json(text)
     except ValidationError as error:
-        raise GenerationError("Claude returned a plan in an unexpected format. Please try again.") from error
+        raise GenerationError("Claude returned a response in an unexpected format. Please try again.") from error
 
 
 def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
@@ -71,34 +77,37 @@ def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
     return DatedPlan(summary=plan.summary, warnings=plan.warnings, weeks=weeks)
 
 
-def generate_plan(request: SavedRequest, client=None, today: date | None = None) -> PlanFile:
+def build_plan(request, system, make_prompt, client, today, plan_id=None) -> PlanFile:
+    """Generate, validate with one retry, and wrap in a PlanFile. `make_prompt` shapes the user prompt."""
     client = client or anthropic.Anthropic()
     model = os.environ.get("PLAN_MODEL") or os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL  # v1 name
     today = today or clock.today()
     now = datetime.now(timezone.utc)
 
+    starts = clock.week_starts(today, request.race_date)
+    if not starts:
+        raise GenerationError("The race date has passed. Change it and try again.")
     paces = Paces(**compute_paces(
         request.recent_race_distance_km,
         request.recent_race_time,
         request.race_distance_km,
         request.goal_time,
     ))
-    starts = clock.week_starts(today, request.race_date)
-    user_prompt = build_user_prompt(request, paces, starts)
+    user_prompt = make_prompt(build_user_prompt(request, paces, starts))
     usage = Usage(input_tokens=0, output_tokens=0)
 
-    plan = call_claude(client, model, user_prompt, usage)
+    plan = call_claude(client, model, system, user_prompt, TrainingPlan, usage)
     errors = validate_plan(plan, request, len(starts))
     if errors:
         problems = "\n".join(f"- {error}" for error in errors)
-        plan = call_claude(client, model, f"{user_prompt}\n\nFix these problems:\n{problems}", usage)
+        plan = call_claude(client, model, system, f"{user_prompt}\n\nFix these problems:\n{problems}", TrainingPlan, usage)
         errors = validate_plan(plan, request, len(starts))
     plan.warnings += errors + soft_warnings(plan)
 
     slug = DISTANCE_SLUGS.get(request.race_distance_km, f"{round(request.race_distance_km)}k")
-    plan_file = PlanFile(
+    return PlanFile(
         meta=Meta(
-            id=f"{now:%Y-%m-%dT%H-%M-%S}_{slug}",
+            id=plan_id or storage.new_plan_id(f"{now:%Y-%m-%dT%H-%M-%S}_{slug}"),
             created_at=now.isoformat(timespec="seconds"),
             app_version=APP_VERSION,
             model=model,
@@ -108,5 +117,21 @@ def generate_plan(request: SavedRequest, client=None, today: date | None = None)
         paces=paces,
         plan=add_dates(plan, starts),
     )
+
+
+def generate_plan(request: SavedRequest, client=None, today: date | None = None) -> PlanFile:
+    plan_file = build_plan(request, SYSTEM_PROMPT, lambda prompt: prompt, client, today)
     storage.save_plan(plan_file)
     return plan_file
+
+
+def regenerate_plan(draft: PlanFile, feedback: str, request: SavedRequest, client=None, today=None) -> PlanFile:
+    """A replacement for `draft`, not yet saved; the caller keeps the old one first."""
+    return build_plan(
+        request,
+        SYSTEM_PROMPT + regenerate_prompt.SYSTEM_SUFFIX,
+        lambda prompt: regenerate_prompt.build_user_prompt(prompt, draft, feedback),
+        client,
+        today,
+        plan_id=draft.meta.id,
+    )
