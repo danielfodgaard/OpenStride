@@ -23,7 +23,7 @@ from app.prompts.plan import SYSTEM_PROMPT, build_user_prompt
 from app.validate import soft_warnings, validate_plan
 from app.vdot import compute_paces
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "3.0.0"
 DEFAULT_MODEL = "claude-sonnet-5-5"
 MAX_TOKENS = 64000
 DISTANCE_SLUGS = {5: "5k", 10: "10k", 21.0975: "hm", 42.195: "m"}

@@ -5,7 +5,7 @@ Run once with `python -m app.migrate`. Safe to re-run. Originals go only after t
 from pathlib import Path
 
 from app import storage
-from app.models import PlanFile
+from app.models import SCHEMA_VERSION, PlanFile
 
 V1_PLANS_DIR = Path(__file__).parent.parent / "plans"
 
@@ -14,7 +14,7 @@ def migrate(source: Path = V1_PLANS_DIR) -> list[str]:
     moved = []
     for path in sorted(source.glob("*.json")):
         plan_file = PlanFile.model_validate_json(path.read_text())
-        plan_file.schema_version = "2.0"
+        plan_file.schema_version = SCHEMA_VERSION
         plan_file.meta.status = "draft"
         storage.save_plan(plan_file)
         if storage.load_plan(plan_file.meta.id) == plan_file:

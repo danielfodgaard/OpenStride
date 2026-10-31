@@ -8,6 +8,8 @@ from app.vdot import parse_time
 
 Day = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 DAYS: tuple[Day, ...] = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+Modality = Literal["run", "strength", "cross"]
+SCHEMA_VERSION = "3.0"
 
 MAX_PACE_MIN_PER_KM = 20  # slower than a walk; VDOT formulas turn meaningless near 40 min/km
 
@@ -30,6 +32,13 @@ class SavedRequest(BaseModel):
     long_run_day: Day
     experience: Literal["beginner", "intermediate", "advanced"]
     notes: str = ""
+    strength_sessions_per_week: int = Field(default=0, ge=0, le=3)
+    cross_training: str = ""
+    cross_sessions_per_week: int = Field(default=0, ge=0, le=3)
+    equipment: str = ""
+    hr_max: int = Field(default=0, ge=0, le=250)  # 0 = unknown
+    hr_rest: int = Field(default=0, ge=0, le=150)
+    age: int = Field(default=0, ge=0, le=120)
 
     @field_validator("goal_time", "recent_race_time")
     @classmethod
@@ -42,6 +51,8 @@ class SavedRequest(BaseModel):
     def check_consistency(self):
         if len(set(self.available_days)) < self.runs_per_week:
             raise ValueError("available_days must contain at least runs_per_week different days")
+        if self.cross_sessions_per_week and not self.cross_training.strip():
+            raise ValueError("cross_training must name a sport when cross_sessions_per_week is set")
         if self.long_run_day not in self.available_days:
             raise ValueError("long_run_day must be one of available_days")
         if parse_time(self.recent_race_time) / self.recent_race_distance_km > MAX_PACE_MIN_PER_KM:
@@ -63,22 +74,36 @@ class PlanRequest(SavedRequest):
 
 
 class Step(BaseModel):
-    repeat: int
+    repeat: int  # sets, for strength
     description: str
     distance_km: float
     duration_min: float
     target_pace: str
+    reps: int  # 0 when not applicable
+    load: str
+
+    # Fields stay required in the LLM schema; this only fills them in for v1 and v2 files.
+    @model_validator(mode="before")
+    @classmethod
+    def fill_old_files(cls, data):
+        return {"reps": 0, "load": ""} | data if isinstance(data, dict) else data
 
 
 class Session(BaseModel):
     day: Day
-    type: Literal["easy", "long", "tempo", "intervals", "recovery", "race"]
+    type: Literal["easy", "long", "tempo", "intervals", "recovery", "race", "strength", "cross_training"]
+    modality: Modality
     title: str
     distance_km: float
     duration_min: float
     target_pace: str
     description: str
     steps: list[Step]
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_old_files(cls, data):
+        return {"modality": "run"} | data if isinstance(data, dict) else data
 
 
 class Week(BaseModel):
@@ -146,7 +171,7 @@ class Paces(BaseModel):
 
 
 class PlanFile(BaseModel):
-    schema_version: Literal["1.0", "2.0"] = "2.0"
+    schema_version: Literal["1.0", "2.0", "3.0"] = SCHEMA_VERSION
     meta: Meta
     request: SavedRequest
     paces: Paces

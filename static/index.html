@@ -51,6 +51,14 @@
       <option value="advanced">Advanced</option>
     </select>
   </label></p>
+  <p><label>Strength sessions per week <input name="strength_sessions_per_week" type="number" min="0" max="3" value="0"></label>
+  <label>Equipment <input name="equipment" placeholder="gym, dumbbells at home, none"></label></p>
+  <p><label>Cross-training <input name="cross_training" placeholder="cycling, swimming, rowing, elliptical"></label>
+  <label>Cross sessions per week <input name="cross_sessions_per_week" type="number" min="0" max="3" value="0"></label></p>
+  <p>Optional, used for training load:
+  <label>Max HR <input name="hr_max" type="number" min="0" max="250" value="0"></label>
+  <label>Resting HR <input name="hr_rest" type="number" min="0" max="150" value="0"></label>
+  <label>Age <input name="age" type="number" min="0" max="120" value="0"></label></p>
   <p><label>Notes<br><textarea name="notes" rows="3" cols="50">Mostly flat roads. Mild left achilles tightness last spring.</textarea></label></p>
   <p><button type="submit">Generate plan</button></p>
 </form>

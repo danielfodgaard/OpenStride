@@ -3,6 +3,10 @@
 from app.models import DAYS, AdaptationResult, PlanFile, SavedRequest, TrainingPlan
 
 HARD_TYPES = {"tempo", "intervals", "long"}
+MODALITIES = dict.fromkeys(("easy", "long", "tempo", "intervals", "recovery", "race"), "run") | {
+    "strength": "strength",
+    "cross_training": "cross",
+}
 
 
 def validate_plan(plan: TrainingPlan, request: SavedRequest, n_weeks: int) -> list[str]:
@@ -15,14 +19,17 @@ def validate_plan(plan: TrainingPlan, request: SavedRequest, n_weeks: int) -> li
 
     race_day = DAYS[request.race_date.weekday()]
     hard_days = []
+    allowed_sessions = request.runs_per_week + request.strength_sessions_per_week + request.cross_sessions_per_week
 
     for index, week in enumerate(plan.weeks):
         label = f"Week {week.week_number}"
-        days = [session.day for session in week.sessions]
-        if len(days) > request.runs_per_week:
-            errors.append(f"{label} has {len(days)} sessions, more than runs_per_week ({request.runs_per_week})")
-        if len(set(days)) != len(days):
-            errors.append(f"{label} has more than one session on the same day")
+        run_days = [session.day for session in week.sessions if session.modality == "run"]
+        if len(run_days) > request.runs_per_week:
+            errors.append(f"{label} has {len(run_days)} runs, more than runs_per_week ({request.runs_per_week})")
+        if len(week.sessions) > allowed_sessions:
+            errors.append(f"{label} has {len(week.sessions)} sessions, more than the {allowed_sessions} requested")
+        if len(set(run_days)) != len(run_days):
+            errors.append(f"{label} has more than one run on the same day")
         if week.planned_km < 0:
             errors.append(f"{label} has negative planned_km")
 
@@ -33,7 +40,9 @@ def validate_plan(plan: TrainingPlan, request: SavedRequest, n_weeks: int) -> li
                 errors.append(f"{where} is not an available day")
             if session.type == "long" and session.day != request.long_run_day:
                 errors.append(f"{where} is a long run, which must be on {request.long_run_day}")
-            if session.type in HARD_TYPES:
+            if MODALITIES[session.type] != session.modality:
+                errors.append(f"{where} of type {session.type} must have modality {MODALITIES[session.type]}")
+            if session.type in HARD_TYPES and session.modality == "run":
                 hard_days.append((index * 7 + DAYS.index(session.day), where))
             if session.distance_km < 0 or session.duration_min < 0:
                 errors.append(f"{where} has a negative distance or duration")

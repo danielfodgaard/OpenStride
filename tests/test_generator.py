@@ -84,7 +84,7 @@ def test_valid_plan_is_dated_and_saved(plans_dir):
     assert result.plan.weeks[-1].sessions[-1].date == REQUEST.race_date
     assert result.meta.usage.output_tokens == 200
     assert result.meta.id.endswith("_hm")
-    assert result.schema_version == "2.0" and result.meta.status == "draft"
+    assert result.schema_version == "3.0" and result.meta.status == "draft"
     assert storage.load_plan(result.meta.id) == result
 
 

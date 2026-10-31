@@ -60,6 +60,28 @@ def test_invalid_requests_have_readable_messages(changes, message):
         PlanRequest(**request_data(**changes))
 
 
+def test_cross_sessions_need_a_sport():
+    with pytest.raises(ValidationError, match="cross_training must name a sport"):
+        PlanRequest(**request_data(cross_sessions_per_week=1))
+
+
+@pytest.mark.parametrize(
+    "changes", [{"strength_sessions_per_week": 4}, {"cross_sessions_per_week": 4}, {"hr_max": -1}, {"age": 200}]
+)
+def test_new_request_fields_are_bounded(changes):
+    with pytest.raises(ValidationError):
+        PlanRequest(**request_data(**changes))
+
+
+@pytest.mark.parametrize("version", ["1.0", "2.0"])
+def test_old_plan_files_load_with_empty_v3_fields(version):
+    data = json.loads(Path("examples/sample_plan.json").read_text()) | {"schema_version": version}
+    plan = PlanFile.model_validate(data)
+    session = plan.plan.weeks[0].sessions[0]
+    assert session.modality == "run" and session.steps[0].reps == 0 and session.steps[0].load == ""
+    assert plan.request.strength_sessions_per_week == 0 and plan.request.hr_max == 0
+
+
 def test_llm_schema_is_compatible():
     def walk(node):
         if isinstance(node, dict):

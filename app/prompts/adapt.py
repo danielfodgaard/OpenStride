@@ -11,7 +11,7 @@ Rules:
 - Otherwise return recommendation "change" and only the weeks listed in scope_weeks, complete, with every session of those weeks. Everything else stays as it is.
 - Sessions dated today or earlier have already happened: copy them exactly into the week. Do not move them.
 - Keep the race date and race session exactly as they are.
-- Keep the plan's scheduling rules: only available days, at most runs_per_week per week, one session per day, long run on long_run_day, no two hard sessions (tempo, intervals, long) on consecutive days.
+- Keep the plan's scheduling rules: only available days, at most runs_per_week runs per week, at most one run per day, the same strength and cross-training limits as the request, long run on long_run_day, no two hard runs (tempo, intervals, long) on consecutive days.
 - Every change gets one Change entry whose summary gives the change and the reason in one line.
 - rationale is 2-4 sentences: why change or why not. Paces may differ from the reference if the athlete context justifies it."""
 

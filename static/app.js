@@ -99,6 +99,13 @@ function formRequest(form) {
     long_run_day: data.get("long_run_day"),
     experience: data.get("experience"),
     notes: data.get("notes"),
+    strength_sessions_per_week: Number(data.get("strength_sessions_per_week")),
+    cross_training: data.get("cross_training").trim(),
+    cross_sessions_per_week: Number(data.get("cross_sessions_per_week")),
+    equipment: data.get("equipment").trim(),
+    hr_max: Number(data.get("hr_max")),
+    hr_rest: Number(data.get("hr_rest")),
+    age: Number(data.get("age")),
   };
 }
 
@@ -108,7 +115,8 @@ function fillForm(form, request) {
   fields.race_distance.value = preset ? preset.value : "custom";
   fields.custom_distance.value = preset ? "" : request.race_distance_km;
   for (const name of ["goal_description", "race_date", "recent_race_distance_km", "recent_race_time",
-    "current_weekly_km", "longest_recent_run_km", "runs_per_week", "long_run_day", "experience", "notes"]) {
+    "current_weekly_km", "longest_recent_run_km", "runs_per_week", "long_run_day", "experience", "notes",
+    "strength_sessions_per_week", "cross_training", "cross_sessions_per_week", "equipment", "hr_max", "hr_rest", "age"]) {
     fields[name].value = request[name];
   }
   fields.goal_time.value = request.goal_time ?? "";

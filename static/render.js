@@ -33,8 +33,12 @@ function amount(item) {
 }
 
 function stepText(step) {
+  if (step.reps) {  // a strength exercise; absent in v1 and v2 files
+    return `${step.repeat} × ${step.reps} ${step.description}${step.load ? ` — ${step.load}` : ""}`;
+  }
   const reps = step.repeat > 1 ? `${step.repeat} × ` : "";
-  return `${reps}${amount(step)} @ ${step.target_pace} — ${step.description}`;
+  const size = [`${reps}${amount(step)}`.trim(), step.target_pace].filter(Boolean).join(" @ ");
+  return [size, step.description].filter(Boolean).join(" — ");
 }
 
 function details(session) {
@@ -125,8 +129,8 @@ function weekRows(week, activities, controls) {
 // `actuals` adds the Actual and Review columns; `activities` are this plan's imported runs.
 // `controls(activity)` optionally returns edit controls for a run.
 function renderPlan(planFile, { actuals = false, activities = [], controls } = {}) {
-  if (!["1.0", "2.0"].includes(planFile?.schema_version)) {
-    throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0 or 2.0`);
+  if (!["1.0", "2.0", "3.0"].includes(planFile?.schema_version)) {
+    throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0, 2.0 or 3.0`);
   }
   const { meta, request, paces, plan } = planFile;
   const nodes = [

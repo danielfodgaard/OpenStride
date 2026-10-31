@@ -20,7 +20,6 @@ def data_dir(tmp_path, monkeypatch):
 def draft(plan_id):
     plan_file = PlanFile.model_validate_json(SAMPLE_TEXT)
     plan_file.meta.id = plan_id
-    plan_file.schema_version = "2.0"
     storage.save_plan(plan_file)
     return plan_id
 

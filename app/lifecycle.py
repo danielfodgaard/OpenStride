@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from app import generator, storage
-from app.models import PlanFile, SavedRequest
+from app.models import SCHEMA_VERSION, PlanFile, SavedRequest
 
 
 class Conflict(Exception):
@@ -53,7 +53,7 @@ def accept(plan_id: str) -> PlanFile:
     if previous:
         previous.meta.status = "archived"
         storage.save_plan(previous)
-    plan_file.schema_version = "2.0"
+    plan_file.schema_version = SCHEMA_VERSION
     plan_file.meta.status = "active"
     plan_file.meta.accepted_at = now_iso()
     plan_file.meta.version = 1
@@ -86,7 +86,7 @@ def import_plan(content: bytes) -> PlanFile:
     except ValidationError as error:
         raise ValueError(f"Not a valid plan file: {error.error_count()} problem(s), first: {error.errors()[0]['msg']}") from error
     created = datetime.now(timezone.utc)
-    plan_file.schema_version = "2.0"
+    plan_file.schema_version = SCHEMA_VERSION
     plan_file.meta.id = storage.new_plan_id(f"{created:%Y-%m-%dT%H-%M-%S}_import")
     plan_file.meta.status = "draft"
     plan_file.meta.version = 1

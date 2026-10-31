@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import SavedRequest, TrainingPlan
+from app.models import PlanFile, SavedRequest, Session, TrainingPlan
 from app.validate import soft_warnings, validate_plan
 
 SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())
@@ -50,9 +50,38 @@ def test_too_many_sessions(plan):
     assert any("more than runs_per_week" in e for e in errors_for(plan))
 
 
-def test_duplicate_day(plan):
+def test_two_runs_on_one_day(plan):
     find(plan, 0, "Sat").day = "Thu"
-    assert any("same day" in e for e in errors_for(plan))
+    assert any("more than one run" in e for e in errors_for(plan))
+
+
+def strength_session(day):
+    return Session(
+        day=day, type="strength", modality="strength", title="Strength", distance_km=0,
+        duration_min=30, target_pace="", description="", steps=[],
+    )
+
+
+def test_strength_may_share_a_day_with_a_run(plan):
+    plan.weeks[0].sessions.append(strength_session("Tue"))
+    assert errors_for(plan, strength_sessions_per_week=1) == []
+
+
+def test_strength_beyond_the_request_is_too_many(plan):
+    plan.weeks[0].sessions.append(strength_session("Tue"))
+    assert any("more than the 4 requested" in e for e in errors_for(plan))
+
+
+def test_strength_is_exempt_from_the_hard_day_rule(plan):
+    plan.weeks[4].sessions.append(strength_session("Wed"))
+    plan.weeks[4].sessions.append(strength_session("Sat"))
+    errors = errors_for(plan, strength_sessions_per_week=2, available_days=["Tue", "Wed", "Thu", "Sat", "Sun"])
+    assert errors == []
+
+
+def test_modality_must_match_the_type(plan):
+    find(plan, 0, "Sat").modality = "cross"
+    assert any("must have modality run" in e for e in errors_for(plan))
 
 
 def test_long_run_on_wrong_day(plan):
@@ -126,3 +155,10 @@ def test_volume_jump_is_a_soft_warning(plan):
     plan.weeks[1].planned_km = plan.weeks[0].planned_km * 1.2
     assert errors_for(plan) == []
     assert any("more than 15%" in w for w in soft_warnings(plan))
+
+
+def test_strength_and_cycling_sample_is_valid():
+    sample = PlanFile.model_validate_json(Path("examples/sample_plan_v3.json").read_text())
+    assert validate_plan(sample.plan, sample.request, 10) == []
+    assert soft_warnings(sample.plan) == []
+    assert {s.modality for w in sample.plan.weeks for s in w.sessions} == {"run", "strength", "cross"}
