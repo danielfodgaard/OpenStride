@@ -31,12 +31,22 @@ def compute_scope_weeks(plan_file: PlanFile, scope: str, today) -> list[int]:
     return remaining[:{"this_week": 1, "next_2_weeks": 2}.get(scope, len(remaining))]
 
 
+def keep_edits(new_week, old_week):
+    """The LLM's sessions don't carry the athlete's hand edits, so bring them over."""
+    edited = {(s.date, s.title): s for s in old_week.sessions}
+    for session in new_week.sessions:
+        old = edited.get((session.date, session.title))
+        if old:
+            session.status, session.moved_from, session.edit_note = old.status, old.moved_from, old.edit_note
+    return new_week
+
+
 def merge(plan_file: PlanFile, weeks) -> PlanFile:
     """A copy of the plan with `weeks` swapped in by week number, re-dated from each week's start."""
     merged = plan_file.model_copy(deep=True)
     by_number = {week.week_number: week for week in weeks}
     merged.plan.weeks = [
-        generator.date_week(by_number[week.week_number], week.start_date) if week.week_number in by_number else week
+        keep_edits(generator.date_week(by_number[week.week_number], week.start_date), week) if week.week_number in by_number else week
         for week in merged.plan.weeks
     ]
     return merged

@@ -413,7 +413,7 @@ def sessions_on(plan_file: PlanFile, day, modality: str) -> list:
         (week.week_number, index, session)
         for week in plan_file.plan.weeks
         for index, session in enumerate(week.sessions)
-        if session.date == day and session.modality == modality
+        if session.date == day and session.modality == modality and session.status != "skipped"
     ]
 
 

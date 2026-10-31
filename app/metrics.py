@@ -59,7 +59,9 @@ def session_type(entry: Entry, plan_file: PlanFile) -> str:
     if entry.match.session_index >= 0:
         for week in plan_file.plan.weeks:
             if week.week_number == entry.match.week_number and entry.match.session_index < len(week.sessions):
-                return week.sessions[entry.match.session_index].type
+                session = week.sessions[entry.match.session_index]
+                if session.status != "replaced":  # a replaced session's load is what was actually done
+                    return session.type
     return {"strength": "strength", "cross": "cross_training"}.get(entry.modality, "unplanned")
 
 
@@ -113,22 +115,27 @@ def build_weeks(done: list[Entry], plan_file: PlanFile) -> list[WeekVolume]:
     for week in plan_file.plan.weeks:
         here = [entry for entry in done if in_week(entry, week)]
         matched = {e.match.session_index for e in here if 0 <= e.match.session_index < len(week.sessions)}
-        strength = [i for i, s in enumerate(week.sessions) if s.modality == "strength"]
-        cross = [i for i, s in enumerate(week.sessions) if s.modality == "cross"]
+        # Skipped was the athlete's decision, so it leaves what's expected and is never missed.
+        active = [(i, s) for i, s in enumerate(week.sessions) if s.status != "skipped"]
+        skipped = [s for s in week.sessions if s.status == "skipped"]
+        strength = [i for i, s in active if s.modality == "strength"]
+        cross = [i for i, s in active if s.modality == "cross"]
         unplanned = lambda modality: sum(e.modality == modality and e.match.session_index < 0 for e in here)
         weeks.append(WeekVolume(
             week_number=week.week_number,
             start_date=week.start_date,
-            planned_km=week.planned_km,
+            planned_km=round(week.planned_km - sum(s.distance_km for s in skipped if s.modality == "run"), 2),
             actual_km=round(sum(e.km for e in here if e.modality == "run"), 2),
-            planned_sessions=len(week.sessions),
+            planned_sessions=len(active),
             completed_sessions=len(matched),
             planned_strength=len(strength),
             completed_strength=len(matched & set(strength)) + unplanned("strength"),
-            planned_cross_min=sum(s.duration_min for s in week.sessions if s.modality == "cross"),
+            planned_cross_min=sum(s.duration_min for _, s in active if s.modality == "cross"),
             actual_cross_min=round(sum(e.minutes for e in here if e.modality == "cross"), 1),
             planned_cross=len(cross),
             completed_cross=len(matched & set(cross)) + unplanned("cross"),
+            skipped_sessions=len(skipped),
+            replaced_sessions=sum(s.status == "replaced" for s in week.sessions),
         ))
     return weeks
 

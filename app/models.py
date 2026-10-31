@@ -132,6 +132,9 @@ class RegeneratedPlan(TrainingPlan):
 
 class DatedSession(Session):
     date: date
+    status: Literal["planned", "skipped", "replaced"] = "planned"
+    moved_from: date | None = None  # the original date of a moved session
+    edit_note: str = ""
 
 
 class DatedWeek(Week):
@@ -141,6 +144,12 @@ class DatedWeek(Week):
 
 class DatedPlan(TrainingPlan):
     weeks: list[DatedWeek]
+
+
+class Match(BaseModel):
+    planned_date: str = ""  # "" when unplanned
+    week_number: int = 0
+    session_index: int = -1
 
 
 class Usage(BaseModel):
@@ -153,6 +162,10 @@ class HistoryEntry(BaseModel):
     proposal_id: str
     accepted_at: str
     rationale: str
+    origin: Literal["proposal", "manual", "undo"] = "proposal"  # older files were all proposals
+    summary: str = ""
+    undo_matches: dict[str, Match] = {}  # what a manual edit changed, so Undo puts it back
+    undo_keys: dict[str, str] = {}  # session keys that shifted: new to old
 
 
 class Meta(BaseModel):
@@ -194,12 +207,6 @@ class Lap(BaseModel):
     time_s: int
     pace: str
     avg_hr: int
-
-
-class Match(BaseModel):
-    planned_date: str = ""  # "" when unplanned
-    week_number: int = 0
-    session_index: int = -1
 
 
 class ActivitySummary(BaseModel):
@@ -333,6 +340,8 @@ class WeekVolume(BaseModel):
     actual_cross_min: float
     planned_cross: int = 0
     completed_cross: int = 0
+    skipped_sessions: int = 0
+    replaced_sessions: int = 0
 
 
 class Snapshot(BaseModel):

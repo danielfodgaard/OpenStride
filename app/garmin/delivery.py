@@ -57,6 +57,42 @@ def send_session(provider, plan_file: PlanFile, week: int, index: int) -> dict:
     return {"workout_id": workout_id, "scheduled_date": session.date.isoformat(), "notes": built.notes}
 
 
+def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[str]:
+    """After a hand edit: the mapping follows the sessions, and Garmin's calendar follows the dates."""
+    plan_id = plan_file.meta.id
+    with storage.plan_lock(plan_id):
+        sent = {moved.get(key, key): entry for key, entry in load_sent(plan_id).items()}
+        if sent:
+            garmin.write_json(sent_path(plan_id), sent)
+
+    def session_of(key):
+        return session_at(plan_file, *map(int, key.split("/")))
+
+    resend = [key for key in moved.values() if key in sent and session_of(key).date.isoformat() != sent[key]["scheduled_date"]]
+    gone = [key for key in removed if key in sent]
+    if not resend and not gone:
+        return []
+    if not garmin.status().can_push_workouts:
+        return ["Garmin still has the old copy. Delete it there, and download the workout .fit again if you need it."]
+    provider = garmin.make_pusher()
+    problems = []
+    for key in resend:
+        try:
+            send_session(provider, plan_file, *map(int, key.split("/")))
+        except garmin.GarminError as error:
+            problems.append(f"Couldn't move it on Garmin: {error}")
+    for key in gone:
+        try:
+            provider.delete_workout(sent[key]["workout_id"])
+            with storage.plan_lock(plan_id):
+                left = load_sent(plan_id)
+                del left[key]
+                garmin.write_json(sent_path(plan_id), left)
+        except garmin.GarminError as error:
+            problems.append(f"Couldn't remove it from Garmin: {error}")
+    return problems
+
+
 def week_of(plan_file: PlanFile, number: int):
     week = next((w for w in plan_file.plan.weeks if w.week_number == number), None)
     if week is None:
@@ -69,7 +105,7 @@ def sendable(plan_file: PlanFile, number: int) -> list[int]:
     done = {(e.match.week_number, e.match.session_index) for e in metrics.entries(plan_file.meta.id)}
     return [
         index for index, session in enumerate(week_of(plan_file, number).sessions)
-        if session.modality == "run" and session.date >= clock.today() and (number, index) not in done
+        if session.modality == "run" and session.status == "planned" and session.date >= clock.today() and (number, index) not in done
     ]
 
 

@@ -10,7 +10,8 @@ Keep it short and concrete, with real numbers. observations has 1 to 4 short poi
 
 Use completion "unplanned" when no session was planned.
 
-Sessions dated after today are not due yet. Never count them as missed or behind."""
+Sessions dated after today are not due yet. Never count them as missed or behind.
+Sessions can carry the athlete's own edits: status "skipped" was their choice and is never missed, status "replaced" means they did the matched activity instead, and moved_from and edit_note say what moved and why."""
 
 
 def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str, today) -> str:
@@ -19,6 +20,8 @@ def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, rec
         week = next(w for w in plan_file.plan.weeks if w.week_number == activity.match.week_number)
         session = week.sessions[activity.match.session_index]
     planned = session.model_dump_json(indent=2) if session else "Unplanned run"
+    if session and session.status == "replaced":
+        planned = f"The athlete did something else instead. Planned {session.title}, did the run below. Judge the run on what it was, not against this plan:\n{planned}"
     paces = plan_file.paces.model_dump_json(indent=2) if plan_file else "None: there is no active plan"
     history = json.dumps([a.model_dump(mode="json", exclude={"km_splits"}) for a in recent], indent=2)
     logged = json.dumps([m.model_dump(mode="json") for m in manual], indent=2)

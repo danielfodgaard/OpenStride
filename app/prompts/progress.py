@@ -8,7 +8,8 @@ Base the assessment on the planned-vs-actual table, the runs, their reviews and 
 
 observations are short points on what has happened. suggestions are short and for the athlete to consider; they are never applied automatically.
 
-Sessions dated after today are not due yet. Never count them as missed or behind."""
+Sessions dated after today are not due yet. Never count them as missed or behind.
+Sessions can carry the athlete's own edits: status "skipped" was their choice and is never missed, status "replaced" means they did the matched activity instead, and moved_from and edit_note say what moved and why."""
 
 
 def build_user_prompt(plan_file: PlanFile, table: dict, activities: list[dict], metrics: str, today) -> str:

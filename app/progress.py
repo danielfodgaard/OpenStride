@@ -25,17 +25,19 @@ def planned_vs_actual(plan_file: PlanFile) -> dict:
         row = {
             "week_number": week.week_number,
             "start_date": week.start_date.isoformat(),
-            "planned_km": week.planned_km,
+            "planned_km": volume.planned_km,
             "actual_km": volume.actual_km,
-            "sessions_planned": len(week.sessions),
+            "sessions_planned": volume.planned_sessions,
             "sessions_completed": volume.completed_sessions,
+            "sessions_skipped": volume.skipped_sessions,
+            "sessions_replaced": volume.replaced_sessions,
         } | {completion: 0 for completion in COMPLETIONS}
         for entry in here:
             review_file = storage.load_review(entry.id)
             if review_file:
                 row[review_file.review.completion] += 1
         weeks.append(row)
-    keys = ("planned_km", "actual_km", "sessions_planned", "sessions_completed", *COMPLETIONS)
+    keys = ("planned_km", "actual_km", "sessions_planned", "sessions_completed", "sessions_skipped", "sessions_replaced", *COMPLETIONS)
     totals = {key: round(sum(row[key] for row in weeks), 2) for key in keys}
     return {"weeks": weeks, "totals": totals}
 
@@ -71,7 +73,7 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     # To date, plus anything already done: test data and a wrong watch clock can date a run ahead of today.
     planned = [
         (w, i, s) for w in weeks for i, s in enumerate(w.sessions)
-        if s.date <= today or (w.week_number, i) in done
+        if s.status != "skipped" and (s.date <= today or (w.week_number, i) in done)
     ]
     completed = lambda modality: sum(
         (w.week_number, i) in done for w, i, s in planned if s.modality == modality
@@ -79,7 +81,7 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     count = lambda modality: sum(s.modality == modality for _, _, s in planned)
 
     upcoming = sorted(
-        ((w, i, s) for w in weeks for i, s in enumerate(w.sessions) if s.date >= today),
+        ((w, i, s) for w in weeks for i, s in enumerate(w.sessions) if s.date >= today and s.status != "skipped"),
         key=lambda item: (item[2].date, item[2].modality != "run"),
     )
     is_done = lambda item: (item[0].week_number, item[1]) in done

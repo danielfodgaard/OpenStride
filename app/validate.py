@@ -73,7 +73,7 @@ def soft_warnings(plan: TrainingPlan) -> list[str]:
         (index * 7 + DAYS.index(session.day), f"Week {week.week_number} {session.day}")
         for index, week in enumerate(plan.weeks)
         for session in week.sessions
-        if session.type in HARD_TYPES and session.modality == "run"
+        if session.type in HARD_TYPES and session.modality == "run" and getattr(session, "status", "planned") != "skipped"
     )
     warnings = [
         f"Hard runs on consecutive days: {first} and {second}"
@@ -99,7 +99,7 @@ def scope_errors(result: AdaptationResult, scope_weeks: list[int]) -> list[str]:
 
 
 def facts(session) -> dict:
-    return session.model_dump(exclude={"date"})
+    return session.model_dump(exclude={"date", "status", "moved_from", "edit_note"})
 
 
 def unexplained_removals(old, new, changes, today) -> list[str]:

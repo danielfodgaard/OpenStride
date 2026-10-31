@@ -16,7 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, chat, clock, config, lifecycle, logbook, logsafe, metrics, progress, review, storage
+from app import activities, adapt, chat, clock, config, edits, lifecycle, logbook, logsafe, metrics, progress, review, storage
+from app.garmin import delivery
 from app.garmin import sync as garmin_sync
 from app.garmin.router import router as garmin_router
 from app.generator import APP_VERSION, GenerationError, generate_plan
@@ -191,6 +192,20 @@ class ManualEdit(BaseModel):
 
 class ChatInput(BaseModel):
     text: str = Field(min_length=1, pattern=r"\S")
+
+
+class SessionRef(BaseModel):
+    week: int
+    index: int
+
+
+class EditBody(BaseModel):
+    kind: Literal["move", "swap", "skip", "unskip", "assign_activity", "replace"]
+    session: SessionRef | None = None
+    to_date: Date | None = None
+    other: SessionRef | None = None
+    activity_id: str = ""
+    note: str = ""
 
 
 class ProposalRequest(BaseModel):
@@ -390,6 +405,28 @@ def get_version(plan_id: str, version: int) -> PlanFile:
 def restore_version(plan_id: str, version: int, if_match: str | None = Header(None)) -> PlanFile:
     with checked_plan(plan_id, if_match):
         return adapt.restore(plan_id, version)
+
+
+def require_if_match(if_match: str | None) -> None:
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Reload the plan and try again.")
+
+
+@app.post("/api/plans/{plan_id}/edits")
+def edit_plan(plan_id: str, body: EditBody, if_match: str | None = Header(None)) -> dict:
+    require_if_match(if_match)
+    with checked_plan(plan_id, if_match):
+        result = edits.apply(plan_id, **body.model_dump())
+    return result | {"warnings": result["warnings"] + delivery.follow_edit(result["plan"], **result.pop("garmin"))}
+
+
+@app.post("/api/plans/{plan_id}/undo")
+def undo_edit(plan_id: str, if_match: str | None = Header(None)) -> PlanFile:
+    require_if_match(if_match)
+    with checked_plan(plan_id, if_match):
+        result = edits.undo(plan_id)
+    delivery.follow_edit(result["plan"], **result["garmin"])
+    return result["plan"]
 
 
 @app.get("/api/today")
