@@ -1,12 +1,12 @@
 import json
-from datetime import date, timedelta
+from datetime import date
 
 from app.models import DAYS, Paces, SavedRequest
 
 SYSTEM_PROMPT = """You are an experienced running coach creating a periodised training plan.
 
 Rules:
-- Use ONLY the provided pace zones for every target_pace, in sessions and in steps, copied exactly as given. Easy, recovery, warm-up, cool-down and jog segments use the easy zone.
+- The paces below are a reference computed from the athlete's recent race; you may adjust them if the athlete context justifies it, and say why in the summary.
 - Produce exactly the requested number of weeks, numbered from 1.
 - Schedule sessions only on available days, at most runs_per_week per week, one per day. Never put two hard sessions (tempo, intervals, long) on consecutive days, including Sunday to Monday across weeks.
 - The long run goes on long_run_day.
@@ -17,17 +17,11 @@ Rules:
 - Keep descriptions short."""
 
 
-def week_starts(today: date, race_date: date) -> list[date]:
-    """Mondays from the first on or after today through the race week."""
-    start = today + timedelta(days=-today.weekday() % 7)
-    return [start + timedelta(weeks=i) for i in range((race_date - start).days // 7 + 1)]
-
-
 def build_user_prompt(request: SavedRequest, paces: Paces, starts: list[date]) -> str:
     return f"""Runner request:
 {request.model_dump_json(indent=2)}
 
-Pace zones:
+Reference paces:
 {paces.model_dump_json(indent=2)}
 
 Number of weeks: {len(starts)}

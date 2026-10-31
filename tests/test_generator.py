@@ -8,7 +8,7 @@ import pytest
 from app import storage
 from app.generator import GenerationError, generate_plan
 from app.models import PlanFile, SavedRequest
-from app.prompt import week_starts
+from app.clock import week_starts
 
 SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())
 REQUEST = SavedRequest.model_validate(SAMPLE["request"])
@@ -50,13 +50,13 @@ def reply(plan, stop_reason="end_turn"):
 
 def broken_plan():
     plan = json.loads(json.dumps(SAMPLE["plan"]))
-    plan["weeks"][0]["sessions"][0]["target_pace"] = "9:99/km"
+    plan["weeks"][0]["sessions"][0]["day"] = "Mon"
     return plan
 
 
 @pytest.fixture(autouse=True)
 def plans_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(storage, "PLANS_DIR", tmp_path)
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
     return tmp_path
 
 
@@ -80,15 +80,15 @@ def test_valid_plan_is_dated_and_saved(plans_dir):
     assert result.plan.weeks[-1].sessions[-1].date == REQUEST.race_date
     assert result.meta.usage.output_tokens == 200
     assert result.meta.id.endswith("_hm")
-    saved = PlanFile.model_validate_json((plans_dir / f"{result.meta.id}.json").read_text())
-    assert saved == result
+    assert result.schema_version == "2.0" and result.meta.status == "draft"
+    assert storage.load_plan(result.meta.id) == result
 
 
 def test_retry_sends_errors_and_counts_usage_of_both_calls():
     client = FakeClient(reply(broken_plan()), reply(SAMPLE["plan"]))
     result = generate_plan(REQUEST, client, TODAY)
 
-    assert "Fix these problems:" in client.prompts[1] and "9:99/km" in client.prompts[1]
+    assert "Fix these problems:" in client.prompts[1] and "Week 1 Mon" in client.prompts[1]
     assert result.meta.usage.input_tokens == 200
     assert result.plan.warnings == SAMPLE["plan"]["warnings"]
 
@@ -96,7 +96,7 @@ def test_retry_sends_errors_and_counts_usage_of_both_calls():
 def test_remaining_problems_become_warnings():
     client = FakeClient(reply(broken_plan()), reply(broken_plan()))
     result = generate_plan(REQUEST, client, TODAY)
-    assert any("9:99/km" in warning for warning in result.plan.warnings)
+    assert any("Week 1 Mon" in warning for warning in result.plan.warnings)
 
 
 def test_wrong_week_count_still_produces_a_file():

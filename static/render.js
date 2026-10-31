@@ -72,8 +72,8 @@ function weekRows(week) {
 }
 
 function renderPlan(planFile) {
-  if (planFile?.schema_version !== "1.0") {
-    throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0`);
+  if (!["1.0", "2.0"].includes(planFile?.schema_version)) {
+    throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0 or 2.0`);
   }
   const { meta, request, paces, plan } = planFile;
   const nodes = [

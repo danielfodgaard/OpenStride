@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 import anthropic
 from pydantic import ValidationError
 
-from app import storage
+from app import clock, storage
 from app.models import (
     DAYS,
     DatedPlan,
@@ -17,13 +17,13 @@ from app.models import (
     TrainingPlan,
     Usage,
 )
-from app.prompt import SYSTEM_PROMPT, build_user_prompt, week_starts
+from app.prompts.plan import SYSTEM_PROMPT, build_user_prompt
 from app.validate import soft_warnings, validate_plan
 from app.vdot import compute_paces
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 DEFAULT_MODEL = "claude-sonnet-5-5"
-MAX_TOKENS = 32000
+MAX_TOKENS = 64000
 DISTANCE_SLUGS = {5: "5k", 10: "10k", 21.0975: "hm", 42.195: "m"}
 
 
@@ -73,8 +73,8 @@ def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
 
 def generate_plan(request: SavedRequest, client=None, today: date | None = None) -> PlanFile:
     client = client or anthropic.Anthropic()
-    model = os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL
-    today = today or date.today()
+    model = os.environ.get("PLAN_MODEL") or os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL  # v1 name
+    today = today or clock.today()
     now = datetime.now(timezone.utc)
 
     paces = Paces(**compute_paces(
@@ -83,16 +83,16 @@ def generate_plan(request: SavedRequest, client=None, today: date | None = None)
         request.race_distance_km,
         request.goal_time,
     ))
-    starts = week_starts(today, request.race_date)
+    starts = clock.week_starts(today, request.race_date)
     user_prompt = build_user_prompt(request, paces, starts)
     usage = Usage(input_tokens=0, output_tokens=0)
 
     plan = call_claude(client, model, user_prompt, usage)
-    errors = validate_plan(plan, request, paces, len(starts))
+    errors = validate_plan(plan, request, len(starts))
     if errors:
         problems = "\n".join(f"- {error}" for error in errors)
         plan = call_claude(client, model, f"{user_prompt}\n\nFix these problems:\n{problems}", usage)
-        errors = validate_plan(plan, request, paces, len(starts))
+        errors = validate_plan(plan, request, len(starts))
     plan.warnings += errors + soft_warnings(plan)
 
     slug = DISTANCE_SLUGS.get(request.race_distance_km, f"{round(request.race_distance_km)}k")

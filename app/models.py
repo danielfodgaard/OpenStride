@@ -112,12 +112,25 @@ class Usage(BaseModel):
     output_tokens: int
 
 
+class HistoryEntry(BaseModel):
+    version: int
+    proposal_id: str
+    accepted_at: str
+    rationale: str
+
+
 class Meta(BaseModel):
     id: str
     created_at: str
     app_version: str
     model: str
     usage: Usage
+    # Defaults let v1.0 files load unchanged.
+    version: int = 1
+    history: list[HistoryEntry] = []
+    status: Literal["draft", "active", "archived"] = "draft"
+    accepted_at: str = ""
+    feedback_history: list[str] = []
 
 
 class Paces(BaseModel):
@@ -132,7 +145,7 @@ class Paces(BaseModel):
 
 
 class PlanFile(BaseModel):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.0", "2.0"] = "2.0"
     meta: Meta
     request: SavedRequest
     paces: Paces

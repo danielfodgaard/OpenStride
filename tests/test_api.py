@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, storage
+from app.models import PlanFile
 
 SAMPLE = Path("examples/sample_plan.json").read_text()
 PLAN_ID = json.loads(SAMPLE)["meta"]["id"]
@@ -12,9 +13,10 @@ PLAN_ID = json.loads(SAMPLE)["meta"]["id"]
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(storage, "PLANS_DIR", tmp_path)
-    (tmp_path / f"{PLAN_ID}.json").write_text(SAMPLE)
-    (tmp_path.parent / "secret.json").write_text("{}")
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    storage.save_plan(PlanFile.model_validate_json(SAMPLE))
+    (tmp_path / "secret").mkdir()
+    (tmp_path / "secret" / "plan.json").write_text(SAMPLE)
     return TestClient(main.app)
 
 
@@ -34,8 +36,8 @@ def test_missing_plan_is_404(client):
 
 
 def test_plan_id_cannot_escape_plans_dir(client):
-    assert storage.load_plan("../secret") is None
-    assert client.get("/api/plans/..%2Fsecret").status_code == 404
+    assert storage.load_plan("../../secret") is None
+    assert client.get("/api/plans/..%2F..%2Fsecret").status_code == 404
 
 
 def test_invalid_request_is_422_with_message(client):

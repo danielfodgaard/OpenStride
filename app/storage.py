@@ -1,20 +1,52 @@
+"""JSON files on disk. All ids pass through `safe_id`: they arrive in URLs and uploads."""
 import json
+import os
 import re
 from pathlib import Path
 
 from app.models import PlanFile
 
-PLANS_DIR = Path(__file__).parent.parent / "plans"
+DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
+class NotFound(Exception):
+    pass
+
+
+def safe_id(value: str) -> str:
+    if not ID_PATTERN.fullmatch(value):
+        raise NotFound(value)
+    return value
+
+
+def write_json(path: Path, text: str) -> None:
+    # Replace atomically: a crash mid-write must not destroy the current plan.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(text)
+    os.replace(temporary, path)
+
+
+def plan_dir(plan_id: str) -> Path:
+    return DATA_DIR / "plans" / safe_id(plan_id)
+
+
 def save_plan(plan_file: PlanFile) -> None:
-    (PLANS_DIR / f"{plan_file.meta.id}.json").write_text(plan_file.model_dump_json(indent=2))
+    write_json(plan_dir(plan_file.meta.id) / "plan.json", plan_file.model_dump_json(indent=2))
+
+
+def load_plan(plan_id: str) -> PlanFile | None:
+    try:
+        path = plan_dir(plan_id) / "plan.json"
+    except NotFound:
+        return None
+    return PlanFile.model_validate_json(path.read_text()) if path.exists() else None
 
 
 def list_plans() -> list[dict]:
     plans = []
-    for path in sorted(PLANS_DIR.glob("*.json"), reverse=True):  # ids start with a timestamp
+    for path in sorted((DATA_DIR / "plans").glob("*/plan.json"), reverse=True):  # ids start with a timestamp
         data = json.loads(path.read_text())
         plans.append({
             "id": data["meta"]["id"],
@@ -22,11 +54,3 @@ def list_plans() -> list[dict]:
             "goal_description": data["request"]["goal_description"],
         })
     return plans
-
-
-def load_plan(plan_id: str) -> PlanFile | None:
-    # The id comes from the URL; the pattern keeps it inside PLANS_DIR.
-    if not ID_PATTERN.fullmatch(plan_id):
-        return None
-    path = PLANS_DIR / f"{plan_id}.json"
-    return PlanFile.model_validate_json(path.read_text()) if path.exists() else None

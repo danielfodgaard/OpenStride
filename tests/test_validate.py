@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Paces, SavedRequest, TrainingPlan
+from app.models import SavedRequest, TrainingPlan
 from app.validate import soft_warnings, validate_plan
 
 SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())
@@ -17,7 +17,7 @@ def plan():
 
 def errors_for(plan, **request_changes):
     request = SavedRequest.model_validate(SAMPLE["request"] | request_changes)
-    return validate_plan(plan, request, Paces.model_validate(SAMPLE["paces"]), N_WEEKS)
+    return validate_plan(plan, request, N_WEEKS)
 
 
 def find(plan, week, day):
@@ -103,14 +103,10 @@ def test_session_after_race(plan):
     assert any("after the race" in e for e in errors_for(plan, race_date="2027-01-09"))
 
 
-def test_session_pace_not_a_zone(plan):
+def test_llm_may_adjust_paces(plan):
     find(plan, 0, "Sat").target_pace = "5:00/km"
-    assert any("not a provided zone" in e for e in errors_for(plan))
-
-
-def test_step_pace_not_a_zone(plan):
-    find(plan, 0, "Tue").steps[0].target_pace = "5:00/km"
-    assert any("not a provided zone" in e for e in errors_for(plan))
+    find(plan, 0, "Tue").steps[0].target_pace = "6:30/km"
+    assert errors_for(plan) == []
 
 
 def test_negative_numbers(plan):

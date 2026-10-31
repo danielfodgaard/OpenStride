@@ -1,12 +1,11 @@
 """Semantic checks on a TrainingPlan that the JSON schema cannot express."""
 
-from app.models import DAYS, Paces, SavedRequest, TrainingPlan
+from app.models import DAYS, SavedRequest, TrainingPlan
 
 HARD_TYPES = {"tempo", "intervals", "long"}
-PACE_ZONES = ("easy", "marathon", "threshold", "interval", "repetition", "race_pace")
 
 
-def validate_plan(plan: TrainingPlan, request: SavedRequest, paces: Paces, n_weeks: int) -> list[str]:
+def validate_plan(plan: TrainingPlan, request: SavedRequest, n_weeks: int) -> list[str]:
     """Return human-readable errors; empty means valid."""
     errors = []
 
@@ -14,7 +13,6 @@ def validate_plan(plan: TrainingPlan, request: SavedRequest, paces: Paces, n_wee
     if numbers != list(range(1, n_weeks + 1)):
         errors.append(f"Expected weeks numbered 1..{n_weeks}, got {numbers}")
 
-    allowed_paces = {getattr(paces, zone) for zone in PACE_ZONES}
     race_day = DAYS[request.race_date.weekday()]
     hard_days = []
 
@@ -39,11 +37,7 @@ def validate_plan(plan: TrainingPlan, request: SavedRequest, paces: Paces, n_wee
                 hard_days.append((index * 7 + DAYS.index(session.day), where))
             if session.distance_km < 0 or session.duration_min < 0:
                 errors.append(f"{where} has a negative distance or duration")
-            if session.target_pace not in allowed_paces:
-                errors.append(f"{where} target_pace {session.target_pace!r} is not a provided zone")
             for step in session.steps:
-                if step.target_pace not in allowed_paces:
-                    errors.append(f"{where} step {step.description!r} target_pace {step.target_pace!r} is not a provided zone")
                 if step.repeat < 1:
                     errors.append(f"{where} step {step.description!r} has repeat below 1")
                 if step.distance_km < 0 or step.duration_min < 0:
