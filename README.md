@@ -11,7 +11,7 @@
 | | Runna | OpenStride |
 |---|---|---|
 | Price | $19.99/month or $119.99/year (US, Oct 2026) | $0 software, MIT licence |
-| Running cost | included | your own Claude API key: about $0.1 one time cost (see [cost](#before--after-cost)) |
+| Running cost | included | your own Claude API key: ~$0.1 one time cost for a plan and ~$0.44 running (optional) monthly costs for continual assessment (see [cost](#before--after-cost)) |
 | See your whole plan? | only on the annual plan | always: it's a JSON file on your disk |
 | Why did my plan change? | not shown | every change comes with a written reason and a diff you accept or reject |
 | Your data | their servers | a folder on your computer |
@@ -147,7 +147,7 @@ Plan generation was measured on Haiku. On the default Sonnet 5.5, the same token
 
 | Usage | OpenStride | Runna monthly | Runna annual (per month) |
 |---|---|---|---|
-| Light: plan + every run reviewed + a weekly adaptation check | **~$0.1** | $19.99 | $9.99 |
+| Light: plan + every run reviewed + a weekly adaptation check | **~$0.1 one time cost for a plan and ~$0.44 running (optional) monthly costs for continual assessment** | $19.99 | $9.99 |
 | Heavy: the above + 4 progress summaries + 20 chat messages + 2 proposals | **~$3.50** | $19.99 | $9.99 |
 | **Saving** | | **82–98%** | **65–96%** |
 
