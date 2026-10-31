@@ -93,7 +93,8 @@ def edit_pace(plan_file, index, number=WEEK):
 
 def test_status_in_mode_off_works(client):
     body = client.get("/api/garmin/status").json()
-    assert body == {"sync": "off", "push": "off", "connected": False, "last_sync_at": None, "last_error": None, "can_push_workouts": False}
+    assert (body["sync"], body["push"], body["connected"], body["can_push_workouts"]) == ("off", "off", False, False)
+    assert not body["push_connected"] and body["push_blocked"] is None and body["last_sync_at"] is None
 
 
 def test_sync_in_mode_off_is_501(client):

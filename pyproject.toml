@@ -13,7 +13,11 @@ dependencies = [
     "gpxpy",
     "python-multipart",
     "filelock",
-    "garminconnect>=0.3.20,<0.4",
+    # Pinned with its dependencies: its token reaches a whole Garmin account, so upgrade on purpose.
+    "garminconnect==0.3.20",
+    "curl-cffi==0.17.0",
+    "ua-generator==2.1.7",
+    "requests==2.34.2",
     "garmin-connect-personal-api-python>=1,<2",
 ]
 

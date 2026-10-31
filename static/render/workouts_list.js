@@ -8,7 +8,6 @@ import { clockText, monthHeading, shortDate, stepText, timeText } from "./format
 let importReport = "";  // survives the re-render after an upload
 let syncReport = "";
 
-const UNOFFICIAL_WARNING = "Garmin sync uses an unofficial connection: it can break without notice and is a grey area under Garmin's terms.";
 
 function garminSection(garmin) {
   const section = el("section");
@@ -24,7 +23,7 @@ function garminSection(garmin) {
   }, "Syncing…", "primary");
   const last = el("span", garmin.last_sync_at ? `Last sync ${new Date(garmin.last_sync_at).toLocaleString()}` : "Not synced yet");
   last.className = "muted";
-  section.append(actions(sync, last));
+  section.append(actions(sync, last, link("Garmin settings", "#/garmin")));
   if (garmin.last_error) section.append(notice(garmin.last_error, "critical"));
   section.append(status);
   return section;

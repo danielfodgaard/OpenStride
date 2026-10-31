@@ -191,7 +191,7 @@ def test_an_odd_activity_shape_is_reported_without_values():
 
 def test_unofficial_resumes_saved_tokens_without_a_password(mocked):
     UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
-    mocked.login.assert_called_once_with(tokenstore=str(storage.DATA_DIR / "secrets"))
+    mocked.login.assert_called_once_with(tokenstore=str(storage.DATA_DIR / "secrets" / "garmin-unofficial"))
 
 
 def test_unofficial_push_uploads_schedules_and_sends_to_the_watch(mocked):

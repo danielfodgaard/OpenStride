@@ -41,9 +41,24 @@ Runs and other sports go through the same steps as an uploaded file: matching, r
 
 **Workouts on the watch (experimental: not yet tested against a real Garmin watch).** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug. Strength and cross sessions are not exported.
 
-**Send to Garmin (experimental: not yet tested against a real Garmin account).** This needs `GARMIN_PUSH=unofficial` and a login to your Garmin account through `python-garminconnect`, which is not sanctioned by Garmin and can break without notice. It is not finished: the app has no login for it yet, so use the .fit download for now.
+**Send to Garmin (experimental: not yet tested against a real Garmin account).** The Personal API can't write, so sending uses `python-garminconnect`, which Garmin does not sanction and which can break without notice.
+
+1. Set `GARMIN_PUSH=unofficial` in `.env` and restart.
+2. Open **Garmin settings** (in the footer) at `http://127.0.0.1:8000` or the Tailscale HTTPS address, and log in, with your MFA code if asked. The login is refused anywhere else.
+3. **Send to Garmin** on a planned run uploads the workout, schedules it on the session's date and sends it to your last-used device. Sending it again replaces the old copy. After a plan change, the weeks page offers to re-send only what changed.
 
 **Secrets** live only in `.env` and `data/secrets/`. They are never logged, sent to Claude, or written to plan or activity files.
+
+## Garmin security
+
+The login for sending saves a session token that gives **full access to your Garmin account**, so treat it like a password.
+
+- **What it does here:** only uploads, schedules, replaces and deletes workouts OpenStride made. Your activities are read through the official API, never with this token.
+- **Where it lives:** `data/secrets/garmin-unofficial/`, folder mode 700 and files 600. Your password is never written anywhere. The token is left out of every backup, even with "include secrets".
+- **Disconnect:** press **Disconnect Garmin** in Garmin settings, or run `uv run openstride garmin-disconnect`. Either one deletes the token and turns sending off.
+- **Revoking access:** deleting the token here doesn't end it at Garmin. If it may have leaked, change your Garmin password too. Keep MFA on.
+- **Exposure:** sending is refused if the server listens beyond localhost with no `OPENSTRIDE_PASSWORD`. Never use `tailscale funnel`: it would put this server on the public internet.
+- **Upgrades:** `python-garminconnect` and its dependencies are pinned to exact versions in `pyproject.toml` and `uv.lock`. Upgrade them deliberately and read what changed first.
 
 ## Password
 
@@ -53,7 +68,7 @@ The server refuses to listen beyond localhost with no password, because it holds
 
 ## Backups
 
-`GET /api/backup` downloads `openstride-backup-<date>.zip`: the data folder without lock files, `data/secrets/` and earlier backups. Add `?include_secrets=1` to include secrets, which are tokens, so keep that file private.
+`GET /api/backup` downloads `openstride-backup-<date>.zip`: the data folder without lock files, `data/secrets/` and earlier backups. Add `?include_secrets=1` to include secrets, which are tokens, so keep that file private. The Garmin login token is never included.
 
 `scripts/backup.sh <folder>` writes the same zip to a folder, and is safe while the server runs. For a daily backup at 03:00, in `crontab -e`:
 

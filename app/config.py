@@ -62,10 +62,19 @@ def uvicorn_host() -> str | None:
     return os.environ.get("UVICORN_HOST")
 
 
+def is_loopback(host: str) -> bool:
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
+def exposed_without_password() -> bool:
+    """Unlike the start-up refusal, OPENSTRIDE_ALLOW_OPEN doesn't excuse this."""
+    return not is_loopback(uvicorn_host() or settings.host) and not settings.password
+
+
 def open_server_problem() -> str | None:
     """Why the server must not start, if it would be open to the network with no password."""
     host = uvicorn_host() or settings.host
-    if host in ("localhost", "::1") or host.startswith("127.") or settings.password or settings.allow_open:
+    if is_loopback(host) or settings.password or settings.allow_open:
         return None
     return (
         f"Refusing to start: listening on {host} with no OPENSTRIDE_PASSWORD. This server holds your "

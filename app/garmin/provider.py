@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import time
 import zipfile
 from contextlib import contextmanager, suppress
@@ -15,14 +16,14 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
-from app import storage
+from app import config, storage
 from app.config import settings
 
 log = logging.getLogger(__name__)
 
 PERSONAL_KEY_ENV = "GARMIN_PERSONAL_API_KEY"  # Garmin's own name for it
 PERSONAL_BEARER_FILE = "garmin_personal_bearer.json"
-UNOFFICIAL_TOKEN_FILE = "garmin_tokens.json"  # python-garminconnect's name in a token directory
+UNOFFICIAL_TOKEN_FILE = f"{storage.UNOFFICIAL_TOKEN_DIR}/garmin_tokens.json"  # the library's file name
 LOGIN_HINT = "Log in again in Garmin settings."
 KEY_HINT = f"Check {PERSONAL_KEY_ENV} in .env."
 PAGE_SIZE = 50
@@ -59,6 +60,8 @@ class GarminStatus:
     last_sync_at: str | None
     last_error: str | None
     can_push_workouts: bool
+    push_connected: bool  # an unofficial login token is saved
+    push_blocked: str | None  # why sending is refused
 
 
 @dataclass
@@ -101,7 +104,19 @@ def secrets_dir() -> Path:
     return folder
 
 
+def token_dir() -> Path:
+    folder = secrets_dir() / storage.UNOFFICIAL_TOKEN_DIR
+    folder.mkdir(exist_ok=True)
+    folder.chmod(0o700)
+    return folder
+
+
+def disconnect() -> None:
+    shutil.rmtree(storage.DATA_DIR / "secrets" / storage.UNOFFICIAL_TOKEN_DIR, ignore_errors=True)
+
+
 def save_secret(name: str, value: str) -> None:
+    token_dir()
     storage.write_file(secrets_dir() / name, value, mode=0o600)
 
 
@@ -164,8 +179,10 @@ def fit_from_download(content: bytes) -> bytes:
 def status() -> GarminStatus:
     state = load_state()
     connected = sync_mode() != "off" and bool(personal_key())
-    can_push = push_mode() != "off" and has_secret(UNOFFICIAL_TOKEN_FILE)
-    return GarminStatus(sync_mode(), push_mode(), connected, state.get("last_sync_at"), state.get("last_error"), can_push)
+    token = has_secret(UNOFFICIAL_TOKEN_FILE)
+    blocked = push_refusal() if push_mode() != "off" else None
+    can_push = push_mode() != "off" and token and not blocked
+    return GarminStatus(sync_mode(), push_mode(), connected, state.get("last_sync_at"), state.get("last_error"), can_push, token, blocked)
 
 
 class NullProvider:
@@ -241,7 +258,11 @@ class PersonalApiProvider(NullProvider):
 
 
 class UnofficialProvider(NullProvider):
-    """python-garminconnect: the mobile app's login, not sanctioned by Garmin. Opt-in only."""
+    """python-garminconnect: the mobile app's login, not sanctioned by Garmin. Opt-in only.
+
+    Writes only, on workouts OpenStride made: its token reaches the whole account, so reads stay
+    on the official API, and delivery.py only ever passes ids from garmin_workouts.json.
+    """
 
     def __init__(self):
         self.garmin = None
@@ -255,7 +276,7 @@ class UnofficialProvider(NullProvider):
             if not has_secret(UNOFFICIAL_TOKEN_FILE):
                 raise GarminError(f"Not logged in to Garmin. {LOGIN_HINT}")
             garmin = Garmin()
-            garmin.login(tokenstore=str(secrets_dir()))  # with no credentials this only resumes saved tokens
+            garmin.login(tokenstore=str(token_dir()))  # with no credentials this only resumes saved tokens
             self.garmin = garmin
         return self.garmin
 
@@ -285,6 +306,15 @@ class UnofficialProvider(NullProvider):
 
 def personal_key() -> str:
     return os.environ.get(PERSONAL_KEY_ENV, "").strip()
+
+
+def push_refusal() -> str | None:
+    if config.exposed_without_password():
+        return (
+            "Sending is refused: this server listens beyond localhost with no OPENSTRIDE_PASSWORD, and the "
+            "Garmin token gives full access to your account. Set a password, or listen on 127.0.0.1 and use Tailscale."
+        )
+    return None
 
 
 def sync_mode() -> str:

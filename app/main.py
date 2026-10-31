@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, chat, clock, config, lifecycle, logbook, metrics, progress, review, storage
+from app import activities, adapt, chat, clock, config, lifecycle, logbook, logsafe, metrics, progress, review, storage
 from app.garmin import sync as garmin_sync
 from app.garmin.router import router as garmin_router
 from app.generator import APP_VERSION, GenerationError, generate_plan
@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
     garmin_sync.stop()
 
 
+logsafe.install()
 app = FastAPI(title="OpenStride", lifespan=lifespan)
 
 

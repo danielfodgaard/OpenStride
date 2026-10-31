@@ -23,6 +23,7 @@ from app.config import settings
 from app.models import ActivitySummary, ChatMessage, ManualActivity, PlanFile, Proposal, ReviewFile
 
 DATA_DIR = settings.data_dir
+UNOFFICIAL_TOKEN_DIR = "garmin-unofficial"
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 LOCK_TIMEOUT_S = 30  # locks cover file writes only, so waiting this long means something is stuck
 
@@ -160,8 +161,8 @@ def write_backup(folder: Path, include_secrets: bool = False) -> Path:
                 relative = path.relative_to(DATA_DIR)
                 if not path.is_file() or path.name.endswith((".lock", ".tmp", ".zip")):
                     continue
-                if relative.parts[0] == "secrets" and not include_secrets:
-                    continue
+                if relative.parts[0] == "secrets" and (not include_secrets or relative.parts[1] == UNOFFICIAL_TOKEN_DIR):
+                    continue  # that token reaches the whole Garmin account, so it never leaves this machine
                 try:
                     archive.write(path, relative)
                 except FileNotFoundError:  # deleted on another device since the listing

@@ -1,4 +1,5 @@
 // Hash router, plus the views that aren't a plan page or a workout page.
+import { garminView } from "./render/garmin.js";
 import {
   actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, fullPlanVersionCheck, garminStatus, input,
   labelled, line, link, main, nextRoute,
@@ -241,6 +242,7 @@ async function route() {
     else if (page === "workouts" && !id) await workoutsView(new URLSearchParams(search));
     else if (page === "workouts") await workoutView(id);
     else if (page === "new") await newView(id);
+    else if (page === "garmin") await garminView();
     else if (page === "plans" && !id) await plansView();
     else if (page === "plans" && !section) await planOverview(id);
     else if (page === "plans" && section === "weeks") await weeksView(id, a);
@@ -293,7 +295,7 @@ async function renderFooter() {
   const footer = document.getElementById("footer");
   const backup = link("Download backup", "/api/backup");
   backup.dataset.online = "";
-  footer.append(backup);
+  footer.append(backup, link("Garmin settings", "#/garmin"));
   if (!await garminStatus()) return;
   const secrets = input("checkbox");
   secrets.addEventListener("change", () => {
