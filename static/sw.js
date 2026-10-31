@@ -1,6 +1,6 @@
 // App shell from the cache, so the app opens at once even when the server can't be reached.
 // API reads go to the network first; the last good copy answers when it fails.
-const SHELL_CACHE = "openstride-shell-v3";  // bump when SHELL changes
+const SHELL_CACHE = "openstride-shell-v4";  // bump when SHELL changes
 const API_CACHE = "openstride-api-v1";
 const SHELL = [
   "/",
@@ -11,6 +11,7 @@ const SHELL = [
   "/render/format.js",
   "/render/garmin.js",
   "/render/plan_overview.js",
+  "/render/session_edit.js",
   "/render/ui.js",
   "/render/weeks.js",
   "/render/workout.js",

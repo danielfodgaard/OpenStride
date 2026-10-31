@@ -1,6 +1,6 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
-  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, el, foldable, fullPlanVersionCheck, labelled,
+  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, fullPlanVersionCheck, labelled,
   line, link, main, notice, planPath, postJson, refresh, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
@@ -61,6 +61,11 @@ function versionLine({ meta }) {
   return line(`${meta.status} · version ${meta.version} · `, link("All versions", `${planPath(meta.id)}/versions`));
 }
 
+function recentEdits({ meta }) {
+  const lines = meta.history.slice(-5).reverse().map((h) => `v${h.version} · ${h.summary || (h.proposal_id ? "Coach proposal" : h.rationale)}`);
+  return lines.length ? [bulletList(lines)] : [];
+}
+
 function adaptSection(planFile, proposals, bases) {
   const status = statusLine();
   const scope = el("select");
@@ -70,6 +75,9 @@ function adaptSection(planFile, proposals, bases) {
   scope.add(new Option("Rest of plan", "rest_of_plan"));
   const context = textarea(2, 50);
   context.id = "adapt-context";
+  const prefilled = editMemo.adaptContext;
+  editMemo.adaptContext = "";
+  context.value = prefilled;
   const suggest = button("Suggest plan changes", status, async () => {
     await postJson(`/api/plans/${encodeURIComponent(planFile.meta.id)}/proposals`, {
       scope: scope.value,
@@ -81,8 +89,9 @@ function adaptSection(planFile, proposals, bases) {
   const pending = proposals.some((p) => p.origin !== "chat" && p.status === "pending");
   const section = foldable(
     "Adapt plan",
-    pending,
+    pending || Boolean(prefilled),
     versionLine(planFile),
+    ...recentEdits(planFile),
     labelled("Scope", scope),
     labelled("Context", context),
     actions(suggest),
@@ -136,8 +145,8 @@ function summaryView({ summary }) {
 
 function progressSection(planFile, progress, readOnly) {
   const status = statusLine();
-  const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "As planned", "Partly", "Missed targets", "Unplanned"];
-  const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed,
+  const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "Skipped", "Replaced", "As planned", "Partly", "Missed targets", "Unplanned"];
+  const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed, r.sessions_skipped, r.sessions_replaced,
     r.as_planned, r.partly, r.missed_targets, r.unplanned];
   const summary = el("div");
   if (progress.latest_summary) summary.append(summaryView(progress.latest_summary));

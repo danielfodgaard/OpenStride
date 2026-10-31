@@ -80,12 +80,20 @@ export function notice(text, kind = "") {
   return p;
 }
 
-export function toast(text) {
+// Filled by the edit that just happened, for the page that renders next.
+export const editMemo = { warnings: [], adaptContext: "" };
+
+export function toast(text, ...buttons) {
   const item = el("div", text);
   item.className = "toast";
   const shelf = document.getElementById("toasts");
+  if (buttons.length) {
+    item.dataset.undoable = "";
+    shelf.querySelector("[data-undoable]")?.remove();  // its Undo would no longer be the last edit
+    item.append(actions(...buttons));
+  }
   shelf.append(item);
-  setTimeout(() => item.remove(), 5000);
+  setTimeout(() => item.remove(), buttons.length ? 15000 : 5000);
 }
 
 export function link(text, href) {

@@ -265,3 +265,29 @@ body.login main { max-width: 360px; padding: 0; }
 body.login h1 { display: flex; align-items: center; gap: 8px; }
 body.login form { display: grid; gap: 10px; }
 .login-error { color: var(--critical); font-weight: 600; }
+
+/* Hand edits */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.struck { text-decoration: line-through; color: var(--ink-3); }
+.menu-button { min-width: 44px; padding: 0 8px; font-size: 20px; line-height: 1; }
+.toast .actions { margin-top: 6px; }
+.toast button { color: var(--ink); background: var(--panel); pointer-events: auto; }
+tr.drop-here td { background: var(--accent-soft); }
+tr[draggable="true"] { cursor: grab; }
+.sheet {
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); color: var(--ink);
+  width: min(420px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; padding: 16px;
+}
+.sheet[open] { display: grid; gap: 10px; }
+.sheet::backdrop { background: rgb(0 0 0 / 0.45); }
+.sheet-row { width: 100%; min-height: 44px; text-align: left; }
+.sheet details { display: grid; gap: 6px; }
+.day-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-row .sheet-row { width: auto; flex: 1 1 56px; text-align: center; }
+@media (max-width: 600px) {
+  .sheet {
+    width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 12px 12px 0 0; border-width: 1px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}
+

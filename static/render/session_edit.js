@@ -1,0 +1,228 @@
+// Hand edits: the session menu, the activity buttons, and the toast with Undo. Code applies these, no coach.
+import { actions, api, editMemo, el, input, labelled, notice, planPath, postJson, refresh, statusLine, toast } from "./ui.js";
+import { DAYS, addDays, dateText } from "./format.js";
+
+const ASSIGN_DAYS = 6;
+const dayName = (date) => DAYS[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
+const daysApart = (a, b) => Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000;
+
+async function undo(id) {
+  document.querySelector("[data-undoable]")?.remove();
+  await api(`/api/plans/${encodeURIComponent(id)}`);  // the latest ETag: Undo may come after a reload
+  await api(`/api/plans/${encodeURIComponent(id)}/undo`, { method: "POST", plan: id });
+  toast("Undone");
+  refresh();
+}
+
+function actionButton(text, action) {
+  const b = el("button", text);
+  b.type = "button";
+  b.addEventListener("click", () => action().catch((error) => toast(error.message)));
+  return b;
+}
+
+export async function sendEdit(id, body) {
+  const result = await postJson(`/api/plans/${encodeURIComponent(id)}/edits`, body, id);
+  const note = body.note?.trim();
+  const ask = actionButton("Ask the coach to check this week", async () => {
+    editMemo.adaptContext = `${result.summary}.${note ? ` Reason: ${note}.` : ""} Check the rest of the week.`;
+    if (location.hash === planPath(id)) refresh();
+    else location.hash = planPath(id);
+  });
+  const rereview = body.activity_id ? ["Re-run the review to judge it against this"] : [];
+  toast([result.summary, ...result.warnings, ...rereview].join(" · "), actionButton("Undo", () => undo(id)), ask);
+  editMemo.warnings = result.warnings;
+  refresh();
+}
+
+function sheet(title, ...children) {
+  const dialog = el("dialog");
+  dialog.className = "sheet";
+  const close = el("button", "Close");
+  close.type = "button";
+  close.addEventListener("click", () => dialog.close());
+  dialog.append(el("h3", title), ...children, close);
+  dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+  return dialog;
+}
+
+function option(text, status, action) {
+  const b = el("button", text);
+  b.type = "button";
+  b.className = "sheet-row";
+  b.dataset.online = "";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    status.textContent = "Working…";
+    try {
+      await action();
+      b.closest("dialog")?.close();
+    } catch (error) {
+      status.textContent = error.message;
+      b.disabled = false;
+    }
+  });
+  return b;
+}
+
+function moveChoices(planFile, week, session, today, status, send) {
+  const race = planFile.request.race_date;
+  const box = el("div");
+  box.className = "day-row";
+  DAYS.forEach((day, i) => {
+    const date = addDays(week.start_date, i);
+    if (date >= today && date < race && date !== session.date) {
+      box.append(option(day, status, () => send({ kind: "move", to_date: date })));
+    }
+  });
+  const picker = input("date");
+  picker.min = today;
+  picker.max = addDays(race, -1);
+  const other = el("div");
+  other.className = "field-row";
+  other.append(labelled("Another date", picker), option("Move", status, async () => {
+    if (!picker.value) throw new Error("Pick a date first.");
+    await send({ kind: "move", to_date: picker.value });
+  }));
+  return [box, other];
+}
+
+function swapChoices(planFile, week, index, today, status, send) {
+  const box = el("details");
+  box.append(el("summary", "Swap with…"));
+  for (const candidate of planFile.plan.weeks) {
+    if (candidate.week_number !== week.week_number && candidate.week_number !== week.week_number + 1) continue;
+    candidate.sessions.forEach((s, i) => {
+      const self = candidate === week && i === index;
+      if (self || s.date < today || s.type === "race" || s.status !== "planned") return;
+      box.append(option(`${dateText(s.date)}: ${s.title}`, status, () => send({
+        kind: "swap", other: { week: candidate.week_number, index: i },
+      })));
+    });
+  }
+  return box;
+}
+
+export function sessionMenu(planFile, week, index) {
+  const session = week.sessions[index];
+  const b = el("button", "⋯");
+  b.type = "button";
+  b.className = "menu-button";
+  b.dataset.online = "";
+  b.setAttribute("aria-label", `Options for ${session.title}`);
+  b.addEventListener("click", async (event) => {
+    event.stopPropagation();  // the row around it is a link
+    const { today } = await api("/api/today");
+    const status = statusLine();
+    const note = input("text");
+    const send = (body) => sendEdit(planFile.meta.id, { session: { week: week.week_number, index }, note: note.value, ...body });
+    const nodes = session.status === "skipped"
+      ? [option("Unskip", status, () => send({ kind: "unskip" }))]
+      : [
+        el("h4", "Move to…"), ...moveChoices(planFile, week, session, today, status, send),
+        swapChoices(planFile, week, index, today, status, send),
+        option("Skip", status, () => send({ kind: "skip" })),
+      ];
+    sheet(`${session.day}: ${session.title}`, ...nodes, labelled("Note (optional)", note), status);
+  });
+  return b;
+}
+
+function sessionList(title, planFile, activity, kind, sessions) {
+  const status = statusLine();
+  const rows = sessions.map(({ week, index, session }) => option(`${dateText(session.date)}: ${session.title}`, status, () => sendEdit(
+    planFile.meta.id, { kind, session: { week: week.week_number, index }, activity_id: activity.id },
+  )));
+  sheet(title, ...(rows.length ? rows : [el("p", "No planned sessions fit.")]), status);
+}
+
+const candidates = (planFile, activity, test) => planFile.plan.weeks.flatMap((week) => week.sessions
+  .map((session, index) => ({ week, index, session }))
+  .filter(({ session }) => session.modality === activity.modality && session.type !== "race" && test(session)));
+
+function open(planFile, activity, workouts, kind, title, test) {
+  const taken = (week, index) => workouts.some((w) => w.match.week_number === week.week_number && w.match.session_index === index);
+  const sessions = candidates(planFile, activity, test)
+    .filter(({ week, index }) => !taken(week, index))
+    .sort((a, b) => daysApart(a.session.date, activity.date) - daysApart(b.session.date, activity.date));
+  sessionList(title, planFile, activity, kind, sessions);
+}
+
+// Under an activity's review: tell the plan what this workout really was.
+export function activityButtons(planFile, activity, workouts) {
+  const status = statusLine();
+  if (activity.match.session_index >= 0) {
+    const week = planFile.plan.weeks.find((w) => w.week_number === activity.match.week_number);
+    const session = week?.sessions[activity.match.session_index];
+    if (!session || session.status === "replaced" || session.type === "race") return [];
+    return [actions(option("I did something else", status, () => sendEdit(planFile.meta.id, {
+      kind: "replace", session: { week: week.week_number, index: activity.match.session_index }, activity_id: activity.id,
+    }))), status];
+  }
+  const was = option("This was my …", status, async () => open(
+    planFile, activity, workouts, "assign_activity", "This was my …", (s) => daysApart(s.date, activity.date) <= ASSIGN_DAYS,
+  ));
+  const instead = option("I did this instead of …", status, async () => open(
+    planFile, activity, workouts, "replace", "I did this instead of …", (s) => s.date === activity.date,
+  ));
+  return [actions(was, instead), status];
+}
+
+export function sessionTitle(session, content) {
+  const box = el("span");
+  const title = el("span");
+  title.append(content);
+  if (session.status !== "planned") title.className = "struck";
+  box.append(title);
+  if (session.status === "skipped") box.append(" ", small("Skipped"));
+  if (session.status === "replaced") box.append(" ", small("Replaced"));
+  if (session.moved_from) box.append(" ", small(`moved from ${dayName(session.moved_from)}`));
+  return box;
+}
+
+function small(text) {
+  const span = el("span", text);
+  span.className = "muted";
+  return span;
+}
+
+export function editWarnings() {
+  const warnings = editMemo.warnings.map((text) => notice(text, "warning"));
+  editMemo.warnings = [];
+  return warnings;
+}
+
+// Laptop only: dropping on a session swaps, dropping on a free day moves.
+let dragged = null;
+const canDrag = () => matchMedia("(hover: hover) and (min-width: 900px)").matches;
+
+export function dragSource(row, id, week, index) {
+  if (!canDrag()) return;
+  row.draggable = true;
+  row.addEventListener("dragstart", (event) => {
+    dragged = { week: week.week_number, index };
+    event.dataTransfer.effectAllowed = "move";
+  });
+  row.addEventListener("dragend", () => { dragged = null; });
+}
+
+export function dropTarget(row, id, body) {
+  if (!canDrag()) return;
+  row.addEventListener("dragover", (event) => {
+    if (dragged) {
+      event.preventDefault();
+      row.classList.add("drop-here");
+    }
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop-here"));
+  row.addEventListener("drop", (event) => {
+    event.preventDefault();
+    row.classList.remove("drop-here");
+    if (!dragged) return;
+    const session = dragged;
+    sendEdit(id, { session, ...body }).catch((error) => toast(error.message));
+  });
+}
