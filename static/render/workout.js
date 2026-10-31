@@ -1,6 +1,6 @@
 // The workout detail page. One renderer for a planned session, a recorded workout, or both.
 import {
-  api, breadcrumb, bulletList, button, el, input, line, link, main, patchJson, planPath, refresh,
+  activePlan, api, breadcrumb, bulletList, button, el, input, line, link, main, patchJson, planPath, refresh,
   rpeSelect, stale, statusLine, table, viewToken,
 } from "./ui.js";
 import { amountText, clockText, dateText, expandSteps, paceText, stepText, targetBand, timeText, utcText } from "./format.js";
@@ -272,7 +272,6 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
 }
 
 const planFor = async (id) => (id ? api(`/api/plans/${encodeURIComponent(id)}`) : null);
-const activePlan = () => fetch("/api/plans/active").then((r) => (r.ok ? r.json() : null));
 const seriesFor = async (activity) => (
   activity?.has_series ? api(`/api/activities/${encodeURIComponent(activity.id)}/series`) : null
 );

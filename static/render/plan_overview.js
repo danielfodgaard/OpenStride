@@ -1,6 +1,6 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
-  api, breadcrumb, bulletList, button, downloadButton, el, fullPlanVersionCheck, labelled, line, link, main,
+  activePlan, api, breadcrumb, bulletList, button, downloadButton, el, fullPlanVersionCheck, labelled, line, link, main,
   planPath, postJson, refresh, stale, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText } from "./format.js";
@@ -204,7 +204,7 @@ export function draftActions(planFile, status, form, formRequest) {
   const feedback = textarea(3, 50);
   feedback.id = "feedback";
   const accept = button("Accept plan", status, async () => {
-    const active = await fetch("/api/plans/active").then((r) => (r.ok ? r.json() : null));
+    const active = await activePlan();
     if (active && !confirm(`This replaces your current plan '${active.request.goal_description}'`)) return;
     await api(`/api/plans/${encoded}/accept`, { method: "POST" });
     location.hash = planPath(planFile.meta.id);

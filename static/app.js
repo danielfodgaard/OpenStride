@@ -1,6 +1,7 @@
 // Hash router, plus the views that aren't a plan page or a workout page.
 import {
-  api, breadcrumb, button, downloadButton, el, fullPlanVersionCheck, input, labelled, line, link, main, nextRoute,
+  actions, activePlan, api, breadcrumb, button, chip, downloadButton, el, fullPlanVersionCheck, foldable, garminStatus, input,
+  labelled, line, link, main, nextRoute,
   planPath, postJson, stale, statusLine, table, viewToken,
 } from "./render/ui.js";
 import { draftActions, planBasics, planOverview } from "./render/plan_overview.js";
@@ -182,7 +183,7 @@ async function versionView(id, version) {
 }
 
 async function homeView() {
-  const active = await fetch("/api/plans/active").then((r) => (r.ok ? r.json() : null));
+  const active = await activePlan();
   location.replace(active ? planPath(active.meta.id) : "#/workouts");
 }
 
@@ -208,5 +209,60 @@ async function route() {
   }
 }
 
-window.addEventListener("hashchange", route);
+function markTab() {
+  const tab = location.hash.split("/")[1] || "workouts";
+  for (const a of document.querySelectorAll("#tabs a")) {
+    if (a.hash.split("/")[1] === tab) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+}
+
+function currentTheme() {
+  return document.documentElement.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+
+function showTheme() {
+  const toggle = document.getElementById("theme-toggle");
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  toggle.textContent = next === "dark" ? "Dark" : "Light";
+  toggle.setAttribute("aria-label", `Switch to ${next} theme`);
+  document.querySelector("meta[name=theme-color]").content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+}
+
+// TODO(v4.1): a way back to following the system theme once one is picked.
+function setUpTheme() {
+  document.getElementById("theme-toggle").addEventListener("click", () => {
+    const theme = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("openstride:theme", theme);
+    } catch {
+      // Blocked storage only costs remembering the choice.
+    }
+    showTheme();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", showTheme);
+  showTheme();
+}
+
+async function renderFooter() {
+  const footer = document.getElementById("footer");
+  const backup = link("Download backup", "/api/backup");
+  backup.dataset.online = "";
+  footer.append(backup);
+  if (!await garminStatus()) return;
+  const secrets = input("checkbox");
+  secrets.addEventListener("change", () => {
+    backup.href = secrets.checked ? "/api/backup?include_secrets=1" : "/api/backup";
+  });
+  const tick = el("label");
+  tick.className = "tick";
+  tick.append(secrets, "Include secrets");
+  footer.append(tick);
+}
+
+window.addEventListener("hashchange", () => { markTab(); route(); });
+setUpTheme();
+renderFooter();
+markTab();
 route();

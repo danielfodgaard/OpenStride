@@ -65,7 +65,8 @@ function weekBlock(week, volume, id, workouts, today, open, onToggle) {
   box.append(el("summary", facts.join(" · ")), el("p", week.focus));
   const rows = sessionRows(week, id, workouts);
   const body = table(["Date", "Day", "Type", "Session", "Planned", "Target", "Actual", "Review"], rows.map((r) => r.cells));
-  rows.forEach((row, i) => { if (row.href) rowLinks(body.tBodies[0].rows[i], row.href); });
+  const lines = body.querySelector("tbody").rows;
+  rows.forEach((row, i) => { if (row.href) rowLinks(lines[i], row.href); });
   box.append(body);
   box.addEventListener("toggle", onToggle);
   return box;

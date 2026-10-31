@@ -2,16 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>OpenStride</title>
+<meta name="theme-color" content="#f4f6f7">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<script>
+// Before first paint, so a stored theme never flashes the other one.
+try { const t = localStorage.getItem("openstride:theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+</script>
 </head>
 <body>
-<nav><strong>OpenStride</strong> | <a href="#/workouts">Workouts</a> | <a href="#/plans">All plans</a> | <a href="#/new">New plan</a></nav>
+<header class="appbar">
+  <a class="brand" href="#/"><img src="icons/icon.svg" alt="">OpenStride</a>
+  <nav class="tabs" id="tabs" aria-label="Main">
+    <a href="#/workouts">Workouts</a>
+    <a href="#/plans">Plans</a>
+    <a href="#/new">New plan</a>
+  </nav>
+  <button type="button" class="theme-toggle" id="theme-toggle"></button>
+</header>
+<div class="offline-banner" id="offline-banner" role="status" hidden></div>
 <main id="main"></main>
+<footer class="footer" id="footer"></footer>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
 <template id="plan-form">
-<form>
-  <p><label>Goal <input name="goal_description" size="50" required value="Sub-1:30 half marathon, want to stay injury free"></label></p>
-  <p><label>Race distance
+<form class="plan-form">
+  <div class="field-row"><label>Goal <input name="goal_description" size="50" required value="Sub-1:30 half marathon, want to stay injury free"></label></div>
+  <div class="field-row"><label>Race distance
     <select name="race_distance">
       <option value="5">5 km</option>
       <option value="10">10 km</option>
@@ -20,14 +39,14 @@
       <option value="custom">Custom</option>
     </select>
   </label>
-  <label>Custom distance (km) <input name="custom_distance" type="number" step="any" min="0.1"></label></p>
-  <p><label>Goal time, h:mm:ss or mm:ss (empty for best effort) <input name="goal_time" value="1:30:00"></label></p>
-  <p><label>Race date <input name="race_date" type="date" required></label></p>
-  <p><label>Recent race distance (km) <input name="recent_race_distance_km" type="number" step="any" min="0.1" required value="10"></label>
-  <label>Recent race time <input name="recent_race_time" required value="44:00"></label></p>
-  <p><label>Current weekly km <input name="current_weekly_km" type="number" step="any" min="0" required value="40"></label>
-  <label>Longest recent run (km) <input name="longest_recent_run_km" type="number" step="any" min="0" required value="16"></label></p>
-  <p><label>Runs per week <input name="runs_per_week" type="number" min="2" max="7" required value="4"></label></p>
+  <label>Custom distance (km) <input name="custom_distance" type="number" step="any" min="0.1"></label></div>
+  <div class="field-row"><label>Goal time, h:mm:ss or mm:ss (empty for best effort) <input name="goal_time" value="1:30:00"></label></div>
+  <div class="field-row"><label>Race date <input name="race_date" type="date" required></label></div>
+  <div class="field-row"><label>Recent race distance (km) <input name="recent_race_distance_km" type="number" step="any" min="0.1" required value="10"></label>
+  <label>Recent race time <input name="recent_race_time" required value="44:00"></label></div>
+  <div class="field-row"><label>Current weekly km <input name="current_weekly_km" type="number" step="any" min="0" required value="40"></label>
+  <label>Longest recent run (km) <input name="longest_recent_run_km" type="number" step="any" min="0" required value="16"></label></div>
+  <div class="field-row"><label>Runs per week <input name="runs_per_week" type="number" min="2" max="7" required value="4"></label></div>
   <fieldset>
     <legend>Available days</legend>
     <label><input type="checkbox" name="available_days" value="Mon"> Mon</label>
@@ -38,29 +57,29 @@
     <label><input type="checkbox" name="available_days" value="Sat" checked> Sat</label>
     <label><input type="checkbox" name="available_days" value="Sun" checked> Sun</label>
   </fieldset>
-  <p><label>Long run day
+  <div class="field-row"><label>Long run day
     <select name="long_run_day">
       <option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option>
       <option>Fri</option><option>Sat</option><option selected>Sun</option>
     </select>
-  </label></p>
-  <p><label>Experience
+  </label></div>
+  <div class="field-row"><label>Experience
     <select name="experience">
       <option value="beginner">Beginner</option>
       <option value="intermediate" selected>Intermediate</option>
       <option value="advanced">Advanced</option>
     </select>
-  </label></p>
-  <p><label>Strength sessions per week <input name="strength_sessions_per_week" type="number" min="0" max="3" value="0"></label>
-  <label>Equipment <input name="equipment" placeholder="gym, dumbbells at home, none"></label></p>
-  <p><label>Cross-training <input name="cross_training" placeholder="cycling, swimming, rowing, elliptical"></label>
-  <label>Cross sessions per week <input name="cross_sessions_per_week" type="number" min="0" max="3" value="0"></label></p>
-  <p>Optional, used for training load:
-  <label>Max HR <input name="hr_max" type="number" min="0" max="250" value="0"></label>
+  </label></div>
+  <div class="field-row"><label>Strength sessions per week <input name="strength_sessions_per_week" type="number" min="0" max="3" value="0"></label>
+  <label>Equipment <input name="equipment" placeholder="gym, dumbbells at home, none"></label></div>
+  <div class="field-row"><label>Cross-training <input name="cross_training" placeholder="cycling, swimming, rowing, elliptical"></label>
+  <label>Cross sessions per week <input name="cross_sessions_per_week" type="number" min="0" max="3" value="0"></label></div>
+  <div class="muted">Optional, used for training load:</div>
+  <div class="field-row"><label>Max HR <input name="hr_max" type="number" min="0" max="250" value="0"></label>
   <label>Resting HR <input name="hr_rest" type="number" min="0" max="150" value="0"></label>
-  <label>Age <input name="age" type="number" min="0" max="120" value="0"></label></p>
-  <p><label>Notes<br><textarea name="notes" rows="3" cols="50">Mostly flat roads. Mild left achilles tightness last spring.</textarea></label></p>
-  <p><button type="submit">Generate plan</button></p>
+  <label>Age <input name="age" type="number" min="0" max="120" value="0"></label></div>
+  <div class="field-row"><label>Notes<textarea name="notes" rows="3" cols="50">Mostly flat roads. Mild left achilles tightness last spring.</textarea></label></div>
+  <div class="actions"><button type="submit" class="primary" data-online>Generate plan</button></div>
 </form>
 </template>
 

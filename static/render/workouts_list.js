@@ -1,6 +1,6 @@
 // The Workouts page: importing, logging and every recorded workout, newest first.
 import {
-  api, button, el, input, labelled, line, link, main, postJson, refresh, rowLinks, rpeSelect, stale, statusLine, table, textarea, viewToken,
+  activePlan, api, button, el, input, labelled, line, link, main, postJson, refresh, rowLinks, rpeSelect, stale, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { clockText, dateText, monthHeading, stepText, timeText } from "./format.js";
 
@@ -174,7 +174,7 @@ function listSection(items) {
       ["When", "Workout", "Type", "Distance", "Time", "Pace", "HR", "Plan", "Review"],
       rows.map((row) => row.cells),
     );
-    [...body.tBodies[0].rows].forEach((row, i) => rowLinks(row, rows[i].href));
+    [...body.querySelector("tbody").rows].forEach((row, i) => rowLinks(row, rows[i].href));
     section.append(el("h3", heading), body);
   }
   return section;
@@ -184,7 +184,7 @@ export async function workoutsView(query) {
   const token = viewToken();
   const [items, active, { today }] = await Promise.all([
     api("/api/activities"),
-    fetch("/api/plans/active").then((r) => (r.ok ? r.json() : null)),
+    activePlan(),
     api("/api/today"),
   ]);
   if (stale(token)) return;
