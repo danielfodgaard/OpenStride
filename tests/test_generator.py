@@ -103,6 +103,16 @@ def test_remaining_problems_become_warnings():
     assert any("Week 1 Mon" in warning for warning in result.plan.warnings)
 
 
+def test_warnings_are_not_repeated():
+    plan = json.loads(json.dumps(SAMPLE["plan"]))
+    plan["weeks"][1]["planned_km"] = 200
+    warning = "Week 2 volume rises more than 15% (42 to 200 km)"
+    plan["weeks"][2]["planned_km"] = 200
+    plan["warnings"] = [warning]
+    result = generate_plan(REQUEST, FakeClient(reply(plan)), TODAY)
+    assert result.plan.warnings.count(warning) == 1
+
+
 def test_wrong_week_count_still_produces_a_file():
     plan = json.loads(json.dumps(SAMPLE["plan"]))
     plan["weeks"].append(plan["weeks"][-1])

@@ -111,7 +111,8 @@ def build_plan(request, system, make_prompt, client, today, plan_id=None) -> Pla
         problems = "\n".join(f"- {error}" for error in errors)
         plan = call_claude(client, model, system, f"{user_prompt}\n\nFix these problems:\n{problems}", TrainingPlan, usage)
         errors = validate_plan(plan, request, len(starts))
-    plan.warnings += errors + soft_warnings(plan)
+    # A regenerated plan can repeat warnings it saw in the draft.
+    plan.warnings += [w for w in errors + soft_warnings(plan) if w not in plan.warnings]
 
     slug = DISTANCE_SLUGS.get(request.race_distance_km, f"{round(request.race_distance_km)}k")
     return PlanFile(
