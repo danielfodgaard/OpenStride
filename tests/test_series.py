@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -105,10 +106,15 @@ def test_series_files_are_not_mistaken_for_activities(client, active):
     assert len(storage.list_all_activities()) == 1
 
 
-def test_stored_start_is_utc_while_the_date_is_local():
+def test_stored_start_is_utc_while_the_date_is_local(monkeypatch):
+    # This file has no time zone of its own, so the server's applies. 23:12 UTC is 07:12 next day in +8.
+    monkeypatch.setenv("TZ", "Asia/Singapore")
+    time.tzset()
     activity = activities.parse_file("a.fit", (ROOT / "2026-11-03_tue_easy_easy-run.fit").read_bytes(), "plan")
     assert activity.start_utc == "2026-11-02T23:12:30+00:00"
-    assert activity.date.isoformat() == "2026-11-03"
+    monkeypatch.undo()
+    time.tzset()
+    assert activity.date.isoformat() == "2026-11-03" and activity.date.weekday() == 1
 
 
 def test_re_import_adds_the_series_to_an_older_workout(client, active):

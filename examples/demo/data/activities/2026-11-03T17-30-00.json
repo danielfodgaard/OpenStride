@@ -101,5 +101,6 @@
     "session_index": 0
   },
   "modality": "run",
-  "sport": "running"
+  "sport": "running",
+  "start_utc": "2026-11-04T01:30:00+00:00"
 }

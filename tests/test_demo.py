@@ -38,6 +38,14 @@ def test_full_offline_flow_without_a_key(demo):
     assert demo.get(f"/api/plans/{plan_id}/progress").json()["latest_summary"]
 
 
+def test_every_recorded_file_has_its_route_and_charts_offline(demo):
+    items = demo.get("/api/activities").json()
+    files = [item for item in items if not item.get("manual")]
+    assert all(storage.has_series(item["id"]) and storage.find_raw(item["id"]) for item in files)
+    assert all(item["start_utc"] for item in files)
+    assert demo.get(f"/api/activities/{files[0]['id']}/series").json()["points"]
+
+
 def test_charts_work_offline_and_the_cache_is_there(demo):
     plan_id = demo.get("/api/plans/active").json()["meta"]["id"]
     assert (storage.plan_dir(plan_id) / "metrics_cache.json").exists()

@@ -22,7 +22,10 @@ def client(tmp_path, monkeypatch):
 
 def test_index_and_renderer_are_served(client):
     assert "<form" in client.get("/").text
-    assert "renderPlan" in client.get("/render.js").text
+    page = client.get("/").text
+    assert 'type="module"' in page and "My plan" not in page and "Workouts" in page
+    assert "renderWorkout" in client.get("/render/workout.js").text
+    assert "drawDistanceCharts" in client.get("/charts.js").text
 
 
 def test_list_and_get_plan(client):

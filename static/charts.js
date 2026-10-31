@@ -1,4 +1,7 @@
 // Plain inline SVG charts. Every chart comes with a table of the same numbers.
+import { el, table } from "./render/ui.js";
+import { paceText, timeText } from "./render/format.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MS_PER_DAY = 86400000;
 const WIDTH = 760;
@@ -143,7 +146,7 @@ function drawBarChart({ title, bars, headers, rows }) {
 
 const signed = (value) => `${value < 0 ? "−" : "+"}${Math.abs(Math.round(value))}`;
 
-function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
+export function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
   const form = tsb < 0 ? `−${Math.abs(Math.round(tsb))}` : Math.round(tsb);
   return `Fitness ${Math.round(ctl)} (${signed(change)} this week), fatigue ${Math.round(atl)}, form ${form}`;
 }
@@ -155,7 +158,7 @@ function weekNotes(week) {
   return notes;
 }
 
-function drawProgressCharts(metrics, raceDate) {
+export function drawProgressCharts(metrics, raceDate) {
   const days = metrics.days.map((d) => ({ ...d, x: dayMs(d.date) }));
   const line = (name, color, key) => ({ name, color, axis: "left", points: days.map((d) => ({ x: d.x, y: d[key] })) });
   const fitness = drawSeriesChart({
@@ -184,4 +187,217 @@ function drawProgressCharts(metrics, raceDate) {
   });
 
   return [fitness, el("p", snapshotText(metrics.current)), volume];
+}
+
+// The route, in the style of the reference page: latitude-corrected, start dot, finish square.
+export function drawRoute(points) {
+  const located = points.map((p, i) => ({ lat: p[4], lon: p[5], i })).filter((p) => p.lat !== null && p.lon !== null);
+  if (located.length < 2) return null;
+  const k = Math.cos((located[0].lat * Math.PI) / 180);
+  const xs = located.map((p) => p.lon * k);
+  const ys = located.map((p) => -p.lat);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY) || 1e-6;
+  const size = 300;
+  const pad = 22;
+  const inner = size - 2 * pad;
+  const left = pad + (inner - ((maxX - minX) / span) * inner) / 2;
+  const top = pad + (inner - ((maxY - minY) / span) * inner) / 2;
+  const place = (n) => [left + ((xs[n] - minX) / span) * inner, top + ((ys[n] - minY) / span) * inner];
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${size} ${size}`, width: size, height: size, role: "img", "aria-label": "Route map" });
+  const barLength = (1 / 111.32 / span) * inner;  // one km of latitude
+  if (barLength < inner) {
+    svg.append(svgEl("line", { x1: pad, y1: 292, x2: pad + barLength, y2: 292, stroke: "#7a8a95", "stroke-width": 2 }));
+    svg.append(svgEl("text", { x: pad + barLength + 6, y: 296, "font-size": 11 }, "1 km"));
+  }
+  svg.append(svgEl("polyline", {
+    points: located.map((_, n) => place(n).map((v) => v.toFixed(1)).join(",")).join(" "),
+    fill: "none", stroke: "#15212a", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
+  const [startX, startY] = place(0);
+  const [endX, endY] = place(located.length - 1);
+  svg.append(svgEl("circle", { cx: startX, cy: startY, r: 5, fill: "#0d7a87", stroke: "#ffffff", "stroke-width": 2 }));
+  svg.append(svgEl("rect", { x: endX - 5, y: endY - 5, width: 10, height: 10, fill: "#b8325c", stroke: "#ffffff", "stroke-width": 2 }));
+  const marker = svgEl("circle", { r: 6, fill: "#ffffff", stroke: "#15212a", "stroke-width": 2.5, visibility: "hidden" });
+  svg.append(marker);
+
+  const byPoint = new Map(located.map((p, n) => [p.i, n]));
+  return {
+    svg,
+    mark(pointIndex) {
+      const n = byPoint.get(pointIndex);
+      if (n === undefined) return marker.setAttribute("visibility", "hidden");
+      const [x, y] = place(n);
+      marker.setAttribute("cx", x);
+      marker.setAttribute("cy", y);
+      return marker.setAttribute("visibility", "visible");
+    },
+    clear: () => marker.setAttribute("visibility", "hidden"),
+  };
+}
+
+// Round values spaced so that 3-6 ticks cover lo..hi.
+function ticksFor(lo, hi, steps) {
+  const step = steps.find((s) => (hi - lo) / s <= 5) ?? steps[steps.length - 1];
+  const ticks = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+  return ticks;
+}
+
+function quantile(sorted, share) {
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
+}
+
+const CHART_W = 640;
+const CHART_LEFT = 44;
+const CHART_RIGHT = 10;
+
+function distanceChart({ points, index, height, xAxis, maxKm, lo, hi, invert, ticks, format, color, band, label }) {
+  const bottom = xAxis ? 26 : 8;
+  const top = 10;
+  const svg = svgEl("svg", { viewBox: `0 0 ${CHART_W} ${height}`, width: CHART_W, height, role: "img", "aria-label": label });
+  const x = (km) => CHART_LEFT + (km / maxKm) * (CHART_W - CHART_LEFT - CHART_RIGHT);
+  const share = (v) => (v - lo) / (hi - lo);
+  const y = (v) => (invert ? top + share(v) * (height - top - bottom) : height - bottom - share(v) * (height - top - bottom));
+  const clamp = (v) => Math.max(lo, Math.min(hi, v));
+  if (band) {
+    const [y1, y2] = [y(clamp(band[0])), y(clamp(band[1]))];
+    svg.append(svgEl("rect", {
+      x: CHART_LEFT, y: Math.min(y1, y2), width: CHART_W - CHART_LEFT - CHART_RIGHT, height: Math.abs(y2 - y1),
+      fill: color, "fill-opacity": 0.12,
+    }));
+  }
+  for (const tick of ticks) {
+    svg.append(svgEl("line", { x1: CHART_LEFT, x2: CHART_W - CHART_RIGHT, y1: y(tick), y2: y(tick), stroke: "#e9eef0" }));
+    svg.append(svgEl("text", { x: CHART_LEFT - 8, y: y(tick) + 4, "text-anchor": "end", "font-size": 11 }, format(tick)));
+  }
+  if (xAxis) {
+    const step = Math.max(1, Math.ceil(maxKm / 10));
+    for (let km = 0; km <= maxKm; km += step) {
+      svg.append(svgEl("text", { x: x(km), y: height - 6, "text-anchor": "middle", "font-size": 11 }, km));
+    }
+    svg.append(svgEl("text", { x: CHART_W - CHART_RIGHT, y: height - 6, "text-anchor": "end", "font-size": 11 }, "km"));
+  }
+  // A stop breaks the line rather than drawing across it.
+  let segment = [];
+  const flush = () => {
+    if (segment.length > 1) {
+      svg.append(svgEl("polyline", { points: segment.join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }));
+    }
+    segment = [];
+  };
+  for (const p of points) {
+    if (p[index] === null) flush();
+    else segment.push(`${x(p[0]).toFixed(1)},${y(clamp(p[index])).toFixed(1)}`);
+  }
+  flush();
+  const cross = svgEl("line", { y1: top, y2: height - bottom, stroke: "#7a8a95", "stroke-dasharray": "3 3", visibility: "hidden" });
+  const dot = svgEl("circle", { r: 4.5, fill: color, stroke: "#ffffff", "stroke-width": 2, visibility: "hidden" });
+  svg.append(cross, dot);
+  return {
+    svg,
+    show(p) {
+      cross.setAttribute("x1", x(p[0]));
+      cross.setAttribute("x2", x(p[0]));
+      cross.setAttribute("visibility", "visible");
+      if (p[index] === null) return dot.setAttribute("visibility", "hidden");
+      dot.setAttribute("cx", x(p[0]));
+      dot.setAttribute("cy", y(clamp(p[index])));
+      return dot.setAttribute("visibility", "visible");
+    },
+    hide() {
+      cross.setAttribute("visibility", "hidden");
+      dot.setAttribute("visibility", "hidden");
+    },
+  };
+}
+
+function hoverLabel() {
+  const box = svgEl("rect", { width: 150, height: 40, rx: 4, fill: "#15212a" });
+  const first = svgEl("text", { fill: "#ffffff", "font-size": 12 });
+  const second = svgEl("text", { fill: "#ffffff", "font-size": 12 });
+  const group = svgEl("g", { visibility: "hidden" });
+  group.append(box, first, second);
+  return {
+    group,
+    show(p, svgX) {
+      const left = Math.min(Math.max(svgX - 75, CHART_LEFT), CHART_W - CHART_RIGHT - 150);
+      group.setAttribute("transform", `translate(${left},12)`);
+      first.setAttribute("x", 8);
+      first.setAttribute("y", 16);
+      second.setAttribute("x", 8);
+      second.setAttribute("y", 32);
+      first.textContent = `${p[0].toFixed(2)} km · ${timeText(p[1])}`;
+      second.textContent = `${p[2] === null ? "–" : `${paceText(p[2])}/km`} · ${p[3] ?? "–"} bpm`;
+      group.setAttribute("visibility", "visible");
+    },
+    hide: () => group.setAttribute("visibility", "hidden"),
+  };
+}
+
+// Pace above heart rate on one distance axis, never two y-axes. Hovering either moves a shared
+// crosshair and tooltip, and the marker on `route`.
+export function drawDistanceCharts(points, band, route) {
+  const paces = points.map((p) => p[2]).filter((v) => v !== null).sort((a, b) => a - b);
+  const heartRates = points.map((p) => p[3]).filter((v) => v !== null).sort((a, b) => a - b);
+  const maxKm = points[points.length - 1][0] || 1;
+  const box = el("div");
+  const charts = [];
+
+  if (paces.length) {
+    // A few seconds of walking shouldn't flatten the whole chart.
+    const low = Math.min(quantile(paces, 0.01), band?.[0] ?? Infinity);
+    const high = Math.max(quantile(paces, 0.99), band?.[1] ?? -Infinity);
+    const lo = Math.floor(low / 15) * 15 - 15;
+    const hi = Math.ceil(high / 15) * 15 + 15;
+    charts.push(distanceChart({
+      points, index: 2, height: 170, xAxis: !heartRates.length, maxKm, lo, hi, invert: true,
+      ticks: ticksFor(lo, hi, [15, 30, 60, 120, 300, 600]), format: paceText, color: "#0d7a87", band, label: "Pace over distance",
+    }));
+  }
+  if (heartRates.length) {
+    const lo = Math.floor((heartRates[0] - 5) / 10) * 10;
+    const hi = Math.ceil((heartRates[heartRates.length - 1] + 5) / 10) * 10;
+    charts.push(distanceChart({
+      points, index: 3, height: 150, xAxis: true, maxKm, lo, hi, invert: false,
+      ticks: ticksFor(lo, hi, [10, 20, 40]), format: String, color: "#b8325c", label: "Heart rate over distance",
+    }));
+  }
+  if (!charts.length) return null;
+  const label = hoverLabel();
+  charts[0].svg.append(label.group);
+  for (const chart of charts) box.append(chart.svg);
+
+  const nearest = (km) => {
+    let best = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      if (Math.abs(points[i][0] - km) < Math.abs(points[best][0] - km)) best = i;
+    }
+    return best;
+  };
+  const hide = () => {
+    for (const chart of charts) chart.hide();
+    label.hide();
+    route?.clear();
+  };
+  const move = (clientX) => {
+    const rect = charts[0].svg.getBoundingClientRect();
+    const svgX = ((clientX - rect.left) / rect.width) * CHART_W;
+    const km = ((svgX - CHART_LEFT) / (CHART_W - CHART_LEFT - CHART_RIGHT)) * maxKm;
+    if (km < 0 || km > maxKm) return hide();
+    const best = nearest(km);
+    for (const chart of charts) chart.show(points[best]);
+    label.show(points[best], svgX);
+    return route?.mark(best);
+  };
+  box.addEventListener("mousemove", (event) => move(event.clientX));
+  box.addEventListener("mouseleave", hide);
+  box.addEventListener("touchstart", (event) => { if (event.touches[0]) move(event.touches[0].clientX); }, { passive: true });
+  box.addEventListener("touchmove", (event) => { if (event.touches[0]) move(event.touches[0].clientX); }, { passive: true });
+  box.addEventListener("touchend", hide);
+  return box;
 }

@@ -29,7 +29,18 @@ Warnings are coaching judgments. They never block anything and appear above a pr
 
     .venv/bin/uvicorn app.main:app
 
-Open http://127.0.0.1:8000. Data lives in `data/`.
+Open http://127.0.0.1:8000. Data lives in `data/`, including every uploaded file in `data/activities/raw/`.
+
+## Navigating the app
+
+- **Workouts**: every recorded workout, newest first by month, across all plans. Import files and log sessions here; neither needs an active plan. Without one, workouts are saved as unplanned, and Change match on a workout attaches it to a plan later.
+- **All plans**: every plan, the active one first. A plan opens on its overview: status, next session, the fitness and weekly volume charts, coach chat, progress summary and Adapt plan.
+- **Weeks**, from the overview: foldable weeks, the current one open by default, with a linked row per session. Pace zones and the plan's summary and warnings are here.
+- **Workout detail**: one page for a planned session and what you actually ran: the plan, a summary strip, the review, route, pace and heart-rate charts with a shared hover, and laps, with a Target column when the laps line up with the session's steps.
+
+Pages to screenshot for a walkthrough: the plan overview, an open week, a done steady run (`#/plans/<id>/sessions/1/0`), an interval session with its Target column, Workouts, and a session not yet done.
+
+Workouts from before v3.1 have no stored file, so their detail page asks you to import the file again. Doing that adds the route and charts to the existing workout.
 
 Upgrading from v1: run `.venv/bin/python -m app.migrate` once. It moves `plans/*.json` to `data/plans/<id>/plan.json` as drafts.
 
@@ -39,9 +50,9 @@ No API key or network needed:
 
     OPENSTRIDE_DEMO=1 .venv/bin/uvicorn app.main:app
 
-This serves a throwaway copy of `examples/demo/data` with the date pinned to Wednesday 25 November 2026: an active half-marathon plan with strength and cycling, three weeks of runs with real reviews, two logged strength sessions, a cycling file, one bad run with a note, the charts, a chat thread with a pending proposal, and a progress summary. Your `data/` is not touched and every change disappears when the server stops.
+This serves a throwaway copy of `examples/demo/data`, including route and chart data for every file, with the date pinned to Wednesday 25 November 2026: an active half-marathon plan with strength and cycling, three weeks of runs with real reviews, two logged strength sessions, a cycling file, one bad run with a note, the charts, a chat thread with a pending proposal, and a progress summary. Your `data/` is not touched and every change disappears when the server stops.
 
-Offline you can read the thread, accept or reject the proposal, view and restore versions, open the chart tables, log a session, and upload `examples/activities/cross/2026-11-12_pool_swim.fit`, which imports with a "review failed" message. Actions that need Claude show an error; with a key in `.env` they work in the demo too.
+Offline you can open every page, hover the workout charts, read the thread, accept or reject the proposal, view and restore versions, open the chart tables, log a session, delete a workout, and upload `examples/activities/cross/2026-11-12_pool_swim.fit`, which imports with a "review failed" message. Actions that need Claude show an error; with a key in `.env` they work in the demo too.
 
 ## Test
 
