@@ -1,8 +1,9 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app import clock
 from app.vdot import parse_time
 
 Day = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -55,7 +56,7 @@ class PlanRequest(SavedRequest):
 
     @model_validator(mode="after")
     def check_race_date(self):
-        today = date.today()
+        today = clock.today()
         if not today + timedelta(weeks=3) <= self.race_date <= today + timedelta(weeks=24):
             raise ValueError("race_date must be between 3 and 24 weeks from today")
         return self
@@ -150,3 +151,38 @@ class PlanFile(BaseModel):
     request: SavedRequest
     paces: Paces
     plan: DatedPlan
+
+
+class Lap(BaseModel):
+    index: int
+    distance_km: float
+    time_s: int
+    pace: str
+    avg_hr: int
+
+
+class Match(BaseModel):
+    planned_date: str = ""  # "" when unplanned
+    week_number: int = 0
+    session_index: int = -1
+
+
+class ActivitySummary(BaseModel):
+    id: str
+    plan_id: str  # activities stay with the plan they were imported under
+    source_file: str
+    start_time: datetime
+    date: date
+    distance_km: float
+    moving_time_s: int
+    elapsed_time_s: int
+    avg_pace: str
+    avg_hr: int
+    max_hr: int
+    avg_cadence_spm: int
+    elevation_gain_m: float
+    laps: list[Lap]
+    km_splits: list[Lap]
+    user_note: str
+    rpe: int
+    match: Match

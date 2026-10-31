@@ -3,14 +3,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app import lifecycle, storage
+from app import activities, lifecycle, storage
 from app.generator import GenerationError, generate_plan
-from app.models import PlanFile, PlanRequest
+from app.models import ActivitySummary, PlanFile, PlanRequest
 
 load_dotenv()
 
@@ -40,6 +40,17 @@ app.add_exception_handler(storage.NotFound, error_handler(404, "Not found"))
 class RegenerateBody(BaseModel):
     feedback: str
     request: PlanRequest | None = None
+
+
+class MatchEdit(BaseModel):
+    week_number: int  # 0 with session_index -1 means unplanned
+    session_index: int
+
+
+class ActivityEdit(BaseModel):
+    user_note: str | None = None
+    rpe: int | None = Field(default=None, ge=0, le=10)
+    match: MatchEdit | None = None
 
 
 # Plain defs: FastAPI runs them in a thread pool, so long API calls don't block the server.
@@ -87,6 +98,23 @@ def accept_plan(plan_id: str) -> PlanFile:
 @app.delete("/api/plans/{plan_id}", status_code=204)
 def discard_plan(plan_id: str) -> None:
     lifecycle.discard(plan_id)
+
+
+@app.post("/api/activities")
+def upload_activities(files: list[UploadFile], user_note: str = Form(""), rpe: int = Form(0, ge=0, le=10)) -> list[dict]:
+    uploads = [(file.filename or "upload", file.file.read()) for file in files]
+    return activities.import_files(uploads, user_note, rpe)
+
+
+@app.get("/api/activities")
+def get_activities(plan_id: str) -> list[ActivitySummary]:
+    return storage.list_activities(plan_id)
+
+
+@app.patch("/api/activities/{activity_id}")
+def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
+    match = edit.match and (edit.match.week_number, edit.match.session_index)
+    return activities.edit(activity_id, edit.user_note, edit.rpe, match)
 
 
 # Mounted last so it never shadows API routes; html=True serves index.html at /.
