@@ -242,10 +242,12 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
   if (session) nodes.push(plannedSection(session));
 
   if (!activity) {
-    nodes.push(line(
-      link("Import run", `#/workouts?date=${session.date}`), " · ",
-      link("Log session", `#/workouts?date=${session.date}`),
-    ));
+    if (plan.meta.status === "active") {
+      nodes.push(line(
+        link("Import run", `#/workouts?date=${session.date}`), " · ",
+        link("Log session", `#/workouts?date=${session.date}`),
+      ));
+    }
   } else if (activity.manual) {
     const editable = !activity.plan_id || plan?.meta.status === "active";
     nodes.push(...manualDetail(activity, session, editable));
