@@ -83,7 +83,8 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
         model=model,
         flags=reply.flags,
     )
-    storage.save_chat(plan_id, [*thread, user, coach])
+    with storage.plan_lock(plan_id):  # read again: the other device may have chatted during the call
+        storage.save_chat(plan_id, [*storage.load_chat(plan_id), user, coach])
     return {
         "messages": [user.model_dump(), coach.model_dump()],
         "proposal": storage.load_proposal(proposal_id).model_dump() if proposal_id else None,
@@ -91,5 +92,6 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
 
 
 def clear(plan_id: str) -> None:
-    lifecycle.require_active(plan_id)
-    storage.archive_chat(plan_id, f"{datetime.now(timezone.utc):%Y-%m-%dT%H-%M-%S}")
+    with storage.plan_lock(plan_id):
+        lifecycle.require_active(plan_id)
+        storage.archive_chat(plan_id, f"{datetime.now(timezone.utc):%Y-%m-%dT%H-%M-%S}")

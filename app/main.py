@@ -1,12 +1,12 @@
 import os
 import shutil
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import date as Date
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -60,6 +60,31 @@ def error_handler(status_code: int, default: str | None = None):
 app.add_exception_handler(GenerationError, error_handler(502))
 app.add_exception_handler(lifecycle.Conflict, error_handler(409))
 app.add_exception_handler(storage.NotFound, error_handler(404, "Not found"))
+app.add_exception_handler(storage.FileLockTimeout, error_handler(503, "The server is busy. Try again."))
+
+
+async def plan_changed(request: Request, error: Exception):
+    return JSONResponse({"error": "plan_changed"}, status_code=409)
+
+
+app.add_exception_handler(lifecycle.PlanChanged, plan_changed)
+
+
+def check_etag(plan_id: str, if_match: str | None) -> None:
+    """No header means no check, so older callers keep working."""
+    if if_match not in (None, "*") and if_match != storage.plan_etag(plan_id):
+        raise lifecycle.PlanChanged(plan_id)
+
+
+@contextmanager
+def checked_plan(plan_id: str, if_match: str | None):
+    """Holds the plan lock, so nothing can change the plan between the check and the write.
+
+    For routes with no LLM call; those with one call `check_etag` and lock only the final write.
+    """
+    with storage.plan_lock(plan_id):
+        check_etag(plan_id, if_match)
+        yield
 
 
 class RegenerateBody(BaseModel):
@@ -143,23 +168,28 @@ def import_plan(file: UploadFile) -> PlanFile:
 
 
 @app.get("/api/plans/{plan_id}")
-def get_plan(plan_id: str) -> PlanFile:
+def get_plan(plan_id: str, response: Response) -> PlanFile:
+    # Before the load: a write in between gives an old tag and a needless 409, never a lost update.
+    response.headers["ETag"] = storage.plan_etag(plan_id)
     return lifecycle.require_plan(plan_id)
 
 
 @app.post("/api/plans/{plan_id}/regenerate")
-def regenerate_plan(plan_id: str, body: RegenerateBody) -> PlanFile:
+def regenerate_plan(plan_id: str, body: RegenerateBody, if_match: str | None = Header(None)) -> PlanFile:
+    check_etag(plan_id, if_match)
     return lifecycle.regenerate(plan_id, body.feedback, body.request)
 
 
 @app.post("/api/plans/{plan_id}/accept")
-def accept_plan(plan_id: str) -> PlanFile:
-    return lifecycle.accept(plan_id)
+def accept_plan(plan_id: str, if_match: str | None = Header(None)) -> PlanFile:
+    with storage.activation_lock(), checked_plan(plan_id, if_match):
+        return lifecycle.accept(plan_id)
 
 
 @app.delete("/api/plans/{plan_id}", status_code=204)
-def discard_plan(plan_id: str) -> None:
-    lifecycle.discard(plan_id)
+def discard_plan(plan_id: str, if_match: str | None = Header(None)) -> None:
+    with checked_plan(plan_id, if_match):
+        lifecycle.discard(plan_id)
 
 
 @app.post("/api/activities")
@@ -195,7 +225,8 @@ def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
 
 
 @app.post("/api/plans/{plan_id}/manual")
-def log_session(plan_id: str, body: ManualInput) -> ManualActivity:
+def log_session(plan_id: str, body: ManualInput, if_match: str | None = Header(None)) -> ManualActivity:
+    check_etag(plan_id, if_match)
     return logbook.create(plan_id, body.model_dump())
 
 
@@ -222,7 +253,8 @@ def rerun_review(activity_id: str) -> ReviewFile:
 
 
 @app.post("/api/plans/{plan_id}/proposals")
-def create_proposal(plan_id: str, body: ProposalRequest) -> Proposal:
+def create_proposal(plan_id: str, body: ProposalRequest, if_match: str | None = Header(None)) -> Proposal:
+    check_etag(plan_id, if_match)
     return adapt.create_proposal(plan_id, body.scope, body.user_context)
 
 
@@ -232,13 +264,15 @@ def get_proposals(plan_id: str) -> list[Proposal]:
 
 
 @app.post("/api/proposals/{proposal_id}/accept")
-def accept_proposal(proposal_id: str) -> PlanFile:
-    return adapt.accept(proposal_id)
+def accept_proposal(proposal_id: str, if_match: str | None = Header(None)) -> PlanFile:
+    with checked_plan(storage.load_proposal(proposal_id).plan_id, if_match):
+        return adapt.accept(proposal_id)
 
 
 @app.post("/api/proposals/{proposal_id}/reject")
-def reject_proposal(proposal_id: str) -> Proposal:
-    return adapt.reject(proposal_id)
+def reject_proposal(proposal_id: str, if_match: str | None = Header(None)) -> Proposal:
+    with checked_plan(storage.load_proposal(proposal_id).plan_id, if_match):
+        return adapt.reject(proposal_id)
 
 
 @app.get("/api/plans/{plan_id}/versions")
@@ -256,8 +290,9 @@ def get_version(plan_id: str, version: int) -> PlanFile:
 
 
 @app.post("/api/plans/{plan_id}/restore/{version}")
-def restore_version(plan_id: str, version: int) -> PlanFile:
-    return adapt.restore(plan_id, version)
+def restore_version(plan_id: str, version: int, if_match: str | None = Header(None)) -> PlanFile:
+    with checked_plan(plan_id, if_match):
+        return adapt.restore(plan_id, version)
 
 
 @app.get("/api/today")
@@ -284,7 +319,8 @@ def create_progress_summary(plan_id: str) -> ProgressFile:
 
 
 @app.post("/api/plans/{plan_id}/chat")
-def send_chat(plan_id: str, body: ChatInput) -> dict:
+def send_chat(plan_id: str, body: ChatInput, if_match: str | None = Header(None)) -> dict:
+    check_etag(plan_id, if_match)
     return chat.send(plan_id, body.text)
 
 
@@ -295,8 +331,9 @@ def get_chat(plan_id: str) -> list[ChatMessage]:
 
 
 @app.post("/api/plans/{plan_id}/chat/clear", status_code=204)
-def clear_chat(plan_id: str) -> None:
-    chat.clear(plan_id)
+def clear_chat(plan_id: str, if_match: str | None = Header(None)) -> None:
+    with checked_plan(plan_id, if_match):
+        chat.clear(plan_id)
 
 
 @app.get("/api/plans/{plan_id}/metrics")

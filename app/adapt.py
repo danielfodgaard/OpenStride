@@ -74,21 +74,22 @@ def create_proposal(plan_id: str, scope: str, user_context: str, client=None, to
         trade_offs = merge_warnings(plan_file, merge(plan_file, result.weeks))
 
     now = datetime.now(timezone.utc)
-    proposal = Proposal(
-        proposal_id=storage.new_proposal_id(plan_id, f"{now:%Y-%m-%dT%H-%M-%S}_{scope}"),
-        plan_id=plan_id,
-        based_on_version=plan_file.meta.version,
-        scope=scope,
-        scope_weeks=weeks,
-        user_context=user_context,
-        status="pending",
-        acceptable=not errors,
-        result=result,
-        meta=ReviewMeta(model=model, created_at=now.isoformat(timespec="seconds"), usage=usage),
-        origin=origin,
-        warnings=trade_offs,
-    )
-    storage.save_proposal(proposal)
+    with storage.plan_lock(plan_id):
+        proposal = Proposal(
+            proposal_id=storage.new_proposal_id(plan_id, f"{now:%Y-%m-%dT%H-%M-%S}_{scope}"),
+            plan_id=plan_id,
+            based_on_version=plan_file.meta.version,
+            scope=scope,
+            scope_weeks=weeks,
+            user_context=user_context,
+            status="pending",
+            acceptable=not errors,
+            result=result,
+            meta=ReviewMeta(model=model, created_at=now.isoformat(timespec="seconds"), usage=usage),
+            origin=origin,
+            warnings=trade_offs,
+        )
+        storage.save_proposal(proposal)
     return proposal
 
 
@@ -100,55 +101,58 @@ def replace_plan(new: PlanFile) -> None:
 
 
 def accept(proposal_id: str, today=None) -> PlanFile:
-    proposal = storage.load_proposal(proposal_id)
-    plan_file = lifecycle.require_active(proposal.plan_id)
-    if proposal.status != "pending":
-        raise lifecycle.Conflict(f"This proposal is already {proposal.status}.")
-    if not proposal.acceptable or proposal.result.recommendation != "change":
-        raise lifecycle.Conflict("This proposal has nothing that can be accepted.")
-    if proposal.based_on_version != plan_file.meta.version:
-        raise lifecycle.Conflict("The plan has changed since this proposal. Ask for new suggestions.")
-    # Days pass between proposing and accepting, so a session it moves may be in the past by now.
-    errors = check(plan_file, proposal.result, proposal.scope_weeks, today or clock.today())
-    if errors:
-        raise lifecycle.Conflict("This proposal is out of date: " + " ".join(errors))
+    with storage.plan_lock(storage.load_proposal(proposal_id).plan_id):
+        proposal = storage.load_proposal(proposal_id)
+        plan_file = lifecycle.require_active(proposal.plan_id)
+        if proposal.status != "pending":
+            raise lifecycle.Conflict(f"This proposal is already {proposal.status}.")
+        if not proposal.acceptable or proposal.result.recommendation != "change":
+            raise lifecycle.Conflict("This proposal has nothing that can be accepted.")
+        if proposal.based_on_version != plan_file.meta.version:
+            raise lifecycle.Conflict("The plan has changed since this proposal. Ask for new suggestions.")
+        # Days pass between proposing and accepting, so a session it moves may be in the past by now.
+        errors = check(plan_file, proposal.result, proposal.scope_weeks, today or clock.today())
+        if errors:
+            raise lifecycle.Conflict("This proposal is out of date: " + " ".join(errors))
 
-    merged = merge(plan_file, proposal.result.weeks)
-    merged.meta.version += 1
-    merged.meta.history.append(HistoryEntry(
-        version=merged.meta.version,
-        proposal_id=proposal.proposal_id,
-        accepted_at=lifecycle.now_iso(),
-        rationale=proposal.result.rationale,
-    ))
-    replace_plan(merged)
-    proposal.status = "accepted"
-    storage.save_proposal(proposal)
-    return merged
+        merged = merge(plan_file, proposal.result.weeks)
+        merged.meta.version += 1
+        merged.meta.history.append(HistoryEntry(
+            version=merged.meta.version,
+            proposal_id=proposal.proposal_id,
+            accepted_at=lifecycle.now_iso(),
+            rationale=proposal.result.rationale,
+        ))
+        replace_plan(merged)
+        proposal.status = "accepted"
+        storage.save_proposal(proposal)
+        return merged
 
 
 def reject(proposal_id: str) -> Proposal:
-    proposal = storage.load_proposal(proposal_id)
-    lifecycle.require_active(proposal.plan_id)
-    if proposal.status != "pending":
-        raise lifecycle.Conflict(f"This proposal is already {proposal.status}.")
-    proposal.status = "rejected"
-    storage.save_proposal(proposal)
-    return proposal
+    with storage.plan_lock(storage.load_proposal(proposal_id).plan_id):
+        proposal = storage.load_proposal(proposal_id)
+        lifecycle.require_active(proposal.plan_id)
+        if proposal.status != "pending":
+            raise lifecycle.Conflict(f"This proposal is already {proposal.status}.")
+        proposal.status = "rejected"
+        storage.save_proposal(proposal)
+        return proposal
 
 
 def restore(plan_id: str, version: int) -> PlanFile:
     """A new version with an old version's content. History only ever grows."""
-    current = lifecycle.require_active(plan_id)
-    new = storage.load_version(plan_id, version)
-    new.meta.status = "active"
-    new.meta.version = current.meta.version + 1
-    new.meta.accepted_at = current.meta.accepted_at
-    new.meta.history = [*current.meta.history, HistoryEntry(
-        version=new.meta.version,
-        proposal_id="",
-        accepted_at=lifecycle.now_iso(),
-        rationale=f"Restored version {version}",
-    )]
-    replace_plan(new)
-    return new
+    with storage.plan_lock(plan_id):
+        current = lifecycle.require_active(plan_id)
+        new = storage.load_version(plan_id, version)
+        new.meta.status = "active"
+        new.meta.version = current.meta.version + 1
+        new.meta.accepted_at = current.meta.accepted_at
+        new.meta.history = [*current.meta.history, HistoryEntry(
+            version=new.meta.version,
+            proposal_id="",
+            accepted_at=lifecycle.now_iso(),
+            rationale=f"Restored version {version}",
+        )]
+        replace_plan(new)
+        return new

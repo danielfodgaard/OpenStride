@@ -448,23 +448,25 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
         except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
             results.append({"file": name, "status": "error", "message": f"Could not read {name}: {error}"})
             continue
-        existing = find_duplicate(activity)
-        if existing and storage.find_raw(existing.id):
-            results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
-            continue
-        if existing:  # imported before v3.1: keep the workout, add what its detail page needs
-            storage.save_raw(existing.id, name, content)
-            store_series(existing, parsed)
-            results.append({"file": name, "status": "updated", "message": f"{name}: route and charts added"})
-            continue
-        activity.id = storage.new_activity_id(activity.id)
-        if plan_file:
-            activity.match = match_activity(activity, plan_file)
-        storage.save_activity(activity)
-        storage.save_raw(activity.id, name, content)
-        store_series(activity, parsed)
-        if plan_file:
-            metrics.refresh(plan_file)
+        with storage.workout_lock(plan_id):
+            plan_file = storage.load_plan(plan_id) if plan_id else None  # may have moved on since the last file
+            existing = find_duplicate(activity)
+            if existing and storage.find_raw(existing.id):
+                results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
+                continue
+            if existing:  # imported before v3.1: keep the workout, add what its detail page needs
+                storage.save_raw(existing.id, name, content)
+                store_series(existing, parsed)
+                results.append({"file": name, "status": "updated", "message": f"{name}: route and charts added"})
+                continue
+            activity.id = storage.new_activity_id(activity.id)
+            if plan_file:
+                activity.match = match_activity(activity, plan_file)
+            storage.save_activity(activity)
+            storage.save_raw(activity.id, name, content)
+            store_series(activity, parsed)
+            if plan_file:
+                metrics.refresh(plan_file)
         result = {
             "file": name,
             "status": "imported",
@@ -482,19 +484,20 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
 
 def rematch(plan_file: PlanFile) -> None:
     """After a new plan version, point matches at the same planned day. Keeps manual matches."""
-    saves = [
-        *((a, storage.save_activity) for a in storage.list_activities(plan_file.meta.id)),
-        *((m, storage.save_manual) for m in storage.list_manual(plan_file.meta.id)),
-    ]
-    for entry, save in saves:
-        if not entry.match.planned_date:
-            continue
-        day = date.fromisoformat(entry.match.planned_date)
-        found = closest_session(sessions_on(plan_file, day, entry.modality), entry.distance_km)
-        match = Match(planned_date=entry.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
-        if match != entry.match:
-            entry.match = match
-            save(entry)
+    with storage.activities_lock():
+        saves = [
+            *((a, storage.save_activity) for a in storage.list_activities(plan_file.meta.id)),
+            *((m, storage.save_manual) for m in storage.list_manual(plan_file.meta.id)),
+        ]
+        for entry, save in saves:
+            if not entry.match.planned_date:
+                continue
+            day = date.fromisoformat(entry.match.planned_date)
+            found = closest_session(sessions_on(plan_file, day, entry.modality), entry.distance_km)
+            match = Match(planned_date=entry.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
+            if match != entry.match:
+                entry.match = match
+                save(entry)
 
 
 def with_review(activity: ActivitySummary) -> dict:
@@ -523,28 +526,31 @@ def planned_match(plan_file: PlanFile | None, week_number: int, index: int, moda
 
 
 def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[int, int] | None) -> ActivitySummary:
-    activity = storage.load_activity(activity_id)
-    plan_file = plan_for_edit(activity.plan_id)
-    if user_note is not None:
-        activity.user_note = user_note
-    if rpe is not None:
-        activity.rpe = rpe
-    if match is not None:
-        week_number, index = match
-        if index == -1:
-            activity.match = Match()
-        else:
-            activity.match = planned_match(plan_file, week_number, index, activity.modality)
-            activity.plan_id = plan_file.meta.id  # an unattached workout joins the plan it matches
-    storage.save_activity(activity)
-    if plan_file:
-        metrics.refresh(plan_file)
-    return activity
+    plan_file = plan_for_edit(storage.load_activity(activity_id).plan_id)
+    with storage.workout_lock(plan_file.meta.id if plan_file else ""):
+        activity = storage.load_activity(activity_id)
+        if user_note is not None:
+            activity.user_note = user_note
+        if rpe is not None:
+            activity.rpe = rpe
+        if match is not None:
+            week_number, index = match
+            if index == -1:
+                activity.match = Match()
+            else:
+                activity.match = planned_match(plan_file, week_number, index, activity.modality)
+                activity.plan_id = plan_file.meta.id  # an unattached workout joins the plan it matches
+        storage.save_activity(activity)
+        if plan_file:
+            metrics.refresh(plan_file)
+        return activity
 
 
 def delete(activity_id: str) -> None:
-    activity = storage.load_activity(activity_id)
-    storage.delete_activity(activity_id)
-    plan_file = storage.load_plan(activity.plan_id) if activity.plan_id else None
-    if plan_file:
-        metrics.refresh(plan_file)
+    plan_id = storage.load_activity(activity_id).plan_id
+    plan_file = storage.load_plan(plan_id) if plan_id else None  # its plan may no longer exist
+    with storage.workout_lock(plan_file.meta.id if plan_file else ""):
+        storage.load_activity(activity_id)  # another device may have got here first
+        storage.delete_activity(activity_id)
+        if plan_file:
+            metrics.refresh(plan_file)

@@ -12,6 +12,10 @@ class Conflict(Exception):
     """The plan's status doesn't allow this action. Maps to HTTP 409."""
 
 
+class PlanChanged(Exception):
+    """The plan changed after the caller read it. Maps to HTTP 409 plan_changed."""
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -48,23 +52,29 @@ def write_version(plan_file: PlanFile) -> None:
 
 
 def accept(plan_id: str) -> PlanFile:
-    plan_file = require_draft(plan_id)
-    previous = active_plan()
-    if previous:
-        previous.meta.status = "archived"
-        storage.save_plan(previous)
-    plan_file.schema_version = SCHEMA_VERSION
-    plan_file.meta.status = "active"
-    plan_file.meta.accepted_at = now_iso()
-    plan_file.meta.version = 1
-    write_version(plan_file)
-    storage.save_plan(plan_file)
-    return plan_file
+    # The only place holding two plan locks; activation_lock keeps that from deadlocking.
+    with storage.activation_lock(), storage.plan_lock(plan_id):
+        plan_file = require_draft(plan_id)
+        previous = active_plan()
+        if previous:
+            with storage.plan_lock(previous.meta.id):
+                previous = require_plan(previous.meta.id)
+                previous.meta.status = "archived"
+                storage.save_plan(previous)
+        plan_file.schema_version = SCHEMA_VERSION
+        plan_file.meta.status = "active"
+        plan_file.meta.accepted_at = now_iso()
+        plan_file.meta.version = 1
+        write_version(plan_file)
+        storage.save_plan(plan_file)
+        return plan_file
 
 
 def discard(plan_id: str) -> None:
-    require_draft(plan_id)
-    shutil.rmtree(storage.plan_dir(plan_id))
+    # TODO(v4.1): Windows can't delete the held .lock file; move the delete after the lock there.
+    with storage.plan_lock(plan_id):
+        require_draft(plan_id)
+        shutil.rmtree(storage.plan_dir(plan_id))
 
 
 def regenerate(plan_id: str, feedback: str, request: SavedRequest | None = None, client=None, today=None) -> PlanFile:
@@ -72,10 +82,13 @@ def regenerate(plan_id: str, feedback: str, request: SavedRequest | None = None,
     new = generator.regenerate_plan(draft, feedback, request or draft.request, client, today)
     new.meta.feedback_history = [*draft.meta.feedback_history, feedback]
 
-    versions = storage.plan_dir(plan_id) / "versions"
-    number = len(list(versions.glob("draft_v*.json"))) + 1
-    storage.write_json(versions / f"draft_v{number}.json", draft.model_dump_json(indent=2))
-    storage.save_plan(new)
+    with storage.plan_lock(plan_id):
+        if require_draft(plan_id) != draft:  # regenerated on another device during the LLM call
+            raise PlanChanged(plan_id)
+        versions = storage.plan_dir(plan_id) / "versions"
+        number = len(list(versions.glob("draft_v*.json"))) + 1
+        storage.write_json(versions / f"draft_v{number}.json", draft.model_dump_json(indent=2))
+        storage.save_plan(new)
     return new
 
 

@@ -99,47 +99,49 @@ def create(plan_id: str | None, fields: dict) -> ManualActivity:
     plan_file = active if active and plan_id in (None, active.meta.id) else None
     check_date(fields["date"])
     owner = plan_file.meta.id if plan_file else ""
-    entry = ManualActivity(id=storage.new_manual_id(owner, fields["date"]), plan_id=owner, match=Match(), **fields)
-    if plan_file:
-        entry.match = match_entry(entry, plan_file)
-        entry.title = entry.title.strip() or planned_title(entry, plan_file)
-    else:
-        entry.title = entry.title.strip() or LABELS[entry.modality]
-    storage.save_manual(entry)
-    if plan_file:
-        metrics.refresh(plan_file)
-    return entry
+    with storage.workout_lock(owner):
+        entry = ManualActivity(id=storage.new_manual_id(owner, fields["date"]), plan_id=owner, match=Match(), **fields)
+        if plan_file:
+            entry.match = match_entry(entry, plan_file)
+            entry.title = entry.title.strip() or planned_title(entry, plan_file)
+        else:
+            entry.title = entry.title.strip() or LABELS[entry.modality]
+        storage.save_manual(entry)
+        if plan_file:
+            metrics.refresh(plan_file)
+        return entry
 
 
 def edit(manual_id: str, changes: dict, match: tuple[int, int] | None) -> ManualActivity:
-    entry = storage.load_manual(manual_id)
-    plan_file = activities.plan_for_edit(entry.plan_id)
-    moved = any(key in changes and changes[key] != getattr(entry, key) for key in ("date", "modality"))
-    if "date" in changes:
-        check_date(changes["date"])
-    old = entry
-    entry = entry.model_copy(update=changes)
-    if match is not None:
-        week_number, index = match
-        if index == -1:
-            entry.match = Match()
-        else:
-            entry.match = activities.planned_match(plan_file, week_number, index, entry.modality)
-            if not entry.plan_id:  # joining the plan moves it into that plan's folder
-                entry.plan_id = plan_file.meta.id
-                entry.id = storage.new_manual_id(entry.plan_id, entry.date)
-                storage.delete_manual(old)
-    elif moved and entry.plan_id:
-        entry.match = match_entry(entry, plan_file)
-    storage.save_manual(entry)
-    if plan_file:
-        metrics.refresh(plan_file)
-    return entry
+    plan_file = activities.plan_for_edit(storage.load_manual(manual_id).plan_id)
+    with storage.workout_lock(plan_file.meta.id if plan_file else ""):
+        entry = storage.load_manual(manual_id)
+        moved = any(key in changes and changes[key] != getattr(entry, key) for key in ("date", "modality"))
+        if "date" in changes:
+            check_date(changes["date"])
+        old = entry
+        entry = entry.model_copy(update=changes)
+        if match is not None:
+            week_number, index = match
+            if index == -1:
+                entry.match = Match()
+            else:
+                entry.match = activities.planned_match(plan_file, week_number, index, entry.modality)
+                if not entry.plan_id:  # joining the plan moves it into that plan's folder
+                    entry.plan_id = plan_file.meta.id
+                    entry.id = storage.new_manual_id(entry.plan_id, entry.date)
+                    storage.delete_manual(old)
+        elif moved and entry.plan_id:
+            entry.match = match_entry(entry, plan_file)
+        storage.save_manual(entry)
+        if plan_file:
+            metrics.refresh(plan_file)
+        return entry
 
 
 def delete(manual_id: str) -> None:
-    entry = storage.load_manual(manual_id)
-    plan_file = activities.plan_for_edit(entry.plan_id)
-    storage.delete_manual(entry)
-    if plan_file:
-        metrics.refresh(plan_file)
+    plan_file = activities.plan_for_edit(storage.load_manual(manual_id).plan_id)
+    with storage.workout_lock(plan_file.meta.id if plan_file else ""):
+        storage.delete_manual(storage.load_manual(manual_id))
+        if plan_file:
+            metrics.refresh(plan_file)

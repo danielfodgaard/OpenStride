@@ -1,10 +1,19 @@
-"""JSON files on disk. All ids pass through `safe_id`: they arrive in URLs and uploads."""
+"""JSON files on disk. All ids pass through `safe_id`: they arrive in URLs and uploads.
+
+Phone and laptop can write at once, so a read-modify-write runs under a lock. The order is
+always activation_lock, then plan_lock, then activities_lock, and locks never wrap an LLM call.
+"""
 import json
 import os
 import re
 import tempfile
+import threading
+import uuid
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
+from filelock import FileLock
+from filelock import Timeout as FileLockTimeout
 from pydantic import TypeAdapter
 
 from app.config import settings
@@ -12,6 +21,7 @@ from app.models import ActivitySummary, ChatMessage, ManualActivity, PlanFile, P
 
 DATA_DIR = settings.data_dir
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+LOCK_TIMEOUT_S = 30  # locks cover file writes only, so waiting this long means something is stuck
 
 
 CHAT_THREAD = TypeAdapter(list[ChatMessage])
@@ -27,12 +37,89 @@ def safe_id(value: str) -> str:
     return value
 
 
-def write_json(path: Path, text: str) -> None:
-    # Replace atomically: a crash mid-write must not destroy the current plan.
+def write_file(path: Path, content: str | bytes, mode: int = 0o666) -> None:
+    """Replace atomically: a crash mid-write must not destroy the current plan.
+
+    The temp name is unique per write, and doesn't end in .json so listings never see it.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(text)
-    os.replace(temporary, path)
+    temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        kind = "xb" if isinstance(content, bytes) else "x"
+        with open(temporary, kind, opener=lambda name, flags: os.open(name, flags, mode)) as file:
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def write_json(path: Path, text: str) -> None:
+    write_file(path, text)
+
+
+held_locks = threading.local()
+
+
+@contextmanager
+def file_lock(path: Path):
+    """FileLock objects on one path block each other even in one thread, so nesting is tracked here."""
+    held = held_locks.__dict__.setdefault("paths", set())
+    if path in held:
+        yield
+        return
+    with FileLock(path, timeout=LOCK_TIMEOUT_S):
+        held.add(path)
+        try:
+            yield
+        finally:
+            held.discard(path)
+
+
+def activation_lock():
+    """Choosing the active plan, which has to see and change two plans as one step."""
+    (DATA_DIR / "plans").mkdir(parents=True, exist_ok=True)
+    return file_lock(DATA_DIR / "plans" / ".lock")
+
+
+def plan_lock(plan_id: str):
+    folder = plan_dir(plan_id)
+    if not folder.is_dir():
+        raise NotFound(plan_id)
+    path = folder / ".lock"
+    held = held_locks.__dict__.get("paths", set())
+    if activities_lock_path() in held and path not in held:
+        raise RuntimeError("plan_lock must be taken before activities_lock")
+    return file_lock(path)
+
+
+def activities_lock_path() -> Path:
+    return DATA_DIR / "activities" / ".lock"
+
+
+def activities_lock():
+    """Everything under data/activities/, and manual entries that belong to no plan."""
+    activities_lock_path().parent.mkdir(parents=True, exist_ok=True)
+    return file_lock(activities_lock_path())
+
+
+@contextmanager
+def workout_lock(plan_id: str):
+    """A change to a workout: its plan, if it has one, then the activities."""
+    with plan_lock(plan_id) if plan_id else nullcontext(), activities_lock():
+        yield
+
+
+def plan_etag(plan_id: str) -> str:
+    """Taken from one open file, so the version and mtime can't come from two different writes."""
+    try:
+        with open(plan_dir(plan_id) / "plan.json") as file:
+            mtime = os.fstat(file.fileno()).st_mtime_ns
+            return f'"{json.load(file)["meta"]["version"]}-{mtime}"'
+    except FileNotFoundError:
+        raise NotFound(plan_id) from None
 
 
 def data_dir_writable() -> bool:
@@ -49,11 +136,16 @@ def plan_dir(plan_id: str) -> Path:
 
 
 def new_plan_id(base: str) -> str:
+    """Claims the folder too, so two plans made in the same second can't share an id."""
     plan_id, suffix = base, 1
-    while plan_dir(plan_id).exists():
-        suffix += 1
-        plan_id = f"{base}-{suffix}"
-    return plan_id
+    (DATA_DIR / "plans").mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            plan_dir(plan_id).mkdir()
+            return plan_id
+        except FileExistsError:
+            suffix += 1
+            plan_id = f"{base}-{suffix}"
 
 
 def save_plan(plan_file: PlanFile) -> None:
@@ -68,6 +160,7 @@ def load_plan(plan_id: str) -> PlanFile | None:
     return PlanFile.model_validate_json(path.read_text()) if path.exists() else None
 
 
+# TODO(v4.1): listings can raise FileNotFoundError if another device deletes a file mid-listing; a reload fixes it.
 def list_plans() -> list[dict]:
     plans = []
     for path in sorted((DATA_DIR / "plans").glob("*/plan.json"), reverse=True):  # ids start with a timestamp
@@ -104,9 +197,7 @@ def load_series(activity_id: str) -> dict:
 
 def save_raw(activity_id: str, name: str, content: bytes) -> None:
     suffix = "fit" if name.lower().endswith(".fit") else "gpx"
-    path = DATA_DIR / "activities" / "raw" / f"{safe_id(activity_id)}.{suffix}"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
+    write_file(DATA_DIR / "activities" / "raw" / f"{safe_id(activity_id)}.{suffix}", content)
 
 
 def find_raw(activity_id: str) -> Path | None:
