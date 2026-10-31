@@ -279,5 +279,8 @@ def test_the_old_mode_still_sets_both_capabilities(monkeypatch):
     for mode, pair in expected.items():
         monkeypatch.setenv("GARMIN_MODE", mode)
         assert (config.load().garmin_sync, config.load().garmin_push) == pair
+        assert config.load().garmin_mode_used
     monkeypatch.setenv("GARMIN_PUSH", "off")
     assert config.load().garmin_push == "off"
+    monkeypatch.setenv("GARMIN_SYNC", "off")
+    assert not config.load().garmin_mode_used and config.load().garmin_sync == "off"  # the new settings win

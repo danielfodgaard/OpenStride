@@ -20,6 +20,13 @@ def redact(text: str) -> str:
 def install() -> None:
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
+    # uvicorn only sets up its own loggers, so ours need a way out.
+    app_logger = logging.getLogger("app")
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+        app_logger.addHandler(handler)
+        app_logger.setLevel(logging.INFO)
     make_record = logging.getLogRecordFactory()
     if getattr(make_record, "redacts", False):
         return

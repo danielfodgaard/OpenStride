@@ -162,7 +162,9 @@ def sync(provider=None) -> dict:
     if not sync_lock.acquire(blocking=False):
         return {"imported": [], "skipped": 0, "matched": 0, "unplanned": 0, "warnings": ["A Garmin sync is already running."]}
     try:
-        return sync_with(provider or garmin.make_provider())
+        result = sync_with(provider or garmin.make_provider())
+        log.info("Garmin sync: %d imported, %d skipped, %d warnings", len(result["imported"]), result["skipped"], len(result["warnings"]))
+        return result
     finally:
         sync_lock.release()
 
@@ -175,8 +177,49 @@ def loop(seconds: float) -> None:
             log.error("Garmin background sync failed: %s", garmin.safe_text(error))
 
 
+def sync_setup_text() -> str:
+    mode = garmin.sync_mode()
+    if mode == "off":
+        return "sync=off"
+    key = garmin.personal_key()
+    if not key:
+        return f"sync={mode} (KEY MISSING: set {garmin.PERSONAL_KEY_ENV} in .env)"
+    try:
+        garmin.PersonalApiProvider().call(lambda api: None)
+    except garmin.GarminError as error:
+        return f"sync={mode} (key set, {len(key)} chars, TOKEN REQUEST FAILED: {error})"
+    return f"sync={mode} (key set, {len(key)} chars)"
+
+
+def push_setup_text() -> str:
+    mode = garmin.push_mode()
+    if mode == "off":
+        return "push=off"
+    blocked = garmin.push_refusal()
+    if blocked:
+        return f"push={mode} (REFUSED: {blocked})"
+    return f"push={mode} ({'logged in' if garmin.has_secret(garmin.UNOFFICIAL_TOKEN_FILE) else 'not logged in'})"
+
+
+def setup_line() -> str:
+    minutes = settings.garmin_sync_minutes
+    auto = f"auto-sync every {max(minutes, MIN_SYNC_MINUTES)} min" if minutes > 0 and garmin.sync_mode() != "off" else "auto-sync off"
+    return f"Garmin: {sync_setup_text()}, {push_setup_text()}, {auto}"
+
+
+def log_setup() -> None:
+    if settings.garmin_mode_used:
+        log.warning("GARMIN_MODE is the old setting: use GARMIN_SYNC and GARMIN_PUSH in .env instead.")
+    try:
+        log.info(setup_line())
+    except Exception as error:  # only a report: it must never stop the server
+        log.warning("Garmin: could not check the setup: %s", garmin.safe_text(error))
+
+
 def start() -> None:
     global worker
+    # In a thread: asking Garmin for a token must not hold up the server starting.
+    threading.Thread(target=log_setup, name="garmin-setup", daemon=True).start()
     if settings.garmin_sync_minutes <= 0 or garmin.sync_mode() == "off":
         return
     stop_event.clear()

@@ -23,11 +23,13 @@ class Settings:
     garmin_sync: GarminSync  # reading activities: Garmin's official Personal API
     garmin_push: GarminPush  # sending workouts: python-garminconnect, opt-in
     garmin_sync_minutes: int  # 0 means manual only
+    garmin_mode_used: bool = False  # the old GARMIN_MODE filled in a setting
 
 
 def load() -> Settings:
     # GARMIN_MODE is the v4.0 name for the pair; the two settings win where they are set.
-    garmin_mode = os.environ.get("GARMIN_MODE") or "off"
+    old_mode = os.environ.get("GARMIN_MODE")
+    garmin_mode = old_mode or "off"
     if garmin_mode not in ("off", "personal_api", "unofficial"):
         raise ValueError(f"GARMIN_MODE must be off, personal_api or unofficial, not {garmin_mode!r}")
     garmin_sync = os.environ.get("GARMIN_SYNC") or ("off" if garmin_mode == "off" else "personal_api")
@@ -45,6 +47,7 @@ def load() -> Settings:
         garmin_sync=garmin_sync,
         garmin_push=garmin_push,
         garmin_sync_minutes=int(os.environ.get("GARMIN_SYNC_MINUTES") or 0),
+        garmin_mode_used=bool(old_mode) and not (os.environ.get("GARMIN_SYNC") and os.environ.get("GARMIN_PUSH")),
     )
 
 

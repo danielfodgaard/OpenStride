@@ -434,3 +434,55 @@ def test_a_second_sync_at_the_same_time_does_nothing():
     finally:
         sync.sync_lock.release()
     assert result["imported"] == [] and "already running" in result["warnings"][0]
+
+
+def set_settings(monkeypatch, sync_mode="personal_api", push="off", minutes=0, old=False):
+    new = replace(provider.settings, garmin_sync=sync_mode, garmin_push=push, garmin_sync_minutes=minutes, garmin_mode_used=old)
+    monkeypatch.setattr(provider, "settings", new)
+    monkeypatch.setattr(sync, "settings", new)
+
+
+def test_the_setup_line_gives_each_state_without_the_key(monkeypatch):
+    set_settings(monkeypatch, push="unofficial", minutes=30)
+    monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_TOKEN)
+    monkeypatch.setattr(provider.PersonalApiProvider, "call", lambda self, request: None)
+    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    line = sync.setup_line()
+    assert line == f"Garmin: sync=personal_api (key set, {len(FAKE_TOKEN)} chars), push=unofficial (logged in), auto-sync every 30 min"
+    assert FAKE_TOKEN not in line
+
+
+def test_the_setup_line_says_so_when_things_are_missing(monkeypatch):
+    set_settings(monkeypatch, push="unofficial")
+    line = sync.setup_line()
+    assert "KEY MISSING" in line and "push=unofficial (not logged in)" in line and "auto-sync off" in line
+    set_settings(monkeypatch, sync_mode="off")
+    assert sync.setup_line() == "Garmin: sync=off, push=off, auto-sync off"
+
+
+def test_the_setup_line_reports_a_failed_token_request(monkeypatch):
+    set_settings(monkeypatch)
+    monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_TOKEN)
+
+    def refuse(self, request):
+        raise GarminError("Garmin refused the login or key.")
+
+    monkeypatch.setattr(provider.PersonalApiProvider, "call", refuse)
+    line = sync.setup_line()
+    assert "TOKEN REQUEST FAILED: Garmin refused" in line and FAKE_TOKEN not in line
+
+
+def test_the_old_setting_logs_one_warning_naming_the_new_ones(monkeypatch, caplog):
+    set_settings(monkeypatch, old=True)
+    caplog.set_level(logging.INFO, logger="app")
+    sync.log_setup()
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "GARMIN_SYNC" in warnings[0] and "GARMIN_PUSH" in warnings[0]
+
+
+def test_no_warning_with_the_new_settings(monkeypatch, caplog):
+    set_settings(monkeypatch)
+    caplog.set_level(logging.INFO, logger="app")
+    sync.log_setup()
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
