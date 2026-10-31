@@ -334,3 +334,25 @@ def test_out_of_order_times_never_give_moving_above_elapsed():
     points = [activities.Point(t0 + timedelta(seconds=s), i * 1.0) for i, s in enumerate(seconds)]
     activity = activities.summarise(activities.Parsed(points=points), "a", "plan", "", 0)
     assert activity.moving_time_s <= activity.elapsed_time_s
+
+
+def stop_and_go():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    return [
+        activities.Point(t0, 0.0),
+        activities.Point(t0 + timedelta(seconds=300), 1.0),
+        activities.Point(t0 + timedelta(seconds=420), 1.0),  # two minutes standing still
+        activities.Point(t0 + timedelta(seconds=720), 2.0),
+    ]
+
+
+def test_gpx_has_no_timer_so_stopped_time_comes_out():
+    assert activities.moving_seconds(stop_and_go())[-1] == 600
+
+
+def test_a_running_watch_timer_keeps_stopped_time_in_the_splits():
+    assert activities.moving_seconds(stop_and_go(), 720)[-1] == 720
+
+
+def test_a_paused_watch_timer_takes_out_what_it_paused():
+    assert activities.moving_seconds(stop_and_go(), 600)[-1] == 600

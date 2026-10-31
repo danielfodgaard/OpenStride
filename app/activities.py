@@ -212,14 +212,29 @@ def parse_gpx(content: bytes) -> Parsed:
     return Parsed(points=points, sport=gpx_sport(gpx))
 
 
-def moving_seconds(points: list[Point]) -> list[float]:
-    """Cumulative moving time at each point."""
+def moving_seconds(points: list[Point], timer_s: float | None = None) -> list[float]:
+    """Cumulative moving time at each point.
+
+    With a device timer, only as much stopped time as the watch paused comes out: a runner
+    standing at a light with the timer running is still on the clock, as in the watch's laps.
+    """
+    steps = [max((b.time - a.time).total_seconds(), 0) for a, b in zip(points, points[1:])]
+    stopped = [
+        i for i, (a, b) in enumerate(zip(points, points[1:]))
+        if steps[i] and (b.distance_km - a.distance_km) / steps[i] < MOVING_KM_PER_S
+    ]
+    if timer_s is not None:
+        paused = sum(steps) - timer_s
+        longest_first, stopped = sorted(stopped, key=lambda i: -steps[i]), []
+        for i in longest_first:
+            if paused <= 0:
+                break
+            stopped.append(i)
+            paused -= steps[i]
+    excluded = set(stopped)
     totals = [0.0]
-    for previous, point in zip(points, points[1:]):
-        seconds = (point.time - previous.time).total_seconds()
-        km = point.distance_km - previous.distance_km
-        moving = seconds > 0 and km / seconds >= MOVING_KM_PER_S
-        totals.append(totals[-1] + (seconds if moving else 0))
+    for i, seconds in enumerate(steps):
+        totals.append(totals[-1] + (0 if i in excluded else seconds))
     return totals
 
 
@@ -302,7 +317,7 @@ def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rp
     if parsed.start_time is None and not parsed.points:
         raise ValueError("no start time")
     points = rebased(parsed.points)
-    moving = moving_seconds(points)
+    moving = moving_seconds(points, parsed.moving_time_s)
     hrs = [point.hr for point in points if point.hr]
     cadences = [point.cadence for point in points if point.cadence]
     distance_km = parsed.distance_km if parsed.distance_km is not None else (points[-1].distance_km if points else 0)
