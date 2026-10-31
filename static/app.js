@@ -65,9 +65,9 @@ function planDiv() {
   return div;
 }
 
-function fullRender(planFile, status) {
+function fullRender(planFile, status, options) {
   try {
-    renderPlan(planFile);
+    renderPlan(planFile, options);
   } catch (error) {
     status.textContent = `Could not show plan: ${error.message}`;
   }
@@ -240,9 +240,52 @@ async function plansView() {
   );
 }
 
+function importSection(status) {
+  const files = el("input");
+  files.type = "file";
+  files.multiple = true;
+  files.accept = ".fit,.gpx";
+  files.id = "run-files";
+  const note = el("textarea");
+  note.rows = 2;
+  note.cols = 50;
+  note.id = "run-note";
+  const rpe = el("select");
+  rpe.id = "run-rpe";
+  rpe.add(new Option("RPE not given", "0"));
+  for (let i = 1; i <= 10; i += 1) rpe.add(new Option(String(i), String(i)));
+  const labelled = (text, control) => {
+    const label = el("label", `${text} `);
+    label.htmlFor = control.id;
+    const line = el("p");
+    line.append(label, control);
+    return line;
+  };
+  const upload = button("Upload", status, async () => {
+    if (!files.files.length) throw new Error("Choose at least one .fit or .gpx file.");
+    const body = new FormData();
+    for (const file of files.files) body.append("files", file);
+    body.append("user_note", note.value);
+    body.append("rpe", rpe.value);
+    const results = await api("/api/activities", { method: "POST", body });
+    await route();
+    document.getElementById("import-status").textContent = results
+      .map((r) => r.message ?? `${r.file}: imported`).join("; ");
+  }, "Importing…");
+  const section = el("section");
+  status.id = "import-status";
+  const uploadLine = el("p");
+  uploadLine.append(upload);
+  section.append(el("h2", "Import runs"), labelled("Files", files), labelled("Note", note), labelled("RPE", rpe), uploadLine, status);
+  return section;
+}
+
 async function planView(id) {
   const token = routeToken;
-  const planFile = await api(`/api/plans/${encodeURIComponent(id)}`);
+  const encoded = encodeURIComponent(id);
+  const planFile = await api(`/api/plans/${encoded}`);
+  const isDraft = planFile.meta.status === "draft";
+  const activities = isDraft ? [] : await api(`/api/activities?plan_id=${encoded}`);
   if (token !== routeToken) return;
   const status = statusLine();
   const { status: planStatus } = planFile.meta;
@@ -256,8 +299,9 @@ async function planView(id) {
     nodes.push(actions);
   }
   nodes.push(status, planDiv());
+  if (planStatus === "active") nodes.push(importSection(statusLine()));
   main.replaceChildren(...nodes);
-  fullRender(planFile, status);
+  fullRender(planFile, status, { actuals: !isDraft, activities });
 }
 
 async function homeView() {
