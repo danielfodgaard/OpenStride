@@ -45,7 +45,7 @@ def test_charts_work_offline_and_the_cache_is_there(demo):
     assert metrics["as_of"] == main.DEMO_TODAY
     assert metrics["days"][-1]["date"] == main.DEMO_TODAY
     assert metrics["current"]["ctl"] == metrics["days"][-1]["ctl"]
-    assert metrics["easy_runs"] and metrics["quality_runs"]
+    assert "easy_runs" not in metrics and "easy_pace_4wk_avg_s" not in metrics["current"]
     assert metrics["weeks"][2]["completed_strength"] == 2
     assert metrics["weeks"][1]["actual_cross_min"] > 0
 

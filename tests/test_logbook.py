@@ -96,8 +96,6 @@ def test_manual_run_counts_as_km(client):
     log(client, modality="run", duration_min=45, distance_km=8, details=[])
     result = metrics.compute(storage.load_plan("plan"))
     assert result.weeks[0].actual_km == 8
-    assert [p.type for p in result.quality_runs] == ["tempo"]
-    assert result.quality_runs[0].avg_hr == 0
 
 
 def test_progress_table_includes_the_log(client):

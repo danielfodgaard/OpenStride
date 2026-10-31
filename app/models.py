@@ -333,32 +333,18 @@ class WeekVolume(BaseModel):
     completed_cross: int = 0
 
 
-class TrendPoint(BaseModel):
-    date: date
-    activity_id: str
-    type: str
-    distance_km: float
-    avg_pace_s: int
-    avg_hr: int
-    efficiency: float
-
-
 class Snapshot(BaseModel):
     ctl: float
     atl: float
     tsb: float
     ctl_7d_change: float
     weekly_km_4wk_avg: float
-    easy_pace_4wk_avg_s: int
-    easy_hr_4wk_avg: int
 
 
 class Metrics(BaseModel):
     as_of: date
     days: list[DayLoad]
     weeks: list[WeekVolume]
-    easy_runs: list[TrendPoint]
-    quality_runs: list[TrendPoint]
     current: Snapshot
 
 

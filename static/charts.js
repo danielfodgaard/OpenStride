@@ -19,7 +19,6 @@ function newSvg(height, label) {
 
 const dayMs = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`);
 const monthDay = (ms) => new Date(ms).toISOString().slice(5, 10);
-const paceText = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 
 // 4-6 round tick values covering min..max.
 function niceTicks(min, max) {
@@ -32,24 +31,6 @@ function niceTicks(min, max) {
   const ticks = [];
   for (let value = start; value < high + step * 0.999; value += step) ticks.push(Number(value.toFixed(6)));
   return ticks;
-}
-
-function leastSquares(points) {
-  const n = points.length;
-  if (n < 2) return null;
-  const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
-  const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
-  const spread = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0);
-  if (!spread) return null;
-  const slope = points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0) / spread;
-  return { slope, intercept: meanY - slope * meanX };
-}
-
-function trendPoints(points) {
-  const fit = leastSquares(points);
-  if (!fit) return [];
-  const xs = points.map((p) => p.x);
-  return [Math.min(...xs), Math.max(...xs)].map((x) => ({ x, y: fit.slope * x + fit.intercept }));
 }
 
 function tableToggle(headers, rows) {
@@ -202,32 +183,5 @@ function drawProgressCharts(metrics, raceDate) {
     ]),
   });
 
-  const easy = metrics.easy_runs.map((p) => ({ ...p, x: dayMs(p.date) }));
-  const pacePoints = easy.map((p) => ({ x: p.x, y: p.avg_pace_s }));
-  const hrPoints = easy.filter((p) => p.avg_hr).map((p) => ({ x: p.x, y: p.avg_hr }));
-  const paceHr = drawSeriesChart({
-    title: "Easy-run pace and heart rate",
-    series: [
-      { name: "Pace, min/km", color: COLORS.blue, axis: "left", dots: true, points: pacePoints },
-      { name: "Pace trend", color: COLORS.blue, axis: "left", dashed: true, points: trendPoints(pacePoints) },
-      { name: "Heart rate, bpm", color: COLORS.red, axis: "right", dots: true, points: hrPoints },
-      { name: "HR trend", color: COLORS.red, axis: "right", dashed: true, points: trendPoints(hrPoints) },
-    ],
-    leftFormat: paceText,
-    headers: ["Date", "Type", "km", "Pace", "HR"],
-    rows: easy.map((p) => [p.date, p.type, p.distance_km, `${paceText(p.avg_pace_s)}/km`, p.avg_hr || ""]),
-  });
-
-  const efficiencyPoints = easy.filter((p) => p.efficiency).map((p) => ({ x: p.x, y: p.efficiency }));
-  const efficiency = drawSeriesChart({
-    title: "Efficiency (metres per heartbeat)",
-    series: [
-      { name: "Efficiency", color: COLORS.green, axis: "left", dots: true, points: efficiencyPoints },
-      { name: "Trend", color: COLORS.green, axis: "left", dashed: true, points: trendPoints(efficiencyPoints) },
-    ],
-    headers: ["Date", "Type", "Metres per heartbeat"],
-    rows: easy.filter((p) => p.efficiency).map((p) => [p.date, p.type, p.efficiency]),
-  });
-
-  return [fitness, el("p", snapshotText(metrics.current)), volume, paceHr, efficiency];
+  return [fitness, el("p", snapshotText(metrics.current)), volume];
 }

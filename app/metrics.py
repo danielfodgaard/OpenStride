@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app import clock, storage
-from app.models import DayLoad, Match, Metrics, PlanFile, SavedRequest, Snapshot, TrendPoint, WeekVolume
+from app.models import DayLoad, Match, Metrics, PlanFile, SavedRequest, Snapshot, WeekVolume
 
 DEFAULT_HR_MAX = 190
 DEFAULT_HR_REST = 55
@@ -14,9 +14,6 @@ INTENSITY = {
     "recovery": 0.6, "easy": 0.75, "long": 0.85, "tempo": 1.1, "intervals": 1.3, "race": 1.4,
     "cross_training": 0.6, "strength": 0.5,
 }
-HISTORY_DAYS = 180
-EASY_TYPES = {"easy", "long", "recovery", "unplanned"}
-QUALITY_TYPES = {"tempo", "intervals", "race"}
 
 
 @dataclass
@@ -135,34 +132,16 @@ def build_weeks(done: list[Entry], plan_file: PlanFile) -> list[WeekVolume]:
     return weeks
 
 
-def trend_point(entry: Entry, kind: str) -> TrendPoint:
-    seconds = entry.minutes * 60
-    speed = entry.km * 1000 / seconds
-    return TrendPoint(
-        date=entry.date,
-        activity_id=entry.id,
-        type=kind,
-        distance_km=entry.km,
-        avg_pace_s=round(seconds / entry.km),
-        avg_hr=entry.avg_hr,
-        efficiency=round(speed * 60 / entry.avg_hr, 3) if entry.avg_hr else 0,
-    )
-
-
-def snapshot(days: list[DayLoad], easy: list[TrendPoint], seed: float, today: date) -> Snapshot:
+def snapshot(days: list[DayLoad], seed: float, today: date) -> Snapshot:
     last = days[-1] if days else DayLoad(date=today, load=0, ctl=round(seed, 1), atl=0, tsb=round(seed, 1), km=0)
     week_ago = days[-8].ctl if len(days) >= 8 else round(seed, 1)
     since = today - timedelta(days=27)
-    recent = [p for p in easy if since <= p.date <= today]
-    with_hr = [p.avg_hr for p in recent if p.avg_hr]
     return Snapshot(
         ctl=last.ctl,
         atl=last.atl,
         tsb=last.tsb,
         ctl_7d_change=round(last.ctl - week_ago, 1),
         weekly_km_4wk_avg=round(sum(d.km for d in days if d.date >= since) / 4, 1),
-        easy_pace_4wk_avg_s=round(sum(p.avg_pace_s for p in recent) / len(recent)) if recent else 0,
-        easy_hr_4wk_avg=round(sum(with_hr) / len(with_hr)) if with_hr else 0,
     )
 
 
@@ -171,19 +150,11 @@ def compute(plan_file: PlanFile, today: date | None = None) -> Metrics:
     done = entries(plan_file.meta.id)
     kinds = {entry.id: session_type(entry, plan_file) for entry in done}
     days = build_days(done, kinds, plan_file, today)
-    # Recent runs from before the plan are real trend data; a 2010 file would squash the chart.
-    since = plan_file.plan.weeks[0].start_date - timedelta(days=HISTORY_DAYS)
-    runs = [e for e in done if e.modality == "run" and e.km > 0 and e.minutes > 0 and e.date >= since]
-    # shortcut: unplanned runs count as easy so imported history has a trend, though some were surely hard; upgrade with a run classifier. TODO(v3.1)
-    easy = [trend_point(e, kinds[e.id]) for e in runs if kinds[e.id] in EASY_TYPES]
-    quality = [trend_point(e, kinds[e.id]) for e in runs if kinds[e.id] in QUALITY_TYPES]
     return Metrics(
         as_of=today,
         days=days,
         weeks=build_weeks(done, plan_file),
-        easy_runs=easy,
-        quality_runs=quality,
-        current=snapshot(days, easy, plan_file.request.current_weekly_km * 1.1, today),
+        current=snapshot(days, plan_file.request.current_weekly_km * 1.1, today),
     )
 
 

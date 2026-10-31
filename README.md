@@ -55,11 +55,11 @@ Limits to know:
 - File times are UTC. A `.fit` that records its local time uses that; otherwise, as with `.gpx`, the server's time zone applies, so a run while travelling can land on the wrong day. The match can be changed by hand.
 - The same run uploaded as both `.fit` and `.gpx` counts once if the start times are within 60 seconds.
 - A multisport file counts as one activity of its longest sport.
-- Runs dated before the plan starts are shown under "Runs outside the plan dates". Those from the 180 days before it appear in the trend charts as unplanned easy runs. Fitness and fatigue start at plan start, from the seed below, so older runs don't affect them.
+- Fitness and fatigue start at plan start, from the seed below, so runs before it don't affect them.
 
 ## Metrics
 
-`app/metrics.py` computes everything on the charts: load (Banister TRIMP from heart rate, or duration times a type factor without one), fitness (CTL, 42-day average), fatigue (ATL, 7-day average), form (TSB), weekly volume and pace, heart-rate and efficiency trends. Set max and resting heart rate in the form for accurate load; otherwise 208 − 0.7 × age, or 190, and 55 are used. Fitness starts from `current_weekly_km × 1.1`, a rough prior.
+`app/metrics.py` computes everything on the charts: load (Banister TRIMP from heart rate, or duration times a type factor without one), fitness (CTL, 42-day average), fatigue (ATL, 7-day average), form (TSB) and weekly volume. Set max and resting heart rate in the form for accurate load; otherwise 208 − 0.7 × age, or 190, and 55 are used. Fitness starts from `current_weekly_km × 1.1`, a rough prior.
 
 ## How paces work
 

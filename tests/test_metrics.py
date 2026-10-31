@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from app import activities, lifecycle, metrics, storage
-from app.metrics import Entry, fitness_series, trend_point, trimp
-from app.models import ManualActivity, Match, PlanFile
+from app.metrics import Entry, fitness_series, trimp
+from app.models import Match, PlanFile
 
 SAMPLES = Path("examples/activities")
 TODAY = date(2026, 11, 11)
@@ -68,13 +68,6 @@ def test_hr_defaults(plan, fields, expected):
     assert metrics.heart_rates(request) == pytest.approx(expected)
 
 
-def test_efficiency_rises_with_speed_at_constant_hr():
-    points = [trend_point(Entry("a", TODAY, "run", minutes, 10, 150, Match()), "easy") for minutes in (60, 55, 50)]
-    values = [p.efficiency for p in points]
-    assert values == sorted(values) and len(set(values)) == 3
-    assert points[0].efficiency == pytest.approx((10000 / 3600) * 60 / 150, abs=0.001)
-
-
 def test_weekly_km_match_hand_computed_sums(plan):
     tempo = add_run(plan, "2026-11-03_tempo.fit")
     easy = add_run(plan, "2026-11-05_easy.gpx")
@@ -112,13 +105,6 @@ def test_runs_before_the_plan_do_not_decay_the_fitness_seed(plan):
     assert result.current.ctl == pytest.approx(44 * (41 / 42) ** 10, abs=0.1)  # ten idle days, not 160
 
 
-def test_recent_runs_before_the_plan_are_in_the_trends_and_old_ones_are_not(plan):
-    storage.save_activity(old_run(date(2026, 10, 1)))
-    storage.save_activity(old_run(date(2017, 6, 12)))
-    result = metrics.compute(plan, TODAY)
-    assert [(p.date, p.type) for p in result.easy_runs] == [(date(2026, 10, 1), "unplanned")]
-
-
 def test_before_the_plan_starts_there_are_no_days_but_no_crash(plan):
     result = metrics.compute(plan, date(2026, 10, 31))
     assert result.days == []
@@ -144,21 +130,6 @@ def test_snapshot_matches_the_last_day(plan):
     assert result.current.ctl_7d_change == pytest.approx(last.ctl - result.days[-8].ctl, abs=0.05)
 
 
-def test_trends_split_by_type_and_averages(plan):
-    add_run(plan, "2026-11-03_tempo.fit")
-    easy = add_run(plan, "2026-11-05_easy.gpx")
-    no_hr = add_run(plan, "2026-11-07_easy_no_hr.gpx")
-    result = metrics.compute(plan, TODAY)
-    assert [p.type for p in result.quality_runs] == ["tempo"]
-    assert [p.date for p in result.easy_runs] == [easy.date, no_hr.date]
-    assert result.easy_runs[1].efficiency == 0
-    expected = round((result.easy_runs[0].avg_pace_s + result.easy_runs[1].avg_pace_s) / 2)
-    assert result.current.easy_pace_4wk_avg_s == expected
-    assert result.current.easy_hr_4wk_avg == easy.avg_hr  # the run without HR doesn't drag it to 0
-    expected_km = sum(d.km for d in result.days) / 4
-    assert result.current.weekly_km_4wk_avg == pytest.approx(expected_km, abs=0.05)
-
-
 def test_cycling_is_load_but_not_running_km(plan):
     run = add_run(plan, "2026-11-05_easy.gpx")
     run.modality = "cross"
@@ -167,7 +138,6 @@ def test_cycling_is_load_but_not_running_km(plan):
     day = next(d for d in result.days if d.date == run.date)
     assert day.km == 0 and day.load > 0
     assert result.weeks[0].actual_km == 0 and result.weeks[0].actual_cross_min == pytest.approx(run.moving_time_s / 60, abs=0.1)
-    assert result.easy_runs == []
 
 
 def test_refresh_writes_the_cache(plan):
@@ -187,16 +157,6 @@ def test_strength_and_cross_counts_for_the_chart_notes(tmp_path, monkeypatch):
     week = metrics.compute(active, TODAY).weeks[0]
     assert (week.completed_cross, week.planned_cross) == (1, 1)
     assert (week.completed_strength, week.planned_strength) == (0, 2)
-
-
-def test_trends_are_in_date_order_with_manual_runs(plan):
-    add_run(plan, "2026-11-05_easy.gpx")
-    storage.save_manual(ManualActivity(
-        id="manual", plan_id="plan", date=date(2026, 11, 2), modality="run", title="Jog", duration_min=30,
-        distance_km=5, rpe=0, note="", details=[], match=Match(),
-    ))
-    points = metrics.compute(plan, TODAY).easy_runs
-    assert [p.date for p in points] == sorted(p.date for p in points)
 
 
 def test_equal_heart_rates_cannot_divide_by_zero(plan):

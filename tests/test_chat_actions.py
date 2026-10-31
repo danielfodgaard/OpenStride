@@ -139,7 +139,7 @@ def test_context_has_the_snapshot_and_at_most_30_messages():
     send("latest question", fake)
     prompt = fake.prompts[0]
 
-    assert '"ctl_7d_change"' in prompt and '"easy_pace_4wk_avg_s"' in prompt
+    assert '"ctl_7d_change"' in prompt and '"weekly_km_4wk_avg"' in prompt
     assert prompt.count("message-") == 29  # the 29 newest plus the new question make 30
     assert "message-10" not in prompt and "message-39" in prompt
     assert "latest question" in prompt
