@@ -1,10 +1,12 @@
+import json
 from datetime import date, timedelta
+from pathlib import Path
 
 import anthropic
 import pytest
 from pydantic import ValidationError
 
-from app.models import PlanRequest, TrainingPlan
+from app.models import PlanFile, PlanRequest, TrainingPlan
 
 
 def request_data(**changes):
@@ -72,3 +74,12 @@ def test_llm_schema_is_compatible():
                 walk(child)
 
     walk(anthropic.transform_schema(TrainingPlan))
+
+
+def test_sample_plan_parses_even_after_its_race_date_passes():
+    PlanFile.model_validate_json(Path("examples/sample_plan.json").read_text())
+
+
+def test_sample_request_matches_the_sample_plan():
+    request = json.loads(Path("examples/sample_request.json").read_text())
+    assert json.loads(Path("examples/sample_plan.json").read_text())["request"] == request

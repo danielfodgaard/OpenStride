@@ -1,0 +1,15 @@
+{
+  "goal_description": "Sub-1:30 half marathon, want to stay injury free",
+  "race_distance_km": 21.0975,
+  "goal_time": "1:30:00",
+  "race_date": "2027-01-10",
+  "recent_race_distance_km": 10,
+  "recent_race_time": "44:00",
+  "current_weekly_km": 40,
+  "longest_recent_run_km": 16,
+  "runs_per_week": 4,
+  "available_days": ["Tue", "Thu", "Sat", "Sun"],
+  "long_run_day": "Sun",
+  "experience": "intermediate",
+  "notes": "Mostly flat roads. Mild left achilles tightness last spring."
+}

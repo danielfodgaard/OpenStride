@@ -1,0 +1,1018 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "id": "2026-10-31T09-00-00_hm",
+    "created_at": "2026-10-31T09:00:00+00:00",
+    "app_version": "1.0.0",
+    "model": "hand-written sample",
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+    }
+  },
+  "request": {
+    "goal_description": "Sub-1:30 half marathon, want to stay injury free",
+    "race_distance_km": 21.0975,
+    "goal_time": "1:30:00",
+    "race_date": "2027-01-10",
+    "recent_race_distance_km": 10,
+    "recent_race_time": "44:00",
+    "current_weekly_km": 40,
+    "longest_recent_run_km": 16,
+    "runs_per_week": 4,
+    "available_days": [
+      "Tue",
+      "Thu",
+      "Sat",
+      "Sun"
+    ],
+    "long_run_day": "Sun",
+    "experience": "intermediate",
+    "notes": "Mostly flat roads. Mild left achilles tightness last spring."
+  },
+  "paces": {
+    "current_vdot": 46.5,
+    "goal_vdot": 51.0,
+    "easy": "5:11-6:13/km",
+    "marathon": "4:54/km",
+    "threshold": "4:37/km",
+    "interval": "4:09/km",
+    "repetition": "3:55/km",
+    "race_pace": "4:16/km"
+  },
+  "plan": {
+    "summary": "A ten-week plan that builds from your current 40 km with three base weeks, then adds threshold and interval work before a two-week taper. Volume steps back every fourth week to protect the achilles.",
+    "warnings": [
+      "Your goal (VDOT 51.0) is well above your current fitness (VDOT 46.5) for a 10-week build; treat 1:30 as a stretch target."
+    ],
+    "weeks": [
+      {
+        "week_number": 1,
+        "phase": "base",
+        "focus": "Settle into four runs a week",
+        "planned_km": 42,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 4 km",
+            "distance_km": 8,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Tempo",
+                "distance_km": 4,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-11-03"
+          },
+          {
+            "day": "Thu",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-05"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-07"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 16 km",
+            "distance_km": 16,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-11-08"
+          }
+        ],
+        "start_date": "2026-11-02"
+      },
+      {
+        "week_number": 2,
+        "phase": "base",
+        "focus": "Extend the long run",
+        "planned_km": 45,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 5 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Tempo",
+                "distance_km": 5,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-11-10"
+          },
+          {
+            "day": "Thu",
+            "type": "easy",
+            "title": "Easy 10 km",
+            "distance_km": 10,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-12"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-14"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 17 km",
+            "distance_km": 17,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-11-15"
+          }
+        ],
+        "start_date": "2026-11-09"
+      },
+      {
+        "week_number": 3,
+        "phase": "base",
+        "focus": "Introduce faster running",
+        "planned_km": 43.4,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 5 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Tempo",
+                "distance_km": 5,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-11-17"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "4 × 0.4 km",
+            "distance_km": 6.8,
+            "duration_min": 0,
+            "target_pace": "3:55/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Repetition",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "3:55/km"
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-11-19"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-21"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 18.6 km",
+            "distance_km": 18.6,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-11-22"
+          }
+        ],
+        "start_date": "2026-11-16"
+      },
+      {
+        "week_number": 4,
+        "phase": "base",
+        "focus": "Lighter week to absorb the load",
+        "planned_km": 38.4,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-24"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "4 × 0.4 km",
+            "distance_km": 6.8,
+            "duration_min": 0,
+            "target_pace": "3:55/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Repetition",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "3:55/km"
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-11-26"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 8 km",
+            "distance_km": 8,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-11-28"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 14.6 km",
+            "distance_km": 14.6,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-11-29"
+          }
+        ],
+        "start_date": "2026-11-23"
+      },
+      {
+        "week_number": 5,
+        "phase": "build",
+        "focus": "Threshold volume",
+        "planned_km": 44.0,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 2 × 3 km",
+            "distance_km": 11,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 2,
+                "description": "Tempo",
+                "distance_km": 3,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Jog recovery",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-01"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "4 × 0.8 km",
+            "distance_km": 8.4,
+            "duration_min": 0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Interval",
+                "distance_km": 0.8,
+                "duration_min": 0,
+                "target_pace": "4:09/km"
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-03"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 8 km",
+            "distance_km": 8,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-12-05"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 16.6 km",
+            "distance_km": 16.6,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-12-06"
+          }
+        ],
+        "start_date": "2026-11-30"
+      },
+      {
+        "week_number": 6,
+        "phase": "build",
+        "focus": "Longer intervals",
+        "planned_km": 47.0,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 2 × 3 km",
+            "distance_km": 11,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 2,
+                "description": "Tempo",
+                "distance_km": 3,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Jog recovery",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-08"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "5 × 1 km",
+            "distance_km": 10.6,
+            "duration_min": 0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 5,
+                "description": "Interval",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "4:09/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-10"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 8 km",
+            "distance_km": 8,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-12-12"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 17.4 km",
+            "distance_km": 17.4,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-12-13"
+          }
+        ],
+        "start_date": "2026-12-07"
+      },
+      {
+        "week_number": 7,
+        "phase": "build",
+        "focus": "Peak mileage",
+        "planned_km": 52.0,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 2 × 4 km",
+            "distance_km": 13,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 2,
+                "description": "Tempo",
+                "distance_km": 4,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Jog recovery",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-15"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "6 × 1 km",
+            "distance_km": 12.0,
+            "duration_min": 0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 6,
+                "description": "Interval",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "4:09/km"
+              },
+              {
+                "repeat": 5,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-17"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 9 km",
+            "distance_km": 9,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-12-19"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 18 km",
+            "distance_km": 18,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2026-12-20"
+          }
+        ],
+        "start_date": "2026-12-14"
+      },
+      {
+        "week_number": 8,
+        "phase": "peak",
+        "focus": "Race-specific long run, slightly lighter week",
+        "planned_km": 45.6,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 6 km",
+            "distance_km": 10,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Tempo",
+                "distance_km": 6,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-22"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "5 × 1 km",
+            "distance_km": 10.6,
+            "duration_min": 0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 5,
+                "description": "Interval",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "4:09/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-24"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 7 km",
+            "distance_km": 7,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2026-12-26"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run with race-pace finish",
+            "distance_km": 18,
+            "duration_min": 0,
+            "target_pace": "4:16/km",
+            "description": "Finish strongly at goal pace.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Steady",
+                "distance_km": 12,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Race pace",
+                "distance_km": 6,
+                "duration_min": 0,
+                "target_pace": "4:16/km"
+              }
+            ],
+            "date": "2026-12-27"
+          }
+        ],
+        "start_date": "2026-12-21"
+      },
+      {
+        "week_number": 9,
+        "phase": "taper",
+        "focus": "Cut volume, keep some sharpness",
+        "planned_km": 35.0,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Tempo 4 km",
+            "distance_km": 8,
+            "duration_min": 0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Tempo",
+                "distance_km": 4,
+                "duration_min": 0,
+                "target_pace": "4:37/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-29"
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "title": "4 × 0.8 km",
+            "distance_km": 8.4,
+            "duration_min": 0,
+            "target_pace": "4:09/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 4,
+                "description": "Interval",
+                "distance_km": 0.8,
+                "duration_min": 0,
+                "target_pace": "4:09/km"
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2026-12-31"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Easy 6 km",
+            "distance_km": 6,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": [],
+            "date": "2027-01-02"
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "title": "Long run 12.6 km",
+            "distance_km": 12.6,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": [],
+            "date": "2027-01-03"
+          }
+        ],
+        "start_date": "2026-12-28"
+      },
+      {
+        "week_number": 10,
+        "phase": "taper",
+        "focus": "Fresh legs for race day",
+        "planned_km": 33.1,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "title": "Race-pace primer",
+            "distance_km": 6,
+            "duration_min": 0,
+            "target_pace": "4:16/km",
+            "description": "Short blocks at goal pace.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              },
+              {
+                "repeat": 2,
+                "description": "Race pace",
+                "distance_km": 1,
+                "duration_min": 0,
+                "target_pace": "4:16/km"
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2,
+                "duration_min": 0,
+                "target_pace": "5:11-6:13/km"
+              }
+            ],
+            "date": "2027-01-05"
+          },
+          {
+            "day": "Thu",
+            "type": "easy",
+            "title": "Easy 3 km",
+            "distance_km": 3,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Very relaxed.",
+            "steps": [],
+            "date": "2027-01-07"
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "title": "Shakeout 3 km",
+            "distance_km": 3,
+            "duration_min": 0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Just loosen the legs.",
+            "steps": [],
+            "date": "2027-01-09"
+          },
+          {
+            "day": "Sun",
+            "type": "race",
+            "title": "Half marathon race day",
+            "distance_km": 21.0975,
+            "duration_min": 0,
+            "target_pace": "4:16/km",
+            "description": "Even effort, then empty the tank in the last 5 km.",
+            "steps": [],
+            "date": "2027-01-10"
+          }
+        ],
+        "start_date": "2027-01-04"
+      }
+    ]
+  }
+}
