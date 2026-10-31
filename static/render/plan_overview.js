@@ -1,7 +1,7 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
-  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, fullPlanVersionCheck, labelled,
-  line, link, main, notice, planPath, postJson, refresh, stale, statStrip, statusLine, table, textarea, viewToken,
+  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
+  line, link, main, muted, notice, planPath, postJson, refresh, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -69,12 +69,10 @@ function recentEdits({ meta }) {
 function adaptSection(planFile, proposals, bases) {
   const status = statusLine();
   const scope = el("select");
-  scope.id = "adapt-scope";
   scope.add(new Option("This week", "this_week"));
   scope.add(new Option("Next 2 weeks", "next_2_weeks"));
   scope.add(new Option("Rest of plan", "rest_of_plan"));
-  const context = textarea(2, 50);
-  context.id = "adapt-context";
+  const context = textarea(2);
   const prefilled = editMemo.adaptContext;
   editMemo.adaptContext = "";
   context.value = prefilled;
@@ -120,8 +118,7 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   if (readOnly) return section;
 
   const status = statusLine();
-  const text = textarea(3, 60);
-  text.id = "chat-text";
+  const text = textarea(3);
   const send = button("Send", status, async () => {
     if (!text.value.trim()) throw new Error("Write a message first.");
     await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
@@ -164,9 +161,7 @@ function progressSection(planFile, progress, readOnly) {
 
 function usageFooter(usage) {
   const cost = usage.unpriced_models.length ? `$${usage.cost_usd} plus ${usage.unpriced_models.join(", ")}` : `$${usage.cost_usd}`;
-  const text = el("p", `Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`);
-  text.className = "muted";
-  return text;
+  return muted(`Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`, "p");
 }
 
 export const daysToGo = (days) => (days >= 0 ? `${days} days to go` : "race day has passed");
@@ -199,17 +194,9 @@ function doneText(session) {
   return actual.filter(Boolean).join(" · ");
 }
 
-function sessionRow(planFile, session, when, facts, done) {
-  const row = link("", `${planPath(planFile.meta.id)}/sessions/${session.week_number}/${session.index}`);
-  row.className = "row-link";
-  const title = el("span", `${when}: ${session.title}`);
-  title.className = "row-title";
-  const meta = el("span", facts);
-  meta.className = "row-meta";
-  row.append(title, meta);
-  if (done) row.append(chip("done"));
-  return row;
-}
+const sessionRow = (planFile, session, when, facts, done) => rowLink(
+  `${planPath(planFile.meta.id)}/sessions/${session.week_number}/${session.index}`, `${when}: ${session.title}`, facts, done && chip("done"),
+);
 
 // The plan's week to show: the current one, week 1 before the start, none once it's over.
 function shownWeek(status) {
@@ -250,8 +237,7 @@ function thisWeekSection(planFile, status, metrics) {
 // Draft actions. `form` is present on the generator page, where field edits count too.
 export function draftActions(planFile, status, form, formRequest) {
   const encoded = encodeURIComponent(planFile.meta.id);
-  const feedback = textarea(3, 50);
-  feedback.id = "feedback";
+  const feedback = textarea(3);
   const accept = button("Accept plan", status, async () => {
     const active = await activePlan();
     if (active && !confirm(`This replaces your current plan '${active.request.goal_description}'`)) return;
@@ -298,7 +284,6 @@ export async function planOverview(id) {
   const token = viewToken();
   const encoded = encodeURIComponent(id);
   const planFile = await api(`/api/plans/${encoded}`);
-  fullPlanVersionCheck(planFile);
   const isDraft = planFile.meta.status === "draft";
   const isActive = planFile.meta.status === "active";
   const [status, metrics, usage] = await Promise.all([

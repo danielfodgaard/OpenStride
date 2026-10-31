@@ -16,6 +16,7 @@ from app.garmin import delivery, provider, router as garmin_router
 from app.garmin.provider import GarminError
 from app.models import PlanFile
 from test_review import reply as review_reply
+from conftest import save_secret
 
 FAKE_TOKEN = "fake-garmin-token-zebra"
 WEEK = 3
@@ -31,10 +32,10 @@ class FakePusher:
     def can_push_workouts(self):
         return True
 
-    def push_workout(self, workout_fit_bytes, workout_json, day):
+    def push_workout(self, workout_json, day):
         if day in self.fail_on:
             raise GarminError("Garmin request failed (Timeout).")
-        self.pushes.append((workout_fit_bytes, workout_json, day))
+        self.pushes.append((workout_json, day))
         return f"w{len(self.pushes)}"
 
     def delete_workout(self, workout_id):
@@ -105,7 +106,7 @@ def test_sync_in_mode_off_is_501(client):
 def test_status_for_a_connected_mode(client, monkeypatch):
     set_mode(monkeypatch, push="unofficial")
     monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_TOKEN)
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     body = client.get("/api/garmin/status").json()
     assert body["push"] == "unofficial" and body["connected"] and body["can_push_workouts"]
     assert FAKE_TOKEN not in json.dumps(body)
@@ -177,8 +178,8 @@ def test_send_session_schedules_on_the_session_date(client, plan, pusher):
     session = plan.plan.weeks[WEEK - 1].sessions[index]
     body = client.post(f"/api/plans/plan/sessions/{WEEK}/{index}/send-to-garmin").json()
     assert body == {"workout_id": "w1", "scheduled_date": session.date.isoformat(), "notes": []}
-    fit, json_body, day = pusher.pushes[0]
-    assert day == session.date and fit[8:12] == b".FIT" and json_body["workoutName"] == workout_fit.workout_name(session)
+    json_body, day = pusher.pushes[0]
+    assert day == session.date and json_body["workoutName"] == workout_fit.workout_name(session)
     saved = delivery.load_sent("plan")[f"{WEEK}/{index}"]
     assert saved["workout_id"] == "w1" and saved["hash"] == workout_fit.fingerprint(session)
 
@@ -241,7 +242,7 @@ def test_week_skips_past_and_done_sessions(client, plan, pusher, monkeypatch):
     activities.import_files([("r.fit", Path("examples/activities/2026-11-03_tue_easy_easy-run.fit").read_bytes())], "", 0)
     ahead = [s for s in week_one.sessions if s.modality == "run" and s.date > tuesday.date]
     assert client.post("/api/plans/plan/weeks/1/send-to-garmin").json()["sent"] == len(ahead)
-    assert all(day > tuesday.date for _, _, day in pusher.pushes)
+    assert all(day > tuesday.date for _, day in pusher.pushes)
 
 
 def test_week_status_counts_sent_and_changed(client, plan, pusher):
@@ -303,7 +304,7 @@ def test_the_real_unofficial_push_path_through_the_router(client, plan, monkeypa
     from garminconnect import Garmin
 
     set_mode(monkeypatch, push="unofficial")
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
     cls = create_autospec(Garmin)
     cls.return_value.login.return_value = (None, None)
     cls.return_value.upload_workout.return_value = {"workoutId": 41}
@@ -325,7 +326,7 @@ def test_tokens_stay_in_secrets_and_out_of_everything_else(client, plan, monkeyp
 
     caplog.set_level(logging.DEBUG)
     set_mode(monkeypatch, push="unofficial")
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
     cls = create_autospec(Garmin)
     cls.return_value.login.return_value = (None, None)
     cls.return_value.upload_workout.side_effect = RuntimeError(f"401 for {FAKE_TOKEN}")

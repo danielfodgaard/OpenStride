@@ -1,5 +1,7 @@
-"""Garmin endpoints. With a capability off these say so, except what needs no Garmin."""
-from dataclasses import asdict
+"""Garmin endpoints. With a capability off these say so, except what needs no Garmin.
+
+A GarminError that reaches a route becomes a 502 through the handler in main.py.
+"""
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, Response
@@ -8,7 +10,7 @@ from pydantic import BaseModel
 
 from app import lifecycle, workout_fit
 from app.garmin import delivery, login, sync
-from app.garmin.provider import GarminError, disconnect, make_pusher, push_mode, push_refusal, status, sync_mode
+from app.garmin.provider import disconnect, make_pusher, push_mode, push_refusal, status, sync_mode
 
 router = APIRouter()
 
@@ -24,10 +26,6 @@ class CodeBody(BaseModel):
 
 def not_configured(error: str = "garmin_not_configured") -> JSONResponse:
     return JSONResponse({"error": error}, status_code=501)
-
-
-def refused(error: GarminError) -> JSONResponse:
-    return JSONResponse({"error": "garmin_error", "detail": str(error)}, status_code=502)
 
 
 def pusher():
@@ -63,29 +61,17 @@ def login_refused(request: Request) -> JSONResponse | None:
 
 @router.get("/api/garmin/status")
 def garmin_status(request: Request):
-    return asdict(status()) | {"login_allowed": login_address_allowed(request)}
+    return status() | {"login_allowed": login_address_allowed(request)}
 
 
 @router.post("/api/garmin/login")
 def garmin_login(body: LoginBody, request: Request):
-    answer = login_refused(request)
-    if answer:
-        return answer
-    try:
-        return {"status": login.start(body.email, body.password)}
-    except GarminError as error:
-        return refused(error)
+    return login_refused(request) or {"status": login.start(body.email, body.password)}
 
 
 @router.post("/api/garmin/login/mfa")
 def garmin_login_code(body: CodeBody, request: Request):
-    answer = login_refused(request)
-    if answer:
-        return answer
-    try:
-        return {"status": login.finish(body.code)}
-    except GarminError as error:
-        return refused(error)
+    return login_refused(request) or {"status": login.finish(body.code)}
 
 
 @router.post("/api/garmin/disconnect")
@@ -120,10 +106,7 @@ def send_session(plan_id: str, week: int, index: int):
     plan_file = lifecycle.require_active(plan_id)
     if delivery.session_at(plan_file, week, index).modality != "run":
         return JSONResponse({"error": "not_a_run"}, status_code=422)
-    try:
-        return delivery.send_session(provider, plan_file, week, index)
-    except GarminError as error:
-        return refused(error)
+    return delivery.send_session(provider, plan_file, week, index)
 
 
 @router.get("/api/plans/{plan_id}/weeks/{number}/garmin")

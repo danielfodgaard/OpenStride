@@ -15,10 +15,7 @@ Sessions can carry the athlete's own edits: status "skipped" was their choice an
 
 
 def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str, today) -> str:
-    session = None
-    if activity.match.session_index >= 0:
-        week = next(w for w in plan_file.plan.weeks if w.week_number == activity.match.week_number)
-        session = week.sessions[activity.match.session_index]
+    session = plan_file.session_at(activity.match.week_number, activity.match.session_index) if plan_file else None
     planned = session.model_dump_json(indent=2) if session else "Unplanned run"
     if session and session.status == "replaced":
         planned = f"The athlete did something else instead. Planned {session.title}, did the run below. Judge the run on what it was, not against this plan:\n{planned}"

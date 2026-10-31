@@ -9,11 +9,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import activities, generator, lifecycle, logbook, main, metrics, review, storage
+from app import activities, generator, lifecycle, main, metrics, review, storage
 from app.garmin import provider, sync
 from app.garmin.provider import GarminError, RemoteActivity
 from app.models import PlanFile
 from test_review import reply as review_reply
+from conftest import save_secret
 
 SAMPLES = Path("examples/activities")
 TOP_LEVEL = [path.name for path in sorted(SAMPLES.glob("*.fit"))]
@@ -210,7 +211,7 @@ def test_since_overlaps_the_last_sync_for_late_uploads():
 def test_a_run_uploaded_after_the_last_sync_is_still_found():
     add_active()
     fake = FakeProvider(TOP_LEVEL[:1])
-    provider.write_json(provider.state_path(), {"last_sync_at": fake.items[0].start_time.isoformat()})
+    storage.write_json(provider.state_path(), {"last_sync_at": fake.items[0].start_time.isoformat()})
     assert len(sync.sync(fake)["imported"]) == 1
 
 
@@ -222,7 +223,7 @@ def test_a_listing_error_is_recorded_in_status_without_raising():
     result = sync.sync(Broken())
     assert result["imported"] == [] and "refused" in result["warnings"][0]
     status = provider.status()
-    assert "refused" in status.last_error and status.last_sync_at is None
+    assert "refused" in status["last_error"] and status["last_sync_at"] is None
 
 
 def test_an_unexpected_provider_error_is_recorded_without_its_text():
@@ -414,7 +415,7 @@ def test_the_demo_never_starts_background_sync(monkeypatch):
 def test_a_secret_never_reaches_stored_files_or_logs(caplog):
     caplog.set_level(logging.DEBUG)
     add_active()
-    provider.save_secret(provider.PERSONAL_BEARER_FILE, FAKE_TOKEN)
+    save_secret(provider.PERSONAL_BEARER_FILE, FAKE_TOKEN)
 
     class Leaky(FakeProvider):
         def download_fit(self, remote_id):
@@ -446,7 +447,7 @@ def test_the_setup_line_gives_each_state_without_the_key(monkeypatch):
     set_settings(monkeypatch, push="unofficial", minutes=30)
     monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_TOKEN)
     monkeypatch.setattr(provider.PersonalApiProvider, "call", lambda self, request: None)
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     line = sync.setup_line()
     assert line == f"Garmin: sync=personal_api (key set, {len(FAKE_TOKEN)} chars), push=unofficial (logged in), auto-sync every 30 min"
     assert FAKE_TOKEN not in line

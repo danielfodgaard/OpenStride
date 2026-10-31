@@ -200,6 +200,17 @@ class PlanFile(BaseModel):
     paces: Paces
     plan: DatedPlan
 
+    def week(self, number: int) -> DatedWeek | None:
+        return next((w for w in self.plan.weeks if w.week_number == number), None)
+
+    def week_of(self, day: date) -> DatedWeek | None:
+        return next((w for w in self.plan.weeks if w.start_date <= day <= w.start_date + timedelta(days=6)), None)
+
+    def session_at(self, week: int, index: int) -> DatedSession | None:
+        """None for a week or index the plan doesn't have, including an unplanned match's -1."""
+        found = self.week(week)
+        return found.sessions[index] if found and 0 <= index < len(found.sessions) else None
+
 
 class Lap(BaseModel):
     index: int

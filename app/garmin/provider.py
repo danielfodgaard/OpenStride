@@ -14,7 +14,6 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Protocol
 
 from app import config, storage
 from app.config import settings
@@ -48,22 +47,6 @@ class GarminError(Exception):
     """Its text is safe to store and show."""
 
 
-class NotSupported(GarminError):
-    pass
-
-
-@dataclass
-class GarminStatus:
-    sync: str
-    push: str
-    connected: bool  # a Personal API key is set
-    last_sync_at: str | None
-    last_error: str | None
-    can_push_workouts: bool
-    push_connected: bool  # an unofficial login token is saved
-    push_blocked: str | None  # why sending is refused
-
-
 @dataclass
 class RemoteActivity:
     id: str
@@ -76,14 +59,6 @@ class RemoteActivity:
     max_hr: int = 0
 
 
-class GarminProvider(Protocol):
-    def list_activities(self, since: datetime) -> list[RemoteActivity]: ...
-    def download_fit(self, remote_id: str) -> bytes: ...  # b"" when the download holds no .fit
-    def can_push_workouts(self) -> bool: ...
-    def push_workout(self, workout_fit: bytes, workout_json: dict, day: date) -> str: ...
-    def delete_workout(self, workout_id: str) -> None: ...
-
-
 def state_path() -> Path:
     return storage.DATA_DIR / "garmin_state.json"
 
@@ -91,10 +66,6 @@ def state_path() -> Path:
 def load_state() -> dict:
     path = state_path()
     return json.loads(path.read_text()) if path.exists() else {}
-
-
-def write_json(path: Path, data: dict) -> None:
-    storage.write_json(path, json.dumps(data, indent=2))
 
 
 def secrets_dir() -> Path:
@@ -113,11 +84,6 @@ def token_dir() -> Path:
 
 def disconnect() -> None:
     shutil.rmtree(storage.DATA_DIR / "secrets" / storage.UNOFFICIAL_TOKEN_DIR, ignore_errors=True)
-
-
-def save_secret(name: str, value: str) -> None:
-    token_dir()
-    storage.write_file(secrets_dir() / name, value, mode=0o600)
 
 
 def has_secret(name: str) -> bool:
@@ -176,30 +142,39 @@ def fit_from_download(content: bytes) -> bytes:
         return b""
 
 
-def status() -> GarminStatus:
+def status() -> dict:
     state = load_state()
-    connected = sync_mode() != "off" and bool(personal_key())
     token = has_secret(UNOFFICIAL_TOKEN_FILE)
     blocked = push_refusal() if push_mode() != "off" else None
-    can_push = push_mode() != "off" and token and not blocked
-    return GarminStatus(sync_mode(), push_mode(), connected, state.get("last_sync_at"), state.get("last_error"), can_push, token, blocked)
+    return {
+        "sync": sync_mode(),
+        "push": push_mode(),
+        "connected": sync_mode() != "off" and bool(personal_key()),  # a Personal API key is set
+        "last_sync_at": state.get("last_sync_at"),
+        "last_error": state.get("last_error"),
+        "can_push_workouts": push_mode() != "off" and token and not blocked,
+        "push_connected": token,  # an unofficial login token is saved
+        "push_blocked": blocked,  # why sending is refused
+    }
 
 
 class NullProvider:
+    """What every provider can be asked; a read or write it doesn't support raises."""
+
     def list_activities(self, since: datetime) -> list[RemoteActivity]:
         raise GarminError("Garmin is not set up.")
 
-    def download_fit(self, remote_id: str) -> bytes:
+    def download_fit(self, remote_id: str) -> bytes:  # b"" when the download holds no .fit
         raise GarminError("Garmin is not set up.")
 
     def can_push_workouts(self) -> bool:
         return False
 
-    def push_workout(self, workout_fit: bytes, workout_json: dict, day: date) -> str:
-        raise NotSupported("Garmin is not set up.")
+    def push_workout(self, workout_json: dict, day: date) -> str:
+        raise GarminError("Garmin is not set up.")
 
     def delete_workout(self, workout_id: str) -> None:
-        raise NotSupported("Garmin is not set up.")
+        raise GarminError("Garmin is not set up.")
 
 
 class PersonalApiProvider(NullProvider):
@@ -283,7 +258,7 @@ class UnofficialProvider(NullProvider):
     def can_push_workouts(self) -> bool:
         return True
 
-    def push_workout(self, workout_fit: bytes, workout_json: dict, day: date) -> str:
+    def push_workout(self, workout_json: dict, day: date) -> str:
         with guarded():
             client = self.client()
             workout_id = client.upload_workout(workout_json)["workoutId"]
@@ -325,11 +300,11 @@ def push_mode() -> str:
     return "off" if os.environ.get("OPENSTRIDE_DEMO") else settings.garmin_push
 
 
-def make_provider() -> GarminProvider:
+def make_provider() -> NullProvider:
     """For reading activities."""
     return PersonalApiProvider() if sync_mode() == "personal_api" else NullProvider()
 
 
-def make_pusher() -> GarminProvider:
+def make_pusher() -> NullProvider:
     """For sending workouts."""
     return UnofficialProvider() if push_mode() == "unofficial" else NullProvider()

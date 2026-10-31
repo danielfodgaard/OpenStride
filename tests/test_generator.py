@@ -7,7 +7,7 @@ import pytest
 
 from app import storage
 from app.generator import GenerationError, generate_plan
-from app.models import PlanFile, SavedRequest
+from app.models import SavedRequest
 from app.clock import week_starts
 
 SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())

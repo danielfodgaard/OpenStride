@@ -5,15 +5,6 @@ from app.models import ManualActivity, Match, PlanFile
 LABELS = {"strength": "Strength", "cross": "Cross-training", "run": "Run"}
 
 
-def match_entry(entry: ManualActivity, plan_file: PlanFile) -> Match:
-    found = activities.closest_session(
-        activities.sessions_on(plan_file, entry.date, entry.modality), entry.distance_km
-    )
-    if found is None:
-        return Match()
-    return Match(planned_date=entry.date.isoformat(), week_number=found[0], session_index=found[1])
-
-
 def summary_line(entry: ManualActivity) -> str:
     parts = [f"{LABELS[entry.modality]} {entry.duration_min} min"]
     if entry.distance_km:
@@ -35,20 +26,13 @@ def all_items(plan_id: str) -> list[dict]:
     return sorted([*files, *(as_item(m) for m in storage.list_manual(plan_id))], key=lambda item: item["date"])
 
 
-def planned_session(match: Match, plan_file: PlanFile | None):
-    if plan_file is None or match.session_index < 0:
-        return None
-    week = next((w for w in plan_file.plan.weeks if w.week_number == match.week_number), None)
-    return week.sessions[match.session_index] if week and match.session_index < len(week.sessions) else None
-
-
 def workout_item(item: dict, plans: dict) -> dict:
     """An item for the Workouts page: title, and which plan and session it counts for."""
     plan_id = item["plan_id"]
     if plan_id not in plans:
         plans[plan_id] = storage.load_plan(plan_id) if plan_id else None
     plan_file = plans[plan_id]
-    session = planned_session(Match(**item["match"]), plan_file)
+    session = plan_file.session_at(item["match"]["week_number"], item["match"]["session_index"]) if plan_file else None
     title = session.title if session else (item["title"] if item.get("manual") else item["source_file"])
     label = f"{plan_file.request.goal_description} · Week {item['match']['week_number']} {session.day}" if session else "Unplanned"
     return item | {
@@ -102,10 +86,8 @@ def create(plan_id: str | None, fields: dict) -> ManualActivity:
     with storage.workout_lock(owner):
         entry = ManualActivity(id=storage.new_manual_id(owner, fields["date"]), plan_id=owner, match=Match(), **fields)
         if plan_file:
-            entry.match = match_entry(entry, plan_file)
-            entry.title = entry.title.strip() or planned_title(entry, plan_file)
-        else:
-            entry.title = entry.title.strip() or LABELS[entry.modality]
+            entry.match = activities.match_activity(entry, plan_file)
+        entry.title = entry.title.strip() or (planned_title(entry, plan_file) if plan_file else LABELS[entry.modality])
         storage.save_manual(entry)
         if plan_file:
             metrics.refresh(plan_file)
@@ -132,7 +114,7 @@ def edit(manual_id: str, changes: dict, match: tuple[int, int] | None) -> Manual
                     entry.id = storage.new_manual_id(entry.plan_id, entry.date)
                     storage.delete_manual(old)
         elif moved and entry.plan_id:
-            entry.match = match_entry(entry, plan_file)
+            entry.match = activities.match_activity(entry, plan_file)
         storage.save_manual(entry)
         if plan_file:
             metrics.refresh(plan_file)

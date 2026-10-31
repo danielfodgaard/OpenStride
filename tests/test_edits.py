@@ -413,7 +413,7 @@ class FakePusher:
     def can_push_workouts(self):
         return True
 
-    def push_workout(self, data, workout_json, day):
+    def push_workout(self, workout_json, day):
         self.pushed.append(day)
         return f"new-{len(self.pushed)}"
 
@@ -425,7 +425,7 @@ class FakePusher:
 def garmin(monkeypatch):
     fake = FakePusher()
     monkeypatch.setattr(provider, "make_pusher", lambda: fake)
-    monkeypatch.setattr(provider, "status", lambda: type("S", (), {"can_push_workouts": True})())
+    monkeypatch.setattr(provider, "status", lambda: {"can_push_workouts": True})
     delivery.send_session(fake, storage.load_plan("plan"), 1, 0)
     fake.pushed.clear()
     return fake
@@ -476,7 +476,7 @@ def test_a_garmin_failure_never_undoes_the_edit(garmin):
 
 
 def test_with_push_off_the_athlete_is_told(garmin, monkeypatch):
-    monkeypatch.setattr(provider, "status", lambda: type("S", (), {"can_push_workouts": False})())
+    monkeypatch.setattr(provider, "status", lambda: {"can_push_workouts": False})
     problems = run_edit("move", to_date=date(2026, 11, 4))
     assert ".fit" in problems[0] and garmin.pushed == []
     assert next(iter(delivery.load_sent("plan"))) in {"1/0", "1/1", "1/2"}  # the mapping still follows

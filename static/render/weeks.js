@@ -1,6 +1,6 @@
 // The weeks page: one foldable block per week, and a linked row per session.
 import {
-  USB_HELP, actions, api, breadcrumb, button, chip, el, fitButton, fullPlanVersionCheck, garminStatus, line, link, main,
+  USB_HELP, actions, api, breadcrumb, button, chip, el, fitButton, garminStatus, line, link, main, muted,
   planPath, refresh, rowLinks, stale, statusLine, table, toast, viewToken,
 } from "./ui.js";
 import { DAYS, actualText, addDays, amountText, dateText, roundKm } from "./format.js";
@@ -49,11 +49,9 @@ function watchBlock(id, week, workouts, today, garmin, changed) {
   const path = `/api/plans/${encodeURIComponent(id)}/weeks/${week.week_number}/send-to-garmin`;
   const box = el("div");
   box.className = "field";
-  const help = el("p", USB_HELP);
-  help.className = "muted";
   box.append(el("h4", "To your watch"), actions(...undone.map(({ session, index }) => (
     fitButton(id, week.week_number, index, session, status, `${session.day}: ${session.title} .fit`)
-  ))), help);
+  ))), muted(USB_HELP, "p"));
   if (garmin?.can_push_workouts) {
     const send = actions(button("Send week to Garmin", status, async () => {
       sendResult(await api(path, { method: "POST" }), status);
@@ -122,7 +120,7 @@ function weekBlock(week, volume, planFile, workouts, today, open, onToggle, watc
   const lines = body.querySelector("tbody").rows;
   rows.forEach((row, i) => {
     if (row.href) rowLinks(lines[i], row.href);
-    if (row.drag !== null && row.drag !== undefined) dragSource(lines[i], id, week, row.drag);
+    if (row.drag !== null && row.drag !== undefined) dragSource(lines[i], week, row.drag);
     if (row.drop) dropTarget(lines[i], id, row.drop);
   });
   box.append(body);
@@ -135,7 +133,6 @@ export async function weeksView(id, openWeek) {
   const token = viewToken();
   const encoded = encodeURIComponent(id);
   const planFile = await api(`/api/plans/${encoded}`);
-  fullPlanVersionCheck(planFile);
   const metrics = await api(`/api/plans/${encoded}/metrics`);
   const workouts = planFile.meta.status === "draft" ? [] : await api(`/api/activities?plan_id=${encoded}`);
   const active = planFile.meta.status === "active";

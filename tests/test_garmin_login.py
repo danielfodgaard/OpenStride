@@ -19,6 +19,7 @@ from garminconnect.exceptions import GarminConnectAuthenticationError
 
 from app import cli, config, logsafe, main, storage
 from app.garmin import login, provider
+from conftest import save_secret
 
 PASSWORD = "fake-password-zebra"
 TOKEN = "fake-session-token-zebra"
@@ -140,7 +141,7 @@ def expose(monkeypatch, password=""):
 
 
 def test_an_exposed_server_refuses_sending_and_says_why(client, monkeypatch):
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     expose(monkeypatch)
     body = client.get("/api/garmin/status").json()
     assert not body["can_push_workouts"] and "OPENSTRIDE_PASSWORD" in body["push_blocked"]
@@ -169,7 +170,7 @@ def test_disconnect_deletes_the_token_and_turns_sending_off(client):
 
 
 def test_the_cli_disconnects_too(monkeypatch, capsys):
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     monkeypatch.setattr(sys, "argv", ["openstride", "garmin-disconnect"])
     cli.main()
     assert not token_path().exists() and "deleted" in capsys.readouterr().out
@@ -177,8 +178,8 @@ def test_the_cli_disconnects_too(monkeypatch, capsys):
 
 @pytest.mark.parametrize("include", [False, True])
 def test_backups_never_hold_the_login_token(tmp_path, include):
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, TOKEN)
-    provider.save_secret(provider.PERSONAL_BEARER_FILE, "bearer")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, TOKEN)
+    save_secret(provider.PERSONAL_BEARER_FILE, "bearer")
     with zipfile.ZipFile(storage.write_backup(tmp_path / "out", include)) as archive:
         names = archive.namelist()
     assert not any("garmin-unofficial" in name for name in names)
@@ -186,13 +187,13 @@ def test_backups_never_hold_the_login_token(tmp_path, include):
 
 
 def test_only_workout_writes_reach_the_unofficial_client(monkeypatch):
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     mocked = create_autospec(Garmin)
     mocked.return_value.login.return_value = (None, None)
     mocked.return_value.upload_workout.return_value = {"workoutId": 7}
     monkeypatch.setattr(garminconnect, "Garmin", mocked)
     pusher = provider.UnofficialProvider()
-    assert pusher.push_workout(b"", {}, date(2026, 11, 3)) == "7"
+    assert pusher.push_workout({}, date(2026, 11, 3)) == "7"
     pusher.delete_workout("7")
     called = {call[0] for call in mocked.return_value.mock_calls}
     assert called == {"login", "upload_workout", "schedule_workout", "push_workout_to_device", "delete_workout"}

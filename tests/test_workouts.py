@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import generator, lifecycle, logbook, main, metrics, progress, storage
+from app import generator, lifecycle, main, metrics, progress, storage
 from app.models import PlanFile
 from test_review import reply as review_reply
 

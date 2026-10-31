@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import activities, adapt, generator, lifecycle, main, storage
+from app import activities, adapt, lifecycle, main, storage
 from app.models import AdaptationResult, PlanFile, Week
 from test_generator import FakeClient, reply
 

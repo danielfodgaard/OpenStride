@@ -17,7 +17,8 @@ from garminconnect.exceptions import GarminConnectAuthenticationError, GarminCon
 
 from app import storage
 from app.garmin import provider
-from app.garmin.provider import GarminError, NotSupported, PersonalApiProvider, UnofficialProvider
+from app.garmin.provider import GarminError, PersonalApiProvider, UnofficialProvider
+from conftest import save_secret
 
 FAKE_KEY = "fake-personal-key-zebra"
 FAKE_REFRESH = "fake-refresh-token-zebra"
@@ -86,7 +87,7 @@ def personal(monkeypatch):
 @pytest.fixture
 def mocked(monkeypatch):
     """A Garmin class with the installed library's real signatures: a wrong call raises TypeError."""
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_REFRESH}))
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_REFRESH}))
     cls = create_autospec(Garmin)
     instance = cls.return_value
     instance.ActivityDownloadFormat = Garmin.ActivityDownloadFormat
@@ -179,8 +180,8 @@ def test_personal_api_without_a_key_says_how_to_connect():
 
 
 def test_personal_api_cannot_push():
-    with pytest.raises(NotSupported):
-        PersonalApiProvider().push_workout(b"", {}, date(2026, 11, 3))
+    with pytest.raises(GarminError):
+        PersonalApiProvider().push_workout({}, date(2026, 11, 3))
 
 
 def test_an_odd_activity_shape_is_reported_without_values():
@@ -190,12 +191,12 @@ def test_an_odd_activity_shape_is_reported_without_values():
 
 
 def test_unofficial_resumes_saved_tokens_without_a_password(mocked):
-    UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
+    UnofficialProvider().push_workout({}, date(2026, 11, 3))
     mocked.login.assert_called_once_with(tokenstore=str(storage.DATA_DIR / "secrets" / "garmin-unofficial"))
 
 
 def test_unofficial_push_uploads_schedules_and_sends_to_the_watch(mocked):
-    workout_id = UnofficialProvider().push_workout(b"", {"workoutName": "Easy"}, date(2026, 11, 3))
+    workout_id = UnofficialProvider().push_workout({"workoutName": "Easy"}, date(2026, 11, 3))
     assert workout_id == "777"
     mocked.upload_workout.assert_called_once_with({"workoutName": "Easy"})
     mocked.schedule_workout.assert_called_once_with(777, "2026-11-03")
@@ -204,27 +205,27 @@ def test_unofficial_push_uploads_schedules_and_sends_to_the_watch(mocked):
 
 def test_a_failed_device_push_keeps_the_scheduled_workout(mocked):
     mocked.push_workout_to_device.side_effect = GarminConnectConnectionError("no device")
-    assert UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3)) == "777"
+    assert UnofficialProvider().push_workout({}, date(2026, 11, 3)) == "777"
     mocked.delete_workout.assert_not_called()
 
 
 def test_a_failed_schedule_removes_the_upload(mocked):
     mocked.schedule_workout.side_effect = GarminConnectConnectionError("calendar down")
     with pytest.raises(GarminError):
-        UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
+        UnofficialProvider().push_workout({}, date(2026, 11, 3))
     mocked.delete_workout.assert_called_once_with(777)
 
 
 def test_rejected_tokens_ask_for_a_new_login(mocked):
     mocked.login.side_effect = GarminConnectAuthenticationError(f"bad {FAKE_REFRESH}")
     with pytest.raises(GarminError, match="Garmin settings") as caught:
-        UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
+        UnofficialProvider().push_workout({}, date(2026, 11, 3))
     assert FAKE_REFRESH not in str(caught.value)
 
 
 def test_secrets_are_mode_600_in_a_private_folder():
-    provider.save_secret("x", "1")
-    provider.save_secret("x", "2")
+    save_secret("x", "1")
+    save_secret("x", "2")
     assert stat.S_IMODE((storage.DATA_DIR / "secrets" / "x").stat().st_mode) == 0o600
     assert stat.S_IMODE((storage.DATA_DIR / "secrets").stat().st_mode) == 0o700
 
@@ -259,17 +260,17 @@ def test_the_unofficial_client_can_never_read_activities():
 
 
 def test_status_reads_state_without_calling_garmin():
-    provider.write_json(provider.state_path(), {"last_sync_at": "t", "last_error": "e"})
+    storage.write_json(provider.state_path(), {"last_sync_at": "t", "last_error": "e"})
     status = provider.status()
-    assert (status.sync, status.push, status.connected, status.last_sync_at, status.last_error) == ("off", "off", False, "t", "e")
+    assert [status[key] for key in ("sync", "push", "connected", "last_sync_at", "last_error")] == ["off", "off", False, "t", "e"]
 
 
 def test_status_of_each_capability(monkeypatch):
     set_modes(monkeypatch, "personal_api", "unofficial")
-    assert not provider.status().connected and not provider.status().can_push_workouts
+    assert not provider.status()["connected"] and not provider.status()["can_push_workouts"]
     monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_KEY)
-    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
-    assert provider.status().connected and provider.status().can_push_workouts
+    save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    assert provider.status()["connected"] and provider.status()["can_push_workouts"]
 
 
 def test_the_old_mode_still_sets_both_capabilities(monkeypatch):

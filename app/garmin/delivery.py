@@ -24,10 +24,25 @@ def key_of(week: int, index: int) -> str:
 
 
 def session_at(plan_file: PlanFile, week: int, index: int):
-    found = next((w for w in plan_file.plan.weeks if w.week_number == week), None)
-    if found is None or not 0 <= index < len(found.sessions):
+    session = plan_file.session_at(week, index)
+    if session is None:
         raise storage.NotFound(key_of(week, index))
-    return found.sessions[index]
+    return session
+
+
+def week_of(plan_file: PlanFile, number: int):
+    week = plan_file.week(number)
+    if week is None:
+        raise storage.NotFound(str(number))
+    return week
+
+
+def forget(plan_id: str, key: str) -> None:
+    """After Garmin deleted the workout, the mapping lets go of it too."""
+    with storage.plan_lock(plan_id):
+        sent = load_sent(plan_id)
+        sent.pop(key, None)
+        storage.write_json(sent_path(plan_id), sent)
 
 
 def replace_old(provider, old: dict | None, notes: list[str]) -> None:
@@ -42,8 +57,8 @@ def replace_old(provider, old: dict | None, notes: list[str]) -> None:
 
 def send_session(provider, plan_file: PlanFile, week: int, index: int) -> dict:
     session = session_at(plan_file, week, index)
-    built = workout_fit.build(session)
-    workout_id = provider.push_workout(built.data, workout_fit.garmin_json(session), session.date)
+    _, notes = workout_fit.steps_of(session)
+    workout_id = provider.push_workout(workout_fit.garmin_json(session), session.date)
     with storage.plan_lock(plan_file.meta.id):
         sent = load_sent(plan_file.meta.id)
         old = sent.get(key_of(week, index))
@@ -52,9 +67,9 @@ def send_session(provider, plan_file: PlanFile, week: int, index: int) -> dict:
             "hash": workout_fit.fingerprint(session),
             "scheduled_date": session.date.isoformat(),
         }
-        garmin.write_json(sent_path(plan_file.meta.id), sent)
-    replace_old(provider, old, built.notes)
-    return {"workout_id": workout_id, "scheduled_date": session.date.isoformat(), "notes": built.notes}
+        storage.write_json(sent_path(plan_file.meta.id), sent)
+    replace_old(provider, old, notes)
+    return {"workout_id": workout_id, "scheduled_date": session.date.isoformat(), "notes": notes}
 
 
 def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[str]:
@@ -63,7 +78,7 @@ def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[st
     with storage.plan_lock(plan_id):
         sent = {moved.get(key, key): entry for key, entry in load_sent(plan_id).items()}
         if sent:
-            garmin.write_json(sent_path(plan_id), sent)
+            storage.write_json(sent_path(plan_id), sent)
 
     def session_of(key):
         return session_at(plan_file, *map(int, key.split("/")))
@@ -72,7 +87,7 @@ def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[st
     gone = [key for key in removed if key in sent]
     if not resend and not gone:
         return []
-    if not garmin.status().can_push_workouts:
+    if not garmin.status()["can_push_workouts"]:
         return ["Garmin still has the old copy. Delete it there, and download the workout .fit again if you need it."]
     provider = garmin.make_pusher()
     problems = []
@@ -84,20 +99,10 @@ def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[st
     for key in gone:
         try:
             provider.delete_workout(sent[key]["workout_id"])
-            with storage.plan_lock(plan_id):
-                left = load_sent(plan_id)
-                del left[key]
-                garmin.write_json(sent_path(plan_id), left)
+            forget(plan_id, key)
         except garmin.GarminError as error:
             problems.append(f"Couldn't remove it from Garmin: {error}")
     return problems
-
-
-def week_of(plan_file: PlanFile, number: int):
-    week = next((w for w in plan_file.plan.weeks if w.week_number == number), None)
-    if week is None:
-        raise storage.NotFound(str(number))
-    return week
 
 
 def sendable(plan_file: PlanFile, number: int) -> list[int]:
@@ -134,7 +139,8 @@ def week_summary(plan_file: PlanFile, number: int) -> dict:
 
 def send_week(provider, plan_file: PlanFile, number: int, changed_only: bool) -> dict:
     week = week_of(plan_file, number)
-    changed, gone = stale(plan_file, number, load_sent(plan_file.meta.id))
+    sent = load_sent(plan_file.meta.id)
+    changed, gone = stale(plan_file, number, sent)
     result = {"sent": 0, "failed": [], "notes": []}
     for index in changed if changed_only else sendable(plan_file, number):
         try:
@@ -144,12 +150,8 @@ def send_week(provider, plan_file: PlanFile, number: int, changed_only: bool) ->
             result["failed"].append({"session": week.sessions[index].title, "error": str(error)})
     for key in gone:
         try:
-            provider.delete_workout(load_sent(plan_file.meta.id)[key]["workout_id"])
+            provider.delete_workout(sent[key]["workout_id"])
+            forget(plan_file.meta.id, key)
         except garmin.GarminError as error:
             result["failed"].append({"session": f"Removed session {key}", "error": str(error)})
-            continue
-        with storage.plan_lock(plan_file.meta.id):
-            sent = load_sent(plan_file.meta.id)
-            del sent[key]
-            garmin.write_json(sent_path(plan_file.meta.id), sent)
     return result

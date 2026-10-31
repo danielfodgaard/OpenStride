@@ -9,7 +9,6 @@ from app.models import (
     PlanFile,
     Proposal,
     ReviewMeta,
-    TrainingPlan,
     Usage,
 )
 from app.prompts.adapt import SYSTEM_PROMPT, build_user_prompt
@@ -150,19 +149,19 @@ def reject(proposal_id: str) -> Proposal:
         return proposal
 
 
+def revive(current: PlanFile, version: int, **entry) -> PlanFile:
+    """A new version with an old version's content. History only ever grows. Call it under the plan lock."""
+    new = storage.load_version(current.meta.id, version)
+    new.meta.status = "active"
+    new.meta.version = current.meta.version + 1
+    new.meta.accepted_at = current.meta.accepted_at
+    new.meta.history = [*current.meta.history, HistoryEntry(
+        version=new.meta.version, proposal_id="", accepted_at=lifecycle.now_iso(), **entry,
+    )]
+    replace_plan(new)
+    return new
+
+
 def restore(plan_id: str, version: int) -> PlanFile:
-    """A new version with an old version's content. History only ever grows."""
     with storage.plan_lock(plan_id):
-        current = lifecycle.require_active(plan_id)
-        new = storage.load_version(plan_id, version)
-        new.meta.status = "active"
-        new.meta.version = current.meta.version + 1
-        new.meta.accepted_at = current.meta.accepted_at
-        new.meta.history = [*current.meta.history, HistoryEntry(
-            version=new.meta.version,
-            proposal_id="",
-            accepted_at=lifecycle.now_iso(),
-            rationale=f"Restored version {version}",
-        )]
-        replace_plan(new)
-        return new
+        return revive(lifecycle.require_active(plan_id), version, rationale=f"Restored version {version}")

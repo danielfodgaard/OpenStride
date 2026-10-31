@@ -56,12 +56,9 @@ def trimp(minutes: float, avg_hr: int, hr_max: float, hr_rest: float) -> float:
 
 def session_type(entry: Entry, plan_file: PlanFile) -> str:
     """The planned type, or for unplanned entries what its modality implies."""
-    if entry.match.session_index >= 0:
-        for week in plan_file.plan.weeks:
-            if week.week_number == entry.match.week_number and entry.match.session_index < len(week.sessions):
-                session = week.sessions[entry.match.session_index]
-                if session.status != "replaced":  # a replaced session's load is what was actually done
-                    return session.type
+    session = plan_file.session_at(entry.match.week_number, entry.match.session_index)
+    if session and session.status != "replaced":  # a replaced session's load is what was actually done
+        return session.type
     return {"strength": "strength", "cross": "cross_training"}.get(entry.modality, "unplanned")
 
 

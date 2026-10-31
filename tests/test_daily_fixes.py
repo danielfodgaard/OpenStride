@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import activities, config, lifecycle, main, metrics, progress, storage
-from app.models import ManualActivity, Match, PlanFile
+from app.models import PlanFile
 from app.prompts import adapt, chat, progress as progress_prompt, review as review_prompt
 
 NOT_DUE = "Sessions dated after today are not due yet. Never count them as missed or behind."

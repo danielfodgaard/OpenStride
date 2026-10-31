@@ -17,6 +17,7 @@ export function timeText(seconds) {
 }
 
 const asDate = (iso) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+export const dayMs = (iso) => asDate(iso).getTime();
 
 export function addDays(iso, days) {
   const date = asDate(iso);

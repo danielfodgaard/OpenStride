@@ -1,6 +1,5 @@
 """scripts/phone-access*.sh against a fake `tailscale`. Real Tailscale is not available in tests."""
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path

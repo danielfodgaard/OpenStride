@@ -100,9 +100,8 @@ main {
   grid-template-columns: minmax(0, 1fr);
   padding: 16px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
 }
-.crumbs { font-size: 14px; color: var(--ink-3); }
+.crumbs { font-size: 14px; color: var(--ink-3); margin-block: -8px; }
 .crumbs a, main p > a { display: inline-flex; align-items: center; min-height: 44px; }
-.crumbs { margin-block: -8px; }
 .page-head { display: grid; gap: 6px; }
 .sub { color: var(--ink-2); }
 .muted { color: var(--ink-3); font-size: 14px; }
@@ -118,16 +117,14 @@ section, .fold {
   display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); align-content: start;
 }
 a.big { font: 600 clamp(20px, 5vw, 26px)/1.2 var(--font-display); color: var(--ink); text-underline-offset: 3px; text-decoration-color: var(--accent); }
-details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; }
+details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; }
 details > summary::before { content: "▸"; color: var(--ink-3); flex: none; }
 details[open] > summary::before { content: "▾"; }
 details > summary::-webkit-details-marker { display: none; }
-details > summary { list-style: none; }
 .fold { padding: 4px 16px; display: block; }
 .fold[open] { padding-bottom: 14px; }
 .fold > :not(summary) { margin-top: 10px; }
 .fold > summary { font-family: var(--font-display); font-weight: 600; }
-.week-facts { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 6px 0; }
 
 /* Stat strip */
 .strip {
@@ -223,7 +220,6 @@ svg text { font-family: var(--font-data); fill: var(--ink-3); }
   background: var(--ink); color: var(--bg); font: 500 12px/1.45 var(--font-data);
 }
 .charts-pair { touch-action: pan-y; display: grid; gap: 4px; }
-.route-note { font-size: 13px; color: var(--ink-3); }
 
 /* Toasts */
 .toasts {

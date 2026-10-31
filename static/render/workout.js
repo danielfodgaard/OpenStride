@@ -1,12 +1,12 @@
 // The workout detail page. One renderer for a planned session, a recorded workout, or both.
 import {
   USB_HELP, actions, activePlan, api, breadcrumb, bulletList, button, buttonLink, chip, el, fitButton, garminStatus, input, labelled, line,
-  link, main, notice, patchJson, planPath, refresh, rpeSelect, stale, statStrip, statusLine, table, toast, viewToken,
+  link, main, muted, notice, patchJson, planPath, refresh, rpeSelect, stale, statStrip, statusLine, table, toast, viewToken,
 } from "./ui.js";
 import {
   amountText, clockText, dateText, expandSteps, paceText, shortDate, stepText, targetBand, timeText, utcText,
 } from "./format.js";
-import { drawDistanceCharts, drawRoute, legend } from "../charts.js";
+import { drawDistanceCharts, drawRoute, legend, svgEl } from "../charts.js";
 import { activityButtons, sessionMenu, sessionTitle } from "./session_edit.js";
 
 const OFF_TARGET_S = 5;
@@ -37,7 +37,7 @@ function plannedSection(session, menu) {
   return section;
 }
 
-function summarySection(activity, session) {
+function summarySection(activity, activity_band) {
   const section = el("section");
   section.append(el("h2", "Summary"));
   section.append(statStrip([
@@ -50,16 +50,13 @@ function summarySection(activity, session) {
     ["Elevation gain", Math.round(activity.elevation_gain_m), "m"],
   ]));
   const notes = [];
-  const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
-  if (band && activity.distance_km) {
+  if (activity_band && activity.distance_km) {
     const pace = activity.moving_time_s / activity.distance_km;
-    notes.push(`${pace >= band[0] && pace <= band[1] ? "Within" : "Outside"} planned pace range`);
+    notes.push(`${pace >= activity_band[0] && pace <= activity_band[1] ? "Within" : "Outside"} planned pace range`);
   }
   notes.push(`File ${activity.source_file}`);
   if (activity.start_utc) notes.push(`Stored start ${utcText(activity.start_utc)}`);
-  const facts = el("p", notes.join(" · "));
-  facts.className = "muted";
-  section.append(facts);
+  section.append(muted(notes.join(" · "), "p"));
   return section;
 }
 
@@ -104,7 +101,7 @@ function reviewSection(activity, editable) {
 }
 
 // Route beside the charts on a laptop, stacked on a phone.
-function chartsSections(activity, series, session) {
+function chartsSections(activity, series, band) {
   if (!series) {
     if (activity.has_raw) return [];
     return [el("p", "Re-import the file to see route and charts")];
@@ -119,7 +116,6 @@ function chartsSections(activity, series, session) {
     ]));
     top.append(section);
   }
-  const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
   const charts = drawDistanceCharts(series.points, band, route);
   if (charts) {
     const section = el("section");
@@ -133,15 +129,8 @@ function chartsSections(activity, series, session) {
 }
 
 function paceBar(width) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", 84);
-  svg.setAttribute("height", 8);
-  svg.setAttribute("aria-hidden", "true");
-  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  rect.setAttribute("width", width);
-  rect.setAttribute("height", 6);
-  rect.setAttribute("fill", "var(--pace)");
-  svg.append(rect);
+  const svg = svgEl("svg", { width: 84, height: 8, "aria-hidden": "true" });
+  svg.append(svgEl("rect", { width, height: 6, fill: "var(--pace)" }));
   return svg;
 }
 
@@ -266,9 +255,7 @@ function watchSection(plan, place, session, garmin) {
       toast(`Sent to Garmin for ${shortDate(date)}`);
     }, "Sending…", "primary"));
   }
-  const help = el("p", USB_HELP);
-  help.className = "muted";
-  section.append(el("h2", "To your watch"), buttons, help, status);
+  section.append(el("h2", "To your watch"), buttons, muted(USB_HELP, "p"), status);
   return section;
 }
 
@@ -307,10 +294,11 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
     if (editable) nodes.push(manualEdit(activity));
     if (activity.plan_id) nodes.push(...editButtons());
   } else {
-    nodes.push(...chartsSections(activity, series, session));
+    const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
+    nodes.push(...chartsSections(activity, series, band));
     const laps = lapsSection(activity, session);
     if (laps) nodes.push(laps);
-    nodes.push(summarySection(activity, session));
+    nodes.push(summarySection(activity, band));
     if (session) nodes.push(plannedSection(session));
     nodes.push(reviewSection(activity, editable), ...editButtons());
   }

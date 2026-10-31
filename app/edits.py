@@ -3,10 +3,11 @@
 Sessions are addressed by week and index, and an edit can shift those, so matches and the Garmin
 mapping follow the session itself. Every edit is a new plan version, like an accepted proposal.
 """
-from datetime import date, timedelta
+from datetime import date
 
-from app import activities, clock, lifecycle, metrics, storage
-from app.adapt import replace_plan
+from app import clock, lifecycle, metrics, storage
+from app.activities import plan_entries
+from app.adapt import revive
 from app.garmin.delivery import key_of, session_at
 from app.models import HistoryEntry, Match, PlanFile
 from app.validate import merge_warnings
@@ -23,20 +24,9 @@ def label(session) -> str:
     return f"{session.day} {session.title.lower()}"
 
 
-def week_for(plan_file: PlanFile, day: date):
-    return next((w for w in plan_file.plan.weeks if w.start_date <= day <= w.start_date + timedelta(days=6)), None)
-
-
 def locate(plan_file: PlanFile) -> dict:
     """Each session object's week and index."""
     return {id(s): (w.week_number, i) for w in plan_file.plan.weeks for i, s in enumerate(w.sessions)}
-
-
-def plan_entries(plan_id: str) -> list:
-    return [
-        *((a, storage.save_activity) for a in storage.list_activities(plan_id)),
-        *((m, storage.save_manual) for m in storage.list_manual(plan_id)),
-    ]
 
 
 def run_clash(plan_file: PlanFile, session, day: date, others=()) -> bool:
@@ -49,8 +39,8 @@ def run_clash(plan_file: PlanFile, session, day: date, others=()) -> bool:
 
 def place(plan_file: PlanFile, session, day: date, note: str = "") -> None:
     """The session goes to `day`, and to the week that contains it."""
-    old_week = week_for(plan_file, session.date)
-    new_week = week_for(plan_file, day)
+    old_week = plan_file.week_of(session.date)
+    new_week = plan_file.week_of(day)
     if new_week is None:
         refuse("That date isn't in this plan.")
     original = session.moved_from or session.date
@@ -137,12 +127,9 @@ def load_entry(activity_id: str, plan_id: str):
 
 def assign(plan_file, session, entry, note, done, keys, warnings):
     """Allowed onto a day that has another run: the run happened, so refusing would only lose a fact."""
-    if session.type == "race":
-        refuse("The race can't be changed by hand.")
+    check_free(session, done, keys)
     if entry.match.session_index >= 0:
         refuse("This workout already counts as a planned session.")
-    if keys[id(session)] in done:
-        refuse("This session is already done.")
     if session.modality != entry.modality:
         refuse(f"A {entry.modality} workout can only count as a planned {entry.modality} session.")
     if abs((session.date - entry.date).days) > ASSIGN_DAYS:
@@ -240,7 +227,6 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             entry, save = load_entry(activity_id, plan_id)
             if kind == "assign_activity":
                 summary = assign(new, chosen, entry, note, done, keys, warnings)
-                moved = []
             else:
                 summary = replace(chosen, entry, note, done, keys)
             entry.plan_id = plan_id  # an unattached workout joins the plan it matches
@@ -282,19 +268,7 @@ def undo(plan_id: str) -> dict:
         last = current.meta.history[-1] if current.meta.history else None
         if last is None or last.origin != "manual":
             refuse("There's no hand edit to undo.")
-        new = storage.load_version(plan_id, last.version - 1)
-        new.meta.status = "active"
-        new.meta.version = current.meta.version + 1
-        new.meta.accepted_at = current.meta.accepted_at
-        new.meta.history = [*current.meta.history, HistoryEntry(
-            version=new.meta.version,
-            proposal_id="",
-            accepted_at=lifecycle.now_iso(),
-            rationale=f"Undid: {last.summary}",
-            origin="undo",
-            summary=f"Undid: {last.summary}",
-        )]
-        replace_plan(new)
+        new = revive(current, last.version - 1, rationale=f"Undid: {last.summary}", origin="undo", summary=f"Undid: {last.summary}")
         for entry, save in plan_entries(plan_id):
             if entry.id in last.undo_matches:
                 entry.match = last.undo_matches[entry.id]

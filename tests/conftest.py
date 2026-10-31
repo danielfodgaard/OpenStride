@@ -18,3 +18,12 @@ os.environ |= {
 def no_real_api_key(monkeypatch):
     # main.py loads .env, and no test may spend the developer's real tokens.
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+def save_secret(name: str, value: str) -> None:
+    """A token file as a Garmin login leaves it: in the 700 secrets folder, mode 600."""
+    from app import storage
+    from app.garmin import provider
+
+    provider.token_dir()
+    storage.write_file(provider.secrets_dir() / name, value, mode=0o600)

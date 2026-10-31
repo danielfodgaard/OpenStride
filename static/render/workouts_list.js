@@ -1,13 +1,12 @@
 // The Workouts page: importing, logging and every recorded workout, newest first.
 import {
-  actions, activePlan, api, button, chip, el, foldable, garminStatus, input, labelled, link, main, notice, postJson, refresh,
+  actions, activePlan, api, button, chip, el, foldable, garminStatus, input, labelled, link, main, muted, notice, postJson, refresh,
   rowLinks, rpeSelect, stale, statusLine, table, textarea, toast, viewToken,
 } from "./ui.js";
-import { clockText, monthHeading, shortDate, stepText, timeText } from "./format.js";
+import { clockText, monthHeading, shortDate, timeText } from "./format.js";
 
 let importReport = "";  // survives the re-render after an upload
 let syncReport = "";
-
 
 function garminSection(garmin) {
   const section = el("section");
@@ -21,8 +20,7 @@ function garminSection(garmin) {
     syncReport = result.warnings.join(" ");
     refresh();
   }, "Syncing…", "primary");
-  const last = el("span", garmin.last_sync_at ? `Last sync ${new Date(garmin.last_sync_at).toLocaleString()}` : "Not synced yet");
-  last.className = "muted";
+  const last = muted(garmin.last_sync_at ? `Last sync ${new Date(garmin.last_sync_at).toLocaleString()}` : "Not synced yet");
   section.append(actions(sync, last, link("Garmin settings", "#/garmin")));
   if (garmin.last_error) section.append(notice(garmin.last_error, "critical"));
   section.append(status);
@@ -32,15 +30,13 @@ function garminSection(garmin) {
 function importSection(open) {
   const startOpen = open || Boolean(importReport);
   const status = statusLine();
-  status.id = "import-status";
   status.textContent = importReport;
   importReport = "";
   const files = input("file");
   files.value = "";
   files.multiple = true;
   files.accept = ".fit,.gpx";
-  files.id = "run-files";
-  const note = textarea(2, 50);
+  const note = textarea(2);
   const rpe = rpeSelect();
   const upload = button("Upload", status, async () => {
     if (!files.files.length) throw new Error("Choose at least one .fit or .gpx file.");
@@ -99,26 +95,19 @@ function readExercises(list) {
 function logSection(activePlan, today, prefillDate, open) {
   const status = statusLine();
   const date = input("date", prefillDate || today);
-  date.id = "log-date";
   date.max = today;
   const modality = el("select");
-  modality.id = "log-modality";
   modality.add(new Option("Strength", "strength"));
   modality.add(new Option("Cross-training", "cross"));
   modality.add(new Option("Run", "run"));
   const title = input("text");
-  title.id = "log-title";
   const duration = input("number");
-  duration.id = "log-duration";
   duration.min = "0";
   const distance = input("number");
-  distance.id = "log-distance";
   distance.min = "0";
   distance.step = "any";
   const rpe = rpeSelect();
-  rpe.id = "log-rpe";
   const note = input("text");
-  note.id = "log-note";
   const exercises = el("div");
   const exerciseBox = el("div");
   const addExercise = el("button", "Add exercise");

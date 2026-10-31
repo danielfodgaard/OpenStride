@@ -1,10 +1,9 @@
 // Hand edits: the session menu, the activity buttons, and the toast with Undo. Code applies these, no coach.
-import { actions, api, editMemo, el, input, labelled, notice, planPath, postJson, refresh, statusLine, toast } from "./ui.js";
-import { DAYS, addDays, dateText } from "./format.js";
+import { actions, api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, toast } from "./ui.js";
+import { DAYS, addDays, dateText, dayMs } from "./format.js";
 
 const ASSIGN_DAYS = 6;
-const dayName = (date) => DAYS[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
-const daysApart = (a, b) => Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000;
+const daysApart = (a, b) => Math.abs(dayMs(a) - dayMs(b)) / 86400000;
 
 async function undo(id) {
   document.querySelector("[data-undoable]")?.remove();
@@ -21,7 +20,7 @@ function actionButton(text, action) {
   return b;
 }
 
-export async function sendEdit(id, body) {
+async function sendEdit(id, body) {
   const result = await postJson(`/api/plans/${encodeURIComponent(id)}/edits`, body, id);
   const note = body.note?.trim();
   const ask = actionButton("Ask the coach to check this week", async () => {
@@ -49,22 +48,12 @@ function sheet(title, ...children) {
   return dialog;
 }
 
+// A sheet row: like `button`, and it closes the sheet it sits in once the action went through.
 function option(text, status, action) {
-  const b = el("button", text);
-  b.type = "button";
-  b.className = "sheet-row";
-  b.dataset.online = "";
-  b.addEventListener("click", async () => {
-    b.disabled = true;
-    status.textContent = "Working…";
-    try {
-      await action();
-      b.closest("dialog")?.close();
-    } catch (error) {
-      status.textContent = error.message;
-      b.disabled = false;
-    }
-  });
+  const b = button(text, status, async () => {
+    await action();
+    b.closest("dialog")?.close();
+  }, "Working…", "sheet-row");
   return b;
 }
 
@@ -177,16 +166,10 @@ export function sessionTitle(session, content) {
   title.append(content);
   if (session.status !== "planned") title.className = "struck";
   box.append(title);
-  if (session.status === "skipped") box.append(" ", small("Skipped"));
-  if (session.status === "replaced") box.append(" ", small("Replaced"));
-  if (session.moved_from) box.append(" ", small(`moved from ${dayName(session.moved_from)}`));
+  if (session.status === "skipped") box.append(" ", muted("Skipped"));
+  if (session.status === "replaced") box.append(" ", muted("Replaced"));
+  if (session.moved_from) box.append(" ", muted(`moved from ${dateText(session.moved_from).slice(0, 3)}`));
   return box;
-}
-
-function small(text) {
-  const span = el("span", text);
-  span.className = "muted";
-  return span;
 }
 
 export function editWarnings() {
@@ -199,7 +182,7 @@ export function editWarnings() {
 let dragged = null;
 const canDrag = () => matchMedia("(hover: hover) and (min-width: 900px)").matches;
 
-export function dragSource(row, id, week, index) {
+export function dragSource(row, week, index) {
   if (!canDrag()) return;
   row.draggable = true;
   row.addEventListener("dragstart", (event) => {

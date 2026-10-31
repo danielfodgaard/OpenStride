@@ -22,7 +22,6 @@ import re
 import struct
 import time
 from dataclasses import dataclass, field
-from datetime import date
 
 from app.models import DatedSession, Session, Step
 

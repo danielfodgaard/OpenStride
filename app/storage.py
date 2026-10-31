@@ -60,8 +60,17 @@ def write_file(path: Path, content: str | bytes, mode: int = 0o666) -> None:
         raise
 
 
-def write_json(path: Path, text: str) -> None:
-    write_file(path, text)
+def write_json(path: Path, data: str | dict) -> None:
+    write_file(path, data if isinstance(data, str) else json.dumps(data, indent=2))
+
+
+def free_name(base: str, taken, separator: str) -> str:
+    """`base`, or the first `base<separator>2`, `base<separator>3`… that `taken` says is unused."""
+    name, suffix = base, 1
+    while taken(name):
+        suffix += 1
+        name = f"{base}{separator}{suffix}"
+    return name
 
 
 held_locks = threading.local()
@@ -260,11 +269,7 @@ def activity_path(activity_id: str) -> Path:
 
 
 def new_activity_id(base: str) -> str:
-    activity_id, suffix = base, 1
-    while activity_path(activity_id).exists():
-        suffix += 1
-        activity_id = f"{base}_{suffix}"
-    return activity_id
+    return free_name(base, lambda name: activity_path(name).exists(), "_")
 
 
 def save_activity(activity: ActivitySummary) -> None:
@@ -304,11 +309,7 @@ def load_review(activity_id: str) -> ReviewFile | None:
 
 
 def new_proposal_id(plan_id: str, base: str) -> str:
-    proposal_id, suffix = base, 1
-    while (plan_dir(plan_id) / "proposals" / f"{proposal_id}.json").exists():
-        suffix += 1
-        proposal_id = f"{base}-{suffix}"
-    return proposal_id
+    return free_name(base, lambda name: (plan_dir(plan_id) / "proposals" / f"{name}.json").exists(), "-")
 
 
 def manual_dir(plan_id: str) -> Path:

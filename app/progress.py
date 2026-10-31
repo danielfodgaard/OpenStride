@@ -1,6 +1,6 @@
 """Planned-vs-actual arithmetic, an on-demand LLM summary, and what the plan has cost so far."""
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 from app import activities, clock, generator, lifecycle, logbook, metrics, storage
 from app.models import PlanFile, ProgressFile, ProgressSummary, Proposal, ReviewMeta, Usage
@@ -44,15 +44,9 @@ def planned_vs_actual(plan_file: PlanFile) -> dict:
 
 def session_ref(week, index: int, session, done: dict) -> dict:
     entry = done.get((week.week_number, index))
-    return {
+    return session.model_dump(mode="json", include={"title", "type", "date", "distance_km", "duration_min", "target_pace"}) | {
         "week_number": week.week_number,
         "index": index,
-        "title": session.title,
-        "type": session.type,
-        "date": session.date.isoformat(),
-        "distance_km": session.distance_km,
-        "duration_min": session.duration_min,
-        "target_pace": session.target_pace,
         "done": entry is not None,
         "workout_id": entry.id if entry else "",
         "actual_km": round(entry.km, 2) if entry else 0,
@@ -67,7 +61,7 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     today = today or clock.today()
     weeks = plan_file.plan.weeks
     race = plan_file.request.race_date
-    current = next((w for w in weeks if w.start_date <= today <= w.start_date + timedelta(days=6)), None)
+    current = plan_file.week_of(today)
     entries = metrics.entries(plan_file.meta.id)
     done = {(e.match.week_number, e.match.session_index): e for e in reversed(entries) if e.match.session_index >= 0}
     # To date, plus anything already done: test data and a wrong watch clock can date a run ahead of today.
@@ -108,9 +102,14 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     }
 
 
-def latest_summary(plan_id: str) -> ProgressFile | None:
+def summary_files(plan_id: str) -> list[ProgressFile]:
     paths = sorted((storage.DATA_DIR / "progress").glob(f"{storage.safe_id(plan_id)}_*.json"))
-    return ProgressFile.model_validate_json(paths[-1].read_text()) if paths else None
+    return [ProgressFile.model_validate_json(path.read_text()) for path in paths]
+
+
+def latest_summary(plan_id: str) -> ProgressFile | None:
+    files = summary_files(plan_id)
+    return files[-1] if files else None
 
 
 def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
@@ -135,7 +134,7 @@ def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
         summary=summary,
         meta=ReviewMeta(model=model, created_at=now.isoformat(timespec="seconds"), usage=usage),
     )
-    path = storage.DATA_DIR / "progress" / f"{plan_id}_{now:%Y-%m-%dT%H-%M-%S}.json"
+    path = storage.DATA_DIR / "progress" / f"{storage.safe_id(plan_id)}_{now:%Y-%m-%dT%H-%M-%S}.json"
     storage.write_json(path, progress_file.model_dump_json(indent=2))
     return progress_file
 
@@ -151,11 +150,7 @@ def usage_totals(plan_id: str) -> dict:
         review_file = storage.load_review(run.id)
         if review_file:
             metas.append(review_file.meta)
-    metas += [
-        ProgressFile.model_validate_json(p.read_text()).meta
-        for p in (storage.DATA_DIR / "progress").glob(f"{storage.safe_id(plan_id)}_*.json")
-    ]
-
+    metas += [progress_file.meta for progress_file in summary_files(plan_id)]
     metas += [m for m in storage.all_chat_messages(plan_id) if m.role == "coach"]
 
     cost = 0.0

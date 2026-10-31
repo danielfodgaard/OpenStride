@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 import fitdecode
 import gpxpy
 
-from app import clock, lifecycle, metrics, review, storage
+from app import clock, lifecycle, metrics, review, storage, vdot
 from app.models import ActivitySummary, Lap, Match, PlanFile
 from app.series import build_series
 
@@ -55,10 +55,7 @@ class Parsed:
 
 
 def format_pace(seconds: float, km: float) -> str:
-    if km <= 0:
-        return ""
-    total = round(seconds / km)
-    return f"{total // 60}:{total % 60:02d}/km"
+    return vdot.format_pace(seconds / 60 / km) if km > 0 else ""
 
 
 def distance_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -417,11 +414,16 @@ def sessions_on(plan_file: PlanFile, day, modality: str) -> list:
     ]
 
 
-def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
-    found = closest_session(sessions_on(plan_file, activity.date, activity.modality), activity.distance_km)
+def match_activity(activity, plan_file: PlanFile, day: date | None = None) -> Match:
+    """The planned session of the same kind on `day` (the workout's date unless given) nearest in distance.
+
+    `activity` is an ActivitySummary or a ManualActivity: both have a date, modality and distance.
+    """
+    day = day or activity.date
+    found = closest_session(sessions_on(plan_file, day, activity.modality), activity.distance_km)
     if found is None:
         return Match()
-    return Match(planned_date=activity.date.isoformat(), week_number=found[0], session_index=found[1])
+    return Match(planned_date=day.isoformat(), week_number=found[0], session_index=found[1])
 
 
 def date_warnings(activity: ActivitySummary) -> list[str]:
@@ -436,17 +438,20 @@ def find_duplicate(activity: ActivitySummary) -> ActivitySummary | None:
     return None
 
 
-def import_one(name: str, content: bytes, plan_file: PlanFile | None, user_note: str, rpe: int, external_id: str = "") -> dict:
+def import_one(name: str, content: bytes, plan_file: PlanFile | None, user_note: str, rpe: int, external_id: str = "",
+               parsed: Parsed | None = None) -> dict:
+    """`parsed` given means a summary from a service with no file behind it: saved as partial, with no raw or series."""
     plan_id = plan_file.meta.id if plan_file else ""
+    partial = parsed is not None
     try:
-        parsed = parse_bytes(name, content)
+        parsed = parsed or parse_bytes(name, content)
         activity = summarise(parsed, name, plan_id, user_note, rpe)
     except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
         return {"file": name, "status": "error", "message": f"Could not read {name}: {error}"}
     with storage.workout_lock(plan_id):
         plan_file = storage.load_plan(plan_id) if plan_id else None  # may have moved on since the last file
         existing = find_duplicate(activity)
-        if existing and storage.find_raw(existing.id):
+        if existing and (partial or storage.find_raw(existing.id)):
             return {"file": name, "status": "duplicate", "message": f"{name} is already imported"}
         if existing:  # imported before v3.1: keep the workout, add what its detail page needs
             storage.save_raw(existing.id, name, content)
@@ -454,11 +459,13 @@ def import_one(name: str, content: bytes, plan_file: PlanFile | None, user_note:
             return {"file": name, "status": "updated", "message": f"{name}: route and charts added"}
         activity.id = storage.new_activity_id(activity.id)
         activity.external_id = external_id
+        activity.partial = partial
         if plan_file:
             activity.match = match_activity(activity, plan_file)
         storage.save_activity(activity)
-        storage.save_raw(activity.id, name, content)
-        store_series(activity, parsed)
+        if not partial:
+            storage.save_raw(activity.id, name, content)
+            store_series(activity, parsed)
         if plan_file:
             metrics.refresh(plan_file)
     return {
@@ -497,19 +504,21 @@ def import_fit_bytes(content: bytes, source: str, external_id: str) -> dict:
     return import_one(name, content, lifecycle.active_plan(), "", 0, external_id)  # the caller adds the review
 
 
+def plan_entries(plan_id: str) -> list:
+    """Every workout on a plan, each with the function that saves it: files and hand-logged alike."""
+    return [
+        *((a, storage.save_activity) for a in storage.list_activities(plan_id)),
+        *((m, storage.save_manual) for m in storage.list_manual(plan_id)),
+    ]
+
+
 def rematch(plan_file: PlanFile) -> None:
     """After a new plan version, point matches at the same planned day. Keeps manual matches."""
     with storage.activities_lock():
-        saves = [
-            *((a, storage.save_activity) for a in storage.list_activities(plan_file.meta.id)),
-            *((m, storage.save_manual) for m in storage.list_manual(plan_file.meta.id)),
-        ]
-        for entry, save in saves:
+        for entry, save in plan_entries(plan_file.meta.id):
             if not entry.match.planned_date:
                 continue
-            day = date.fromisoformat(entry.match.planned_date)
-            found = closest_session(sessions_on(plan_file, day, entry.modality), entry.distance_km)
-            match = Match(planned_date=entry.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
+            match = match_activity(entry, plan_file, date.fromisoformat(entry.match.planned_date))
             if match != entry.match:
                 entry.match = match
                 save(entry)
@@ -532,12 +541,12 @@ def planned_match(plan_file: PlanFile | None, week_number: int, index: int, moda
     """A match the user chose by hand. It has to point at a real session of the same kind."""
     if plan_file is None:
         raise lifecycle.Conflict("There is no active plan to match this to.")
-    week = next((w for w in plan_file.plan.weeks if w.week_number == week_number), None)
-    if week is None or not 0 <= index < len(week.sessions):
+    session = plan_file.session_at(week_number, index)
+    if session is None:
         raise lifecycle.Conflict("That planned session doesn't exist.")
-    if week.sessions[index].modality != modality:
+    if session.modality != modality:
         raise lifecycle.Conflict(f"A {modality} session can only match a planned {modality} session.")
-    return Match(planned_date=week.sessions[index].date.isoformat(), week_number=week_number, session_index=index)
+    return Match(planned_date=session.date.isoformat(), week_number=week_number, session_index=index)
 
 
 def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[int, int] | None) -> ActivitySummary:

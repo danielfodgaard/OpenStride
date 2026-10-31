@@ -1,9 +1,9 @@
 // Hash router, plus the views that aren't a plan page or a workout page.
 import { garminView } from "./render/garmin.js";
 import {
-  actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, fullPlanVersionCheck, garminStatus, input,
+  actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, garminStatus, input,
   labelled, line, link, main, nextRoute,
-  planPath, postJson, stale, statusLine, table, viewToken,
+  planPath, postJson, rowLink, stale, statusLine, table, viewToken,
 } from "./render/ui.js";
 import { dateText } from "./render/format.js";
 import { daysToGo, draftActions, planBasics, planOverview, weekSummary } from "./render/plan_overview.js";
@@ -50,12 +50,10 @@ function fillForm(form, request) {
   const preset = [...fields.race_distance.options].find((o) => Number(o.value) === request.race_distance_km);
   fields.race_distance.value = preset ? preset.value : "custom";
   fields.custom_distance.value = preset ? "" : request.race_distance_km;
-  for (const name of ["goal_description", "race_date", "recent_race_distance_km", "recent_race_time",
-    "current_weekly_km", "longest_recent_run_km", "runs_per_week", "long_run_day", "experience", "notes",
-    "strength_sessions_per_week", "cross_training", "cross_sessions_per_week", "equipment", "hr_max", "hr_rest", "age"]) {
-    fields[name].value = request[name];
+  // Checkbox groups come back as a RadioNodeList, so they are skipped here and filled below.
+  for (const [name, value] of Object.entries(request)) {
+    if (fields[name] instanceof HTMLElement) fields[name].value = value ?? "";
   }
-  fields.goal_time.value = request.goal_time ?? "";
   for (const box of fields.available_days) box.checked = request.available_days.includes(box.value);
 }
 
@@ -94,7 +92,6 @@ async function newView(draftId) {
     location.replace(planPath(draftId));
     return;
   }
-  fullPlanVersionCheck(planFile);
   fillForm(form, planFile.request);
   const review = el("section");
   review.append(el("h2", "Draft preview"), draftActions(planFile, status, form, formRequest), actions(downloadButton(planFile, status)));
@@ -105,16 +102,7 @@ async function newView(draftId) {
   );
 }
 
-function planRow(plan) {
-  const row = link("", planPath(plan.id));
-  row.className = "row-link";
-  const title = el("span", plan.goal_description);
-  title.className = "row-title";
-  const meta = el("span", `Race ${dateText(plan.race_date)} · version ${plan.version}`);
-  meta.className = "row-meta";
-  row.append(title, meta, chip(plan.status));
-  return row;
-}
+const planRow = (plan) => rowLink(planPath(plan.id), plan.goal_description, `Race ${dateText(plan.race_date)} · version ${plan.version}`, chip(plan.status));
 
 function planGroup(title, plans) {
   const section = el("section");
@@ -209,7 +197,6 @@ async function versionsView(id) {
 async function versionView(id, version) {
   const token = viewToken();
   const planFile = await api(`/api/plans/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`);
-  fullPlanVersionCheck(planFile);
   if (stale(token)) return;
   const rows = planFile.plan.weeks.flatMap((week) => week.sessions.map((s) => [
     week.week_number, s.date, s.day, s.type, s.title, s.distance_km ? `${s.distance_km} km` : `${s.duration_min} min`, s.target_pace,

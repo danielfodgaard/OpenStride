@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from app import activities, adapt, chat, clock, config, edits, lifecycle, logbook, logsafe, metrics, progress, review, storage
 from app.garmin import delivery
 from app.garmin import sync as garmin_sync
+from app.garmin.provider import GarminError
 from app.garmin.router import router as garmin_router
 from app.generator import APP_VERSION, GenerationError, generate_plan
 from app.models import (
@@ -114,14 +115,15 @@ async def require_login(request: Request, call_next):
     return RedirectResponse("/login", status_code=303)
 
 
-def error_handler(status_code: int, default: str | None = None):
+def error_handler(status_code: int, default: str | None = None, **extra):
     async def handle(request: Request, error: Exception):
-        return JSONResponse({"detail": default or str(error)}, status_code=status_code)
+        return JSONResponse(extra | {"detail": default or str(error)}, status_code=status_code)
 
     return handle
 
 
 app.add_exception_handler(GenerationError, error_handler(502))
+app.add_exception_handler(GarminError, error_handler(502, error="garmin_error"))
 app.add_exception_handler(lifecycle.Conflict, error_handler(409))
 app.add_exception_handler(storage.NotFound, error_handler(404, "Not found"))
 app.add_exception_handler(storage.FileLockTimeout, error_handler(503, "The server is busy. Try again."))
@@ -141,11 +143,13 @@ def check_etag(plan_id: str, if_match: str | None) -> None:
 
 
 @contextmanager
-def checked_plan(plan_id: str, if_match: str | None):
+def checked_plan(plan_id: str, if_match: str | None, required: bool = False):
     """Holds the plan lock, so nothing can change the plan between the check and the write.
 
     For routes with no LLM call; those with one call `check_etag` and lock only the final write.
     """
+    if required and if_match is None:
+        raise HTTPException(status_code=428, detail="Reload the plan and try again.")
     with storage.plan_lock(plan_id):
         check_etag(plan_id, if_match)
         yield
@@ -407,23 +411,16 @@ def restore_version(plan_id: str, version: int, if_match: str | None = Header(No
         return adapt.restore(plan_id, version)
 
 
-def require_if_match(if_match: str | None) -> None:
-    if if_match is None:
-        raise HTTPException(status_code=428, detail="Reload the plan and try again.")
-
-
 @app.post("/api/plans/{plan_id}/edits")
 def edit_plan(plan_id: str, body: EditBody, if_match: str | None = Header(None)) -> dict:
-    require_if_match(if_match)
-    with checked_plan(plan_id, if_match):
+    with checked_plan(plan_id, if_match, required=True):
         result = edits.apply(plan_id, **body.model_dump())
     return result | {"warnings": result["warnings"] + delivery.follow_edit(result["plan"], **result.pop("garmin"))}
 
 
 @app.post("/api/plans/{plan_id}/undo")
 def undo_edit(plan_id: str, if_match: str | None = Header(None)) -> PlanFile:
-    require_if_match(if_match)
-    with checked_plan(plan_id, if_match):
+    with checked_plan(plan_id, if_match, required=True):
         result = edits.undo(plan_id)
     delivery.follow_edit(result["plan"], **result["garmin"])
     return result["plan"]

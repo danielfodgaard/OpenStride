@@ -1,6 +1,6 @@
 // Plain inline SVG charts. Every chart comes with a table of the same numbers.
 import { el, main, table } from "./render/ui.js";
-import { paceText, roundKm, timeText } from "./render/format.js";
+import { dayMs, paceText, roundKm, timeText } from "./render/format.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MS_PER_DAY = 86400000;
@@ -9,7 +9,7 @@ const MARGIN = { top: 14, right: 12, bottom: 28, left: 40 };
 const BAR_SLOT = 25;  // narrowest week that still fits its percentage; more weeks scroll sideways
 const COLORS = { fitness: "var(--accent)", fatigue: "var(--load-atl)", form: "var(--ink-2)", grid: "var(--grid)", axis: "var(--ink-3)" };
 
-function svgEl(tag, attributes, text) {
+export function svgEl(tag, attributes, text) {
   const node = document.createElementNS(SVG_NS, tag);
   for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
   if (text !== undefined) node.textContent = text;
@@ -26,7 +26,6 @@ function availableWidth(share = 1) {
   return Math.max(260, Math.round(share * inner));
 }
 
-const dayMs = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`);
 const monthDay = (ms) => new Date(ms).toISOString().slice(5, 10);
 
 // 4-6 round tick values covering min..max.
@@ -42,10 +41,12 @@ function niceTicks(min, max) {
   return ticks;
 }
 
-function tableToggle(headers, rows) {
-  const box = el("details");
-  box.append(el("summary", "Table"), table(headers, rows));
-  return box;
+// Horizontal grid lines with their values on the left.
+function gridLines(svg, ticks, toY, left, right, format = String) {
+  for (const tick of ticks) {
+    svg.append(svgEl("line", { x1: left, x2: right, y1: toY(tick), y2: toY(tick), stroke: COLORS.grid }));
+    svg.append(svgEl("text", { x: left - 6, y: toY(tick) + 4, "text-anchor": "end", "font-size": 11 }, format(tick)));
+  }
 }
 
 // items: [{ label, color, kind: "bar" | "line" | "dash" }]
@@ -67,7 +68,9 @@ export function legend(items) {
 function chartBox(title, plot, items, headers, rows) {
   const box = el("div");
   box.className = "chart";
-  box.append(el("h3", title), plot, legend(items), tableToggle(headers, rows));
+  const numbers = el("details");
+  numbers.append(el("summary", "Table"), table(headers, rows));
+  box.append(el("h3", title), plot, legend(items), numbers);
   return box;
 }
 
@@ -117,11 +120,7 @@ function drawSeriesChart({ title, series, format = String, marker, xMax, headers
   const toY = (y) => HEIGHT - MARGIN.bottom - ((y - low) / span) * (HEIGHT - MARGIN.top - MARGIN.bottom);
   const svg = newSvg(width, HEIGHT, title);
 
-  for (const tick of ticks) {
-    const y = toY(tick);
-    svg.append(svgEl("line", { x1: MARGIN.left, x2: width - MARGIN.right, y1: y, y2: y, stroke: COLORS.grid }));
-    svg.append(svgEl("text", { x: MARGIN.left - 6, y: y + 4, "text-anchor": "end", "font-size": 11 }, format(tick)));
-  }
+  gridLines(svg, ticks, toY, MARGIN.left, width - MARGIN.right, format);
   const labels = width < 420 ? 3 : 4;
   for (let i = 0; i <= labels; i += 1) {
     const x = left + (xSpan * i) / labels;
@@ -176,10 +175,7 @@ function drawBarChart({ title, bars, headers, rows }) {
   const toY = (y) => height - bottom - (y / top) * (height - margin.top - bottom);
   const svg = newSvg(width, height, title);
   const barWidth = Math.min(slot * 0.68, 44);
-  for (const tick of ticks) {
-    svg.append(svgEl("line", { x1: margin.left, x2: width - margin.right, y1: toY(tick), y2: toY(tick), stroke: COLORS.grid }));
-    svg.append(svgEl("text", { x: margin.left - 6, y: toY(tick) + 4, "text-anchor": "end", "font-size": 11 }, tick));
-  }
+  gridLines(svg, ticks, toY, margin.left, width - margin.right);
   const wide = slot >= 76;  // room for "S 2/2 · X 1/1" on one line
   bars.forEach((bar, i) => {
     const middle = margin.left + slot * (i + 0.5);
@@ -214,7 +210,7 @@ function drawBarChart({ title, bars, headers, rows }) {
 const signed = (value) => `${Math.round(value) < 0 ? "−" : "+"}${Math.abs(Math.round(value))}`;
 const formText = (tsb) => (Math.round(tsb) < 0 ? `−${Math.abs(Math.round(tsb))}` : Math.abs(Math.round(tsb)));
 
-export function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
+function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
   return `Fitness ${Math.round(ctl)} (${signed(change)} this week), fatigue ${Math.round(atl)}, form ${formText(tsb)}`;
 }
 
@@ -228,7 +224,7 @@ function weekNotes(week) {
 // A week counts once it has started, or as soon as it holds any km, whatever their date.
 export const notStarted = (week, asOf) => week.start_date > asOf && !week.actual_km;
 
-export function weekPercent(week, asOf) {
+function weekPercent(week, asOf) {
   return notStarted(week, asOf) || !week.planned_km ? null : Math.round((week.actual_km / week.planned_km) * 100);
 }
 
@@ -302,7 +298,7 @@ export function drawRoute(points) {
   const top = pad + (inner - ((maxY - minY) / span) * inner) / 2;
   const place = (n) => [left + ((xs[n] - minX) / span) * inner, top + ((ys[n] - minY) / span) * inner];
 
-  const svg = svgEl("svg", { viewBox: `0 0 ${size} ${size}`, width: size, height: size, role: "img", "aria-label": "Route map" });
+  const svg = newSvg(size, size, "Route map");
   const barLength = (1 / 111.32 / span) * inner;  // one km of latitude
   if (barLength < inner) {
     svg.append(svgEl("line", { x1: pad, y1: 292, x2: pad + barLength, y2: 292, stroke: "var(--ink-3)", "stroke-width": 2 }));
@@ -330,7 +326,6 @@ export function drawRoute(points) {
       marker.setAttribute("cy", y);
       return marker.setAttribute("visibility", "visible");
     },
-    clear: () => marker.setAttribute("visibility", "hidden"),
   };
 }
 
@@ -354,7 +349,7 @@ const CHART_RIGHT = 10;
 function distanceChart({ width, points, index, height, xAxis, maxKm, lo, hi, invert, ticks, format, color, band, label }) {
   const bottom = xAxis ? 26 : 8;
   const top = 10;
-  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, role: "img", "aria-label": label });
+  const svg = newSvg(width, height, label);
   const x = (km) => CHART_LEFT + (km / maxKm) * (width - CHART_LEFT - CHART_RIGHT);
   const share = (v) => (v - lo) / (hi - lo);
   const y = (v) => (invert ? top + share(v) * (height - top - bottom) : height - bottom - share(v) * (height - top - bottom));
@@ -366,10 +361,7 @@ function distanceChart({ width, points, index, height, xAxis, maxKm, lo, hi, inv
       fill: color, "fill-opacity": 0.12,
     }));
   }
-  for (const tick of ticks) {
-    svg.append(svgEl("line", { x1: CHART_LEFT, x2: width - CHART_RIGHT, y1: y(tick), y2: y(tick), stroke: COLORS.grid }));
-    svg.append(svgEl("text", { x: CHART_LEFT - 8, y: y(tick) + 4, "text-anchor": "end", "font-size": 11 }, format(tick)));
-  }
+  gridLines(svg, ticks, y, CHART_LEFT, width - CHART_RIGHT, format);
   if (xAxis) {
     const step = Math.max(1, Math.ceil(maxKm / (width < 420 ? 6 : 10)));
     for (let km = 0; km <= maxKm; km += step) {
@@ -480,7 +472,7 @@ export function drawDistanceCharts(points, band, route) {
   const hide = () => {
     for (const chart of charts) chart.hide();
     label.hide();
-    route?.clear();
+    route?.mark(-1);
   };
   const move = (clientX) => {
     const rect = charts[0].svg.getBoundingClientRect();

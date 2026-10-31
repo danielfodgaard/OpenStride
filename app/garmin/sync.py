@@ -3,7 +3,7 @@ import logging
 import threading
 from datetime import datetime, time, timedelta, timezone
 
-from app import activities, lifecycle, logbook, metrics, storage
+from app import activities, lifecycle, logbook, storage
 from app.config import settings
 from app.garmin import provider as garmin
 from app.models import PlanFile
@@ -54,8 +54,7 @@ def log_strength(item: garmin.RemoteActivity, plan_file: PlanFile | None):
 def import_summary(item: garmin.RemoteActivity, external_id: str, plan_file: PlanFile | None) -> dict:
     """C2 fallback when the file has nothing to read: the listing's facts, marked partial."""
     name = f"garmin_{item.id}"
-    local = local_start(item)
-    offset = local - item.start_time.replace(tzinfo=None)
+    offset = local_start(item) - item.start_time.replace(tzinfo=None)
     parsed = activities.Parsed(
         points=[],
         sport="running" if "running" in item.sport else item.sport,  # trail_running and the like
@@ -66,21 +65,10 @@ def import_summary(item: garmin.RemoteActivity, external_id: str, plan_file: Pla
         avg_hr=item.avg_hr,
         max_hr=item.max_hr,
     )
-    plan_id = plan_file.meta.id if plan_file else ""
-    activity = activities.summarise(parsed, name, plan_id, "", 0)
-    with storage.workout_lock(plan_id):
-        if activities.find_duplicate(activity):
-            return {"status": "duplicate"}
-        activity.id = storage.new_activity_id(activity.id)
-        activity.external_id = external_id
-        activity.partial = True
-        if plan_file:
-            activity.match = activities.match_activity(activity, plan_file)
-        storage.save_activity(activity)
-        if plan_file:
-            metrics.refresh(plan_file)
-    warnings = [*activities.date_warnings(activity), f"{name}: the file had no usable data, so only the summary was imported."]
-    return {"file": name, "status": "imported", "activity": activity.model_dump(mode="json"), "warnings": warnings, "summary": activity}
+    result = activities.import_one(name, b"", plan_file, "", 0, external_id, parsed=parsed)
+    if result["status"] == "imported":
+        result["warnings"].append(f"{name}: the file had no usable data, so only the summary was imported.")
+    return result
 
 
 def import_remote(provider, item: garmin.RemoteActivity, external_id: str, plan_file: PlanFile | None) -> dict:
@@ -105,7 +93,7 @@ def sync_with(provider) -> dict:
 
     def record_error(text: str) -> None:
         state["last_error"] = text
-        garmin.write_json(garmin.state_path(), state)
+        storage.write_json(garmin.state_path(), state)
         result["warnings"].append(text)
         log.warning("Garmin sync: %s", text)
 
@@ -134,7 +122,7 @@ def sync_with(provider) -> dict:
             continue
         done.add(external_id)
         state["imported"] = sorted(done)
-        garmin.write_json(garmin.state_path(), state)
+        storage.write_json(garmin.state_path(), state)
         if outcome["status"] != "imported":
             result["skipped"] += 1
             continue
@@ -154,7 +142,7 @@ def sync_with(provider) -> dict:
         record_error(f"{failed} of {len(remote)} Garmin activities could not be imported. They will be tried again.")
         return result
     state |= {"last_sync_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "last_error": None}
-    garmin.write_json(garmin.state_path(), state)
+    storage.write_json(garmin.state_path(), state)
     return result
 
 

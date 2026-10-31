@@ -80,6 +80,25 @@ export function notice(text, kind = "") {
   return p;
 }
 
+export function muted(text, tag = "span") {
+  const node = el(tag, text);
+  node.className = "muted";
+  return node;
+}
+
+// A whole-row link with a title, a meta line and an optional chip.
+export function rowLink(href, title, meta, chipNode) {
+  const row = link("", href);
+  row.className = "row-link";
+  const titleNode = el("span", title);
+  titleNode.className = "row-title";
+  const metaNode = el("span", meta);
+  metaNode.className = "row-meta";
+  row.append(titleNode, metaNode);
+  if (chipNode) row.append(chipNode);
+  return row;
+}
+
 // Filled by the edit that just happened, for the page that renders next.
 export const editMemo = { warnings: [], adaptContext: "" };
 
@@ -237,7 +256,7 @@ export async function garminStatus() {
   return status && (status.sync !== "off" || status.push !== "off") ? status : null;
 }
 
-export async function downloadFile(path, filename) {
+async function downloadFile(path, filename) {
   const response = await send(path);
   saveBlob(await response.blob(), filename);
 }
@@ -312,10 +331,9 @@ export function input(type, value = "") {
   return node;
 }
 
-export function textarea(rows, cols) {
+export function textarea(rows) {
   const node = el("textarea");
   node.rows = rows;
-  node.cols = cols;
   return node;
 }
 
@@ -326,12 +344,6 @@ export function rpeSelect(value = 0) {
   for (let i = 1; i <= 10; i += 1) rpe.add(new Option(String(i), String(i)));
   rpe.value = String(value);
   return rpe;
-}
-
-export function fullPlanVersionCheck(planFile) {
-  if (!["1.0", "2.0", "3.0"].includes(planFile?.schema_version)) {
-    throw new Error(`Unsupported plan file: schema_version is ${planFile?.schema_version}, expected 1.0, 2.0 or 3.0`);
-  }
 }
 
 export function downloadButton(planFile, status) {
