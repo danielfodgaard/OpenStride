@@ -1,0 +1,103 @@
+{
+  "id": "2026-11-03T17-30-00",
+  "plan_id": "2026-10-31T03-31-36_import",
+  "source_file": "2026-11-03_tempo.fit",
+  "start_time": "2026-11-03T17:30:00",
+  "date": "2026-11-03",
+  "distance_km": 8.0,
+  "moving_time_s": 2488,
+  "elapsed_time_s": 2488,
+  "avg_pace": "5:11/km",
+  "avg_hr": 148,
+  "max_hr": 165,
+  "avg_cadence_spm": 176,
+  "elevation_gain_m": 20.0,
+  "laps": [
+    {
+      "index": 1,
+      "distance_km": 2.0,
+      "time_s": 690,
+      "pace": "5:45/km",
+      "avg_hr": 135
+    },
+    {
+      "index": 2,
+      "distance_km": 4.0,
+      "time_s": 1108,
+      "pace": "4:37/km",
+      "avg_hr": 161
+    },
+    {
+      "index": 3,
+      "distance_km": 2.0,
+      "time_s": 690,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    }
+  ],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 135
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 135
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 162
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 277,
+      "pace": "4:37/km",
+      "avg_hr": 162
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 277,
+      "pace": "4:37/km",
+      "avg_hr": 162
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 277,
+      "pace": "4:37/km",
+      "avg_hr": 162
+    },
+    {
+      "index": 7,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    },
+    {
+      "index": 8,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    }
+  ],
+  "user_note": "",
+  "rpe": 0,
+  "match": {
+    "planned_date": "2026-11-03",
+    "week_number": 1,
+    "session_index": 0
+  }
+}

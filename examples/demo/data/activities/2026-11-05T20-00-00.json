@@ -1,0 +1,88 @@
+{
+  "id": "2026-11-05T20-00-00",
+  "plan_id": "2026-10-31T03-31-36_import",
+  "source_file": "2026-11-05_easy.gpx",
+  "start_time": "2026-11-05T20:00:00",
+  "date": "2026-11-05",
+  "distance_km": 8.987,
+  "moving_time_s": 3070,
+  "elapsed_time_s": 3070,
+  "avg_pace": "5:42/km",
+  "avg_hr": 138,
+  "max_hr": 138,
+  "avg_cadence_spm": 174,
+  "elevation_gain_m": 0.0,
+  "laps": [],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 7,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 8,
+      "distance_km": 1.0,
+      "time_s": 342,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 9,
+      "distance_km": 0.987,
+      "time_s": 337,
+      "pace": "5:42/km",
+      "avg_hr": 138
+    }
+  ],
+  "user_note": "",
+  "rpe": 0,
+  "match": {
+    "planned_date": "2026-11-05",
+    "week_number": 1,
+    "session_index": 1
+  }
+}

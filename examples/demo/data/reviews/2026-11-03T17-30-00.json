@@ -1,0 +1,25 @@
+{
+  "activity_id": "2026-11-03T17-30-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Tempo session executed as prescribed: 2 km easy, 4 km at threshold pace, 2 km easy, all 8.0 km completed.",
+    "observations": [
+      "Middle 4 km averaged 4:37/km, exactly on the 4:37/km target, with splits of 4:36 to 4:37 held steady for km 3 to 6.",
+      "Warm-up and cool-down laps at 5:45/km with HR 135 to 140 stayed in easy territory, consistent with a controlled effort.",
+      "Tempo-block HR settled at 161 to 162 and peaked at 165, a steady threshold-type load rather than a surge.",
+      "Overall 8.0 km in 2488 s, average 5:11/km, cadence 176 spm."
+    ],
+    "flags": [
+      "No RPE or athlete note was logged, so the subjective effort of the tempo block is unknown."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T03:31:39+00:00",
+    "usage": {
+      "input_tokens": 2144,
+      "output_tokens": 303
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "id": "2026-11-10T12-00-00",
+  "plan_id": "2026-10-31T03-31-36_import",
+  "source_file": "2026-11-10_tempo_bad.fit",
+  "start_time": "2026-11-10T12:00:00",
+  "date": "2026-11-10",
+  "distance_km": 6.0,
+  "moving_time_s": 2020,
+  "elapsed_time_s": 2020,
+  "avg_pace": "5:37/km",
+  "avg_hr": 163,
+  "max_hr": 179,
+  "avg_cadence_spm": 176,
+  "elevation_gain_m": 20.0,
+  "laps": [
+    {
+      "index": 1,
+      "distance_km": 2.0,
+      "time_s": 700,
+      "pace": "5:50/km",
+      "avg_hr": 150
+    },
+    {
+      "index": 2,
+      "distance_km": 3.0,
+      "time_s": 900,
+      "pace": "5:00/km",
+      "avg_hr": 176
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 420,
+      "pace": "7:00/km",
+      "avg_hr": 158
+    }
+  ],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 350,
+      "pace": "5:50/km",
+      "avg_hr": 150
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 350,
+      "pace": "5:50/km",
+      "avg_hr": 150
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 300,
+      "pace": "5:00/km",
+      "avg_hr": 176
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 300,
+      "pace": "5:00/km",
+      "avg_hr": 176
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 300,
+      "pace": "5:00/km",
+      "avg_hr": 176
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 420,
+      "pace": "7:00/km",
+      "avg_hr": 159
+    }
+  ],
+  "user_note": "sharp calf pain since Tuesday, stopped at 6 km",
+  "rpe": 9,
+  "match": {
+    "planned_date": "2026-11-10",
+    "week_number": 2,
+    "session_index": 0
+  }
+}

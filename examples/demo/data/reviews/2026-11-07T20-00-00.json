@@ -1,0 +1,25 @@
+{
+  "activity_id": "2026-11-07T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Easy 9 km run completed at a steady, controlled pace within the easy band.",
+    "observations": [
+      "Distance 9.01 km vs 9.0 km planned, matching the session well.",
+      "Average pace 5:50/km sits inside the 5:11-6:13/km easy range and every km split was an identical 5:50, showing good pacing discipline.",
+      "Moving time 3150 s equals elapsed time, so no stops or pauses affected the run.",
+      "Follows the tempo session on Nov 3 and the easy run on Nov 5 without signs of accumulated fatigue in the pacing."
+    ],
+    "flags": [
+      "No heart rate, RPE, or athlete note was recorded, so effort intensity cannot be confirmed beyond pace."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T03:31:44+00:00",
+    "usage": {
+      "input_tokens": 2577,
+      "output_tokens": 261
+    }
+  }
+}

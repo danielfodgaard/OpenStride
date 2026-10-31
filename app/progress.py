@@ -102,5 +102,8 @@ def usage_totals(plan_id: str) -> dict:
         "input_tokens": sum(meta.usage.input_tokens for meta in metas),
         "output_tokens": sum(meta.usage.output_tokens for meta in metas),
         "cost_usd": round(cost, 4),
-        "unpriced_models": sorted({meta.model for meta in metas if meta.model not in PRICES}),
+        "unpriced_models": sorted({
+            meta.model for meta in metas
+            if meta.model not in PRICES and meta.usage.input_tokens + meta.usage.output_tokens
+        }),
     }
