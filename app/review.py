@@ -21,14 +21,14 @@ def recent_manual(activity: ActivitySummary) -> list[ManualActivity]:
 
 
 def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
-    plan_file = lifecycle.require_active(activity.plan_id)
+    plan_file = lifecycle.require_active(activity.plan_id) if activity.plan_id else None
     model = os.environ.get("REVIEW_MODEL") or DEFAULT_MODEL
     usage = Usage(input_tokens=0, output_tokens=0)
     review = generator.call_claude(
         client or generator.make_client(),
         model,
         SYSTEM_PROMPT,
-        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file)),
+        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file) if plan_file else ""),
         RunReview,
         usage,
         max_tokens=MAX_TOKENS,

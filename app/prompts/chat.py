@@ -46,7 +46,7 @@ Current plan, version {plan_file.meta.version}:
 Every session so far, from files and the logbook, with reviews, notes and RPE:
 {json.dumps(done, indent=2)}
 
-Training metrics (load, fitness, fatigue, form, weekly volume, trends; current is the latest snapshot):
+Training metrics (load, fitness, fatigue, form, weekly volume; current is the latest snapshot):
 {metrics}
 
 Pending and recent proposals:

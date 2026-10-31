@@ -27,5 +27,5 @@ Planned vs actual:
 Every session so far, with its review, the athlete's notes and RPE:
 {json.dumps(activities, indent=2)}
 
-Training metrics (load, fitness, fatigue, form, weekly volume, trends):
+Training metrics (load, fitness, fatigue, form, weekly volume):
 {metrics}"""

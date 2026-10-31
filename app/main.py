@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, chat, lifecycle, logbook, metrics, progress, review, storage
+from app import activities, adapt, chat, clock, lifecycle, logbook, metrics, progress, review, storage
 from app.generator import GenerationError, generate_plan
 from app.models import (
     ActivitySummary,
@@ -171,8 +171,18 @@ def get_series(activity_id: str) -> dict:
 
 
 @app.get("/api/activities")
-def get_activities(plan_id: str) -> list[dict]:
-    return logbook.all_items(plan_id)
+def get_activities(plan_id: str | None = None) -> list[dict]:
+    return logbook.workouts(plan_id)
+
+
+@app.get("/api/activities/{activity_id}")
+def get_activity(activity_id: str) -> dict:
+    return logbook.workout(activity_id)
+
+
+@app.delete("/api/activities/{activity_id}", status_code=204)
+def delete_activity(activity_id: str) -> None:
+    activities.delete(activity_id)
 
 
 @app.patch("/api/activities/{activity_id}")
@@ -184,6 +194,11 @@ def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
 @app.post("/api/plans/{plan_id}/manual")
 def log_session(plan_id: str, body: ManualInput) -> ManualActivity:
     return logbook.create(plan_id, body.model_dump())
+
+
+@app.post("/api/manual")
+def log_unplanned_session(body: ManualInput) -> ManualActivity:
+    return logbook.create(None, body.model_dump())
 
 
 @app.patch("/api/manual/{manual_id}")
@@ -242,10 +257,22 @@ def restore_version(plan_id: str, version: int) -> PlanFile:
     return adapt.restore(plan_id, version)
 
 
+@app.get("/api/today")
+def get_today() -> dict:
+    return {"today": clock.today().isoformat()}
+
+
+@app.get("/api/plans/{plan_id}/status")
+def get_status(plan_id: str) -> dict:
+    return progress.plan_status(lifecycle.require_plan(plan_id))
+
+
 @app.get("/api/plans/{plan_id}/progress")
 def get_progress(plan_id: str) -> dict:
-    table = progress.planned_vs_actual(lifecycle.require_active(plan_id))
-    return table | {"latest_summary": progress.latest_summary(plan_id)}
+    plan_file = lifecycle.require_plan(plan_id)
+    if plan_file.meta.status == "draft":
+        raise lifecycle.Conflict("A draft has no progress yet.")
+    return progress.planned_vs_actual(plan_file) | {"latest_summary": progress.latest_summary(plan_id)}
 
 
 @app.post("/api/plans/{plan_id}/progress/summary")

@@ -434,13 +434,12 @@ def find_duplicate(activity: ActivitySummary) -> ActivitySummary | None:
 def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> list[dict]:
     """One result per file; a bad file doesn't stop the others."""
     plan_file = lifecycle.active_plan()
-    if plan_file is None:
-        raise lifecycle.Conflict("There is no active plan to import runs into.")
+    plan_id = plan_file.meta.id if plan_file else ""
     results = []
     for name, content in uploads:
         try:
             parsed = parse_bytes(name, content)
-            activity = summarise(parsed, name, plan_file.meta.id, user_note, rpe)
+            activity = summarise(parsed, name, plan_id, user_note, rpe)
         except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
             results.append({"file": name, "status": "error", "message": f"Could not read {name}: {error}"})
             continue
@@ -454,11 +453,13 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
             results.append({"file": name, "status": "updated", "message": f"{name}: route and charts added"})
             continue
         activity.id = storage.new_activity_id(activity.id)
-        activity.match = match_activity(activity, plan_file)
+        if plan_file:
+            activity.match = match_activity(activity, plan_file)
         storage.save_activity(activity)
         storage.save_raw(activity.id, name, content)
         store_series(activity, parsed)
-        metrics.refresh(plan_file)
+        if plan_file:
+            metrics.refresh(plan_file)
         result = {"file": name, "status": "imported", "activity": activity.model_dump(mode="json")}
         try:
             review.review_activity(activity)
@@ -491,8 +492,15 @@ def with_review(activity: ActivitySummary) -> dict:
     return activity.model_dump(mode="json") | {"review": review_file.model_dump(mode="json") if review_file else None}
 
 
-def planned_match(plan_file: PlanFile, week_number: int, index: int, modality: str) -> Match:
+def plan_for_edit(plan_id: str) -> PlanFile | None:
+    """A workout's own plan must be active; one with no plan can match the active plan, if any."""
+    return lifecycle.require_active(plan_id) if plan_id else lifecycle.active_plan()
+
+
+def planned_match(plan_file: PlanFile | None, week_number: int, index: int, modality: str) -> Match:
     """A match the user chose by hand. It has to point at a real session of the same kind."""
+    if plan_file is None:
+        raise lifecycle.Conflict("There is no active plan to match this to.")
     week = next((w for w in plan_file.plan.weeks if w.week_number == week_number), None)
     if week is None or not 0 <= index < len(week.sessions):
         raise lifecycle.Conflict("That planned session doesn't exist.")
@@ -503,7 +511,7 @@ def planned_match(plan_file: PlanFile, week_number: int, index: int, modality: s
 
 def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[int, int] | None) -> ActivitySummary:
     activity = storage.load_activity(activity_id)
-    plan_file = lifecycle.require_active(activity.plan_id)
+    plan_file = plan_for_edit(activity.plan_id)
     if user_note is not None:
         activity.user_note = user_note
     if rpe is not None:
@@ -514,6 +522,16 @@ def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[
             activity.match = Match()
         else:
             activity.match = planned_match(plan_file, week_number, index, activity.modality)
+            activity.plan_id = plan_file.meta.id  # an unattached workout joins the plan it matches
     storage.save_activity(activity)
-    metrics.refresh(plan_file)
+    if plan_file:
+        metrics.refresh(plan_file)
     return activity
+
+
+def delete(activity_id: str) -> None:
+    activity = storage.load_activity(activity_id)
+    storage.delete_activity(activity_id)
+    plan_file = storage.load_plan(activity.plan_id) if activity.plan_id else None
+    if plan_file:
+        metrics.refresh(plan_file)

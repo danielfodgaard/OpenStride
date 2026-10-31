@@ -102,6 +102,14 @@ def find_raw(activity_id: str) -> Path | None:
     return next((DATA_DIR / "activities" / "raw").glob(f"{safe_id(activity_id)}.*"), None)
 
 
+def delete_activity(activity_id: str) -> None:
+    """The activity and everything stored with it."""
+    raw = find_raw(activity_id)
+    for path in (activity_path(activity_id), review_path(activity_id), series_path(activity_id), raw):
+        if path:
+            path.unlink(missing_ok=True)
+
+
 def activity_path(activity_id: str) -> Path:
     return DATA_DIR / "activities" / f"{safe_id(activity_id)}.json"
 
@@ -159,7 +167,8 @@ def new_proposal_id(plan_id: str, base: str) -> str:
 
 
 def manual_dir(plan_id: str) -> Path:
-    return plan_dir(plan_id) / "manual_activities"
+    """Logged with no active plan, an entry has plan_id "" and sits outside any plan."""
+    return plan_dir(plan_id) / "manual_activities" if plan_id else DATA_DIR / "manual_activities"
 
 
 def new_manual_id(plan_id: str, day) -> str:
@@ -173,10 +182,18 @@ def save_manual(entry: ManualActivity) -> None:
     write_json(manual_dir(entry.plan_id) / f"{safe_id(entry.id)}.json", entry.model_dump_json(indent=2))
 
 
+def manual_paths(name: str = "*") -> list[Path]:
+    return [*(DATA_DIR / "plans").glob(f"*/manual_activities/{name}.json"), *(DATA_DIR / "manual_activities").glob(f"{name}.json")]
+
+
 def load_manual(manual_id: str) -> ManualActivity:
-    for path in (DATA_DIR / "plans").glob(f"*/manual_activities/{safe_id(manual_id)}.json"):
+    for path in manual_paths(safe_id(manual_id)):
         return ManualActivity.model_validate_json(path.read_text())
     raise NotFound(manual_id)
+
+
+def list_all_manual() -> list[ManualActivity]:
+    return [ManualActivity.model_validate_json(path.read_text()) for path in sorted(manual_paths())]
 
 
 def list_manual(plan_id: str) -> list[ManualActivity]:

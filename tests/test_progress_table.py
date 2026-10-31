@@ -123,5 +123,6 @@ def test_progress_is_for_the_active_plan_only(plan):
     assert client.get("/api/plans/next/progress").status_code == 409
     assert client.post("/api/plans/next/progress/summary").status_code == 409
     lifecycle.accept("next")
-    assert client.get("/api/plans/plan/progress").status_code == 409
+    assert client.get("/api/plans/plan/progress").status_code == 200  # archived: past figures stay visible
+    assert client.post("/api/plans/plan/progress/summary").status_code == 409
     assert client.get("/api/plans/plan/usage").status_code == 200

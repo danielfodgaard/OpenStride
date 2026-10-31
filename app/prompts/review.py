@@ -11,12 +11,13 @@ Keep it short and concrete, with real numbers. observations has 1 to 4 short poi
 Use completion "unplanned" when no session was planned."""
 
 
-def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str) -> str:
+def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str) -> str:
     session = None
     if activity.match.session_index >= 0:
         week = next(w for w in plan_file.plan.weeks if w.week_number == activity.match.week_number)
         session = week.sessions[activity.match.session_index]
     planned = session.model_dump_json(indent=2) if session else "Unplanned run"
+    paces = plan_file.paces.model_dump_json(indent=2) if plan_file else "None: there is no active plan"
     history = json.dumps([a.model_dump(mode="json", exclude={"km_splits"}) for a in recent], indent=2)
     logged = json.dumps([m.model_dump(mode="json") for m in manual], indent=2)
     return f"""Planned session:
@@ -26,7 +27,7 @@ The run:
 {activity.model_dump_json(indent=2)}
 
 Athlete's reference paces:
-{plan_file.paces.model_dump_json(indent=2)}
+{paces}
 
 Previous 7 days of runs:
 {history}
@@ -34,5 +35,5 @@ Previous 7 days of runs:
 Hand-logged sessions from those 7 days (strength, cross-training, watch-less runs):
 {logged}
 
-Training metrics (load, fitness, fatigue, form, weekly volume, trends):
-{metrics}"""
+Training metrics (load, fitness, fatigue, form, weekly volume):
+{metrics or "None: there is no active plan"}"""

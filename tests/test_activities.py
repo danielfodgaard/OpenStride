@@ -145,10 +145,13 @@ def test_edit_note_rpe_and_match(client, active):
     assert missing.status_code == 409
 
 
-def test_upload_needs_an_active_plan(client):
+def test_upload_with_no_active_plan_is_saved_as_unplanned(client):
     add_draft()
     files = [("files", ("a.gpx", read("2026-11-05_easy.gpx")))]
-    assert client.post("/api/activities", files=files).status_code == 409
+    result = client.post("/api/activities", files=files).json()[0]
+    assert result["status"] == "imported"
+    assert result["activity"]["plan_id"] == "" and result["activity"]["match"]["session_index"] == -1
+    assert storage.list_all_activities()[0].plan_id == ""
 
 
 def test_activity_on_an_archived_plan_is_read_only(client, active):

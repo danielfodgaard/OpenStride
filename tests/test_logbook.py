@@ -157,7 +157,9 @@ def test_only_the_active_plan_takes_entries(client):
     other = storage.load_plan("plan")
     other.meta.id, other.meta.status = "next", "draft"
     storage.save_plan(other)
-    assert client.post("/api/plans/next/manual", json={"date": TUESDAY, "modality": "run", "duration_min": 5}).status_code == 409
+    drafted = client.post("/api/plans/next/manual", json={"date": TUESDAY, "modality": "run", "duration_min": 5}).json()
+    assert drafted["plan_id"] == "" and drafted["match"]["session_index"] == -1
+    assert client.post("/api/plans/nope/manual", json={"date": TUESDAY, "modality": "run", "duration_min": 5}).status_code == 404
     lifecycle.accept("next")
     assert client.patch(f"/api/manual/{entry['id']}", json={"rpe": 3}).status_code == 409
     assert client.delete(f"/api/manual/{entry['id']}").status_code == 409

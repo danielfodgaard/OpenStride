@@ -30,9 +30,55 @@ def as_item(entry: ManualActivity) -> dict:
 
 
 def all_items(plan_id: str) -> list[dict]:
-    """Everything done on a plan, oldest first, for the page and for LLM context."""
+    """Everything done on a plan, oldest first, for LLM context."""
     files = [activities.with_review(a) for a in storage.list_activities(plan_id)]
     return sorted([*files, *(as_item(m) for m in storage.list_manual(plan_id))], key=lambda item: item["date"])
+
+
+def planned_session(match: Match, plan_file: PlanFile | None):
+    if plan_file is None or match.session_index < 0:
+        return None
+    week = next((w for w in plan_file.plan.weeks if w.week_number == match.week_number), None)
+    return week.sessions[match.session_index] if week and match.session_index < len(week.sessions) else None
+
+
+def workout_item(item: dict, plans: dict) -> dict:
+    """An item for the Workouts page: title, and which plan and session it counts for."""
+    plan_id = item["plan_id"]
+    if plan_id not in plans:
+        plans[plan_id] = storage.load_plan(plan_id) if plan_id else None
+    plan_file = plans[plan_id]
+    session = planned_session(Match(**item["match"]), plan_file)
+    title = session.title if session else (item["title"] if item.get("manual") else item["source_file"])
+    label = f"{plan_file.request.goal_description} · Week {item['match']['week_number']} {session.day}" if session else "Unplanned"
+    return item | {
+        "title": title,
+        "type": session.type if session else item["modality"],
+        "plan_title": plan_file.request.goal_description if plan_file else "",
+        "match_label": label,
+    }
+
+
+def workouts(plan_id: str | None = None) -> list[dict]:
+    """Every recorded workout, newest first; one plan's only when `plan_id` is given."""
+    files = storage.list_activities(plan_id) if plan_id else storage.list_all_activities()
+    logged = storage.list_manual(plan_id) if plan_id else storage.list_all_manual()
+    items = [*(activities.with_review(a) for a in files), *(as_item(m) for m in logged)]
+    plans = {}
+    moment = lambda item: item.get("start_time") or item["date"]
+    return sorted((workout_item(item, plans) for item in items), key=moment, reverse=True)
+
+
+def workout(workout_id: str) -> dict:
+    """One workout by id, from a file or the logbook, with what its detail page needs."""
+    try:
+        item = activities.with_review(storage.load_activity(workout_id))
+    except storage.NotFound:
+        item = as_item(storage.load_manual(workout_id))
+    return workout_item(item, {}) | {
+        "has_series": storage.has_series(workout_id),
+        "has_raw": storage.find_raw(workout_id) is not None,
+    }
 
 
 def check_date(day) -> None:
@@ -45,41 +91,55 @@ def planned_title(entry: ManualActivity, plan_file: PlanFile) -> str:
     return found[0][2].title if found else LABELS[entry.modality]
 
 
-def create(plan_id: str, fields: dict) -> ManualActivity:
-    plan_file = lifecycle.require_active(plan_id)
+def create(plan_id: str | None, fields: dict) -> ManualActivity:
+    """Against the active plan if there is one and it's the one asked for; otherwise unplanned."""
+    if plan_id:
+        lifecycle.require_plan(plan_id)
+    active = lifecycle.active_plan()
+    plan_file = active if active and plan_id in (None, active.meta.id) else None
     check_date(fields["date"])
-    entry = ManualActivity(
-        id=storage.new_manual_id(plan_id, fields["date"]),
-        plan_id=plan_id,
-        match=Match(),
-        **fields,
-    )
-    entry.match = match_entry(entry, plan_file)
-    entry.title = entry.title.strip() or planned_title(entry, plan_file)
+    owner = plan_file.meta.id if plan_file else ""
+    entry = ManualActivity(id=storage.new_manual_id(owner, fields["date"]), plan_id=owner, match=Match(), **fields)
+    if plan_file:
+        entry.match = match_entry(entry, plan_file)
+        entry.title = entry.title.strip() or planned_title(entry, plan_file)
+    else:
+        entry.title = entry.title.strip() or LABELS[entry.modality]
     storage.save_manual(entry)
-    metrics.refresh(plan_file)
+    if plan_file:
+        metrics.refresh(plan_file)
     return entry
 
 
 def edit(manual_id: str, changes: dict, match: tuple[int, int] | None) -> ManualActivity:
     entry = storage.load_manual(manual_id)
-    plan_file = lifecycle.require_active(entry.plan_id)
+    plan_file = activities.plan_for_edit(entry.plan_id)
     moved = any(key in changes and changes[key] != getattr(entry, key) for key in ("date", "modality"))
     if "date" in changes:
         check_date(changes["date"])
+    old = entry
     entry = entry.model_copy(update=changes)
     if match is not None:
         week_number, index = match
-        entry.match = Match() if index == -1 else activities.planned_match(plan_file, week_number, index, entry.modality)
-    elif moved:
+        if index == -1:
+            entry.match = Match()
+        else:
+            entry.match = activities.planned_match(plan_file, week_number, index, entry.modality)
+            if not entry.plan_id:  # joining the plan moves it into that plan's folder
+                entry.plan_id = plan_file.meta.id
+                entry.id = storage.new_manual_id(entry.plan_id, entry.date)
+                storage.delete_manual(old)
+    elif moved and entry.plan_id:
         entry.match = match_entry(entry, plan_file)
     storage.save_manual(entry)
-    metrics.refresh(plan_file)
+    if plan_file:
+        metrics.refresh(plan_file)
     return entry
 
 
 def delete(manual_id: str) -> None:
     entry = storage.load_manual(manual_id)
-    plan_file = lifecycle.require_active(entry.plan_id)
+    plan_file = activities.plan_for_edit(entry.plan_id)
     storage.delete_manual(entry)
-    metrics.refresh(plan_file)
+    if plan_file:
+        metrics.refresh(plan_file)
