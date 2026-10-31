@@ -320,12 +320,138 @@ function importSection(status) {
   return section;
 }
 
+function sessionText(session) {
+  if (!session) return "Rest";
+  const amount = session.distance_km ? `${session.distance_km} km` : `${session.duration_min} min`;
+  return `${session.type}: ${session.title}, ${amount} @ ${session.target_pace}`;
+}
+
+function sessionsOn(week, day) {
+  return week.sessions.filter((s) => s.day === day);
+}
+
+// Old vs. new session per day for the affected weeks; changed rows get a *.
+function diffTable(planFile, proposal) {
+  const rows = proposal.result.weeks.flatMap((newWeek) => {
+    const oldWeek = planFile.plan.weeks.find((w) => w.week_number === newWeek.week_number);
+    return DAYS.map((day) => {
+      const before = sessionsOn(oldWeek, day).map(sessionText).join("; ") || "Rest";
+      const after = sessionsOn(newWeek, day).map(sessionText).join("; ") || "Rest";
+      return [before === after ? "" : "*", newWeek.week_number, day, before, after];
+    });
+  });
+  return table(["", "Week", "Day", "Old", "New"], rows);
+}
+
+function proposalView(proposal, planFile) {
+  const box = el("div");
+  const status = statusLine();
+  const { recommendation, rationale, changes } = proposal.result;
+  box.append(el("h3", recommendation === "no_change" ? "No change recommended" : "Suggested changes"));
+  box.append(el("p", `Weeks ${proposal.scope_weeks.join(", ")} — ${proposal.status}`));
+  box.append(el("p", rationale));
+  if (recommendation === "change") {
+    const list = el("ul");
+    for (const change of changes) list.append(el("li", `Week ${change.week_number} ${change.day}: ${change.summary}`));
+    box.append(list, diffTable(planFile, proposal));
+    if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
+    if (proposal.acceptable && proposal.status === "pending") {
+      const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
+      const actions = el("p");
+      actions.append(
+        button("Accept", status, async () => {
+          await api(`${path}/accept`, { method: "POST" });
+          await route();
+        }),
+        " ",
+        button("Reject", status, async () => {
+          await api(`${path}/reject`, { method: "POST" });
+          await route();
+        }),
+      );
+      box.append(actions);
+    }
+  }
+  box.append(status);
+  return box;
+}
+
+function adaptSection(planFile, proposals) {
+  const section = el("section");
+  const status = statusLine();
+  const scope = el("select");
+  scope.id = "adapt-scope";
+  scope.add(new Option("This week", "this_week"));
+  scope.add(new Option("Next 2 weeks", "next_2_weeks"));
+  scope.add(new Option("Rest of plan", "rest_of_plan"));
+  const context = el("textarea");
+  context.id = "adapt-context";
+  context.rows = 2;
+  context.cols = 50;
+  const scopeLabel = el("label", "Scope ");
+  scopeLabel.htmlFor = scope.id;
+  const contextLabel = el("label", "Context ");
+  contextLabel.htmlFor = context.id;
+  const suggest = button("Suggest plan changes", status, async () => {
+    await postJson(`/api/plans/${encodeURIComponent(planFile.meta.id)}/proposals`, {
+      scope: scope.value,
+      user_context: context.value,
+    });
+    await route();
+  }, "Thinking… this can take a minute");
+  const scopeLine = el("p");
+  scopeLine.append(scopeLabel, scope);
+  const contextLine = el("p");
+  contextLine.append(contextLabel, context);
+  const suggestLine = el("p");
+  suggestLine.append(suggest);
+  section.append(el("h2", "Adapt plan"), scopeLine, contextLine, suggestLine, status);
+  if (proposals.length) section.append(proposalView(proposals[0], planFile));
+  return section;
+}
+
+async function versionsView(id) {
+  const token = routeToken;
+  const encoded = encodeURIComponent(id);
+  const planFile = await api(`/api/plans/${encoded}`);
+  const versions = await api(`/api/plans/${encoded}/versions`);
+  if (token !== routeToken) return;
+  const status = statusLine();
+  const rows = versions.map(({ version, history }) => {
+    const view = el("div");
+    view.append(link("View", `#/plans/${encoded}/versions/${version}`));
+    if (planFile.meta.status === "active" && version !== planFile.meta.version) {
+      view.append(" ", button("Restore", status, async () => {
+        await api(`/api/plans/${encoded}/restore/${version}`, { method: "POST" });
+        location.hash = `#/plans/${encoded}`;
+      }));
+    }
+    return [version, history[0]?.accepted_at ?? planFile.meta.accepted_at, history[0]?.rationale ?? "Accepted plan", view];
+  });
+  const back = el("p");
+  back.append(link("Back to plan", `#/plans/${encoded}`));
+  main.replaceChildren(el("h1", "Plan versions"), back, table(["Version", "Accepted", "Why", ""], rows), status);
+}
+
+async function versionView(id, version) {
+  const token = routeToken;
+  const encoded = encodeURIComponent(id);
+  const planFile = await api(`/api/plans/${encoded}/versions/${encodeURIComponent(version)}`);
+  if (token !== routeToken) return;
+  const status = statusLine();
+  const back = el("p");
+  back.append(link("All versions", `#/plans/${encoded}/versions`));
+  main.replaceChildren(el("p", `Version ${planFile.meta.version}, read-only`), back, status, planDiv());
+  fullRender(planFile, status);
+}
+
 async function planView(id) {
   const token = routeToken;
   const encoded = encodeURIComponent(id);
   const planFile = await api(`/api/plans/${encoded}`);
   const isDraft = planFile.meta.status === "draft";
   const activities = isDraft ? [] : await api(`/api/activities?plan_id=${encoded}`);
+  const proposals = planFile.meta.status === "active" ? await api(`/api/plans/${encoded}/proposals`) : [];
   if (token !== routeToken) return;
   const status = statusLine();
   const { status: planStatus } = planFile.meta;
@@ -335,11 +461,11 @@ async function planView(id) {
   } else {
     if (planStatus === "archived") nodes.push(el("p", "Archived"));
     const actions = el("p");
-    actions.append(downloadButton(planFile, status));
+    actions.append(`version ${planFile.meta.version} `, link("All versions", `#/plans/${encoded}/versions`), " ", downloadButton(planFile, status));
     nodes.push(actions);
   }
   nodes.push(status, planDiv());
-  if (planStatus === "active") nodes.push(importSection(statusLine()));
+  if (planStatus === "active") nodes.push(importSection(statusLine()), adaptSection(planFile, proposals));
   main.replaceChildren(...nodes);
   fullRender(planFile, status, {
     actuals: !isDraft,
@@ -360,7 +486,9 @@ async function route() {
     if (parts.length === 0) await homeView();
     else if (parts[0] === "new") await newView(parts[1]);
     else if (parts[0] === "plans" && parts.length === 1) await plansView();
-    else if (parts[0] === "plans") await planView(parts[1]);
+    else if (parts[0] === "plans" && parts.length === 2) await planView(parts[1]);
+    else if (parts[0] === "plans" && parts.length === 3 && parts[2] === "versions") await versionsView(parts[1]);
+    else if (parts[0] === "plans" && parts.length === 4 && parts[2] === "versions") await versionView(parts[1], parts[3]);
     else main.replaceChildren(el("p", "Page not found."));
   } catch (error) {
     main.replaceChildren(el("p", error.message));

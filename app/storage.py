@@ -4,7 +4,7 @@ import os
 import re
 from pathlib import Path
 
-from app.models import ActivitySummary, PlanFile, ReviewFile
+from app.models import ActivitySummary, PlanFile, Proposal, ReviewFile
 
 DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
@@ -101,3 +101,40 @@ def save_review(review_file: ReviewFile) -> None:
 def load_review(activity_id: str) -> ReviewFile | None:
     path = review_path(activity_id)
     return ReviewFile.model_validate_json(path.read_text()) if path.exists() else None
+
+
+def new_proposal_id(plan_id: str, base: str) -> str:
+    proposal_id, suffix = base, 1
+    while (plan_dir(plan_id) / "proposals" / f"{proposal_id}.json").exists():
+        suffix += 1
+        proposal_id = f"{base}-{suffix}"
+    return proposal_id
+
+
+def save_proposal(proposal: Proposal) -> None:
+    path = plan_dir(proposal.plan_id) / "proposals" / f"{safe_id(proposal.proposal_id)}.json"
+    write_json(path, proposal.model_dump_json(indent=2))
+
+
+def load_proposal(proposal_id: str) -> Proposal:
+    # Proposal routes carry no plan id.
+    for path in (DATA_DIR / "plans").glob(f"*/proposals/{safe_id(proposal_id)}.json"):
+        return Proposal.model_validate_json(path.read_text())
+    raise NotFound(proposal_id)
+
+
+def list_proposals(plan_id: str) -> list[Proposal]:
+    paths = sorted((plan_dir(plan_id) / "proposals").glob("*.json"), reverse=True)
+    return [Proposal.model_validate_json(path.read_text()) for path in paths]
+
+
+def load_version(plan_id: str, version: int) -> PlanFile:
+    path = plan_dir(plan_id) / "versions" / f"plan_v{version}.json"
+    if not path.exists():
+        raise NotFound(str(version))
+    return PlanFile.model_validate_json(path.read_text())
+
+
+def list_versions(plan_id: str) -> list[PlanFile]:
+    paths = (plan_dir(plan_id) / "versions").glob("plan_v*.json")
+    return sorted((PlanFile.model_validate_json(p.read_text()) for p in paths), key=lambda p: p.meta.version)

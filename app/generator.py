@@ -16,6 +16,7 @@ from app.models import (
     SavedRequest,
     TrainingPlan,
     Usage,
+    Week,
 )
 from app.prompts import regenerate as regenerate_prompt
 from app.prompts.plan import SYSTEM_PROMPT, build_user_prompt
@@ -71,16 +72,17 @@ def call_claude(client, model, system, user_prompt, output_model, usage, max_tok
         raise GenerationError("Claude returned a response in an unexpected format. Please try again.") from error
 
 
+def date_week(week: Week, start: date) -> DatedWeek:
+    sessions = [
+        DatedSession(**s.model_dump(), date=start + timedelta(days=DAYS.index(s.day)))
+        for s in week.sessions
+    ]
+    return DatedWeek(**week.model_dump(exclude={"sessions"}), start_date=start, sessions=sessions)
+
+
 def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
-    weeks = []
     # A plan that failed validation can have the wrong week count; extrapolate rather than crash.
-    for index, week in enumerate(plan.weeks):
-        start = starts[0] + timedelta(weeks=index)
-        sessions = [
-            DatedSession(**s.model_dump(), date=start + timedelta(days=DAYS.index(s.day)))
-            for s in week.sessions
-        ]
-        weeks.append(DatedWeek(**week.model_dump(exclude={"sessions"}), start_date=start, sessions=sessions))
+    weeks = [date_week(week, starts[0] + timedelta(weeks=i)) for i, week in enumerate(plan.weeks)]
     return DatedPlan(summary=plan.summary, warnings=plan.warnings, weeks=weeks)
 
 

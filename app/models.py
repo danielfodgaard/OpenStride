@@ -208,3 +208,29 @@ class ReviewFile(BaseModel):
     activity_id: str
     review: RunReview
     meta: ReviewMeta
+
+
+class Change(BaseModel):
+    week_number: int
+    day: Day
+    summary: str
+
+
+class AdaptationResult(BaseModel):
+    recommendation: Literal["change", "no_change"]
+    rationale: str
+    changes: list[Change]
+    weeks: list[Week]
+
+
+class Proposal(BaseModel):
+    proposal_id: str
+    plan_id: str
+    based_on_version: int
+    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
+    scope_weeks: list[int]
+    user_context: str
+    status: Literal["pending", "accepted", "rejected"]
+    acceptable: bool
+    result: AdaptationResult
+    meta: ReviewMeta

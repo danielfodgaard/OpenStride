@@ -1,7 +1,7 @@
 """Turns .fit/.gpx files into ActivitySummary facts and matches them to planned sessions."""
 import io
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import fitdecode
 import gpxpy
@@ -283,6 +283,19 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
             result["message"] = f"{name}: imported, but the review failed: {error}"
         results.append(result)
     return results
+
+
+def rematch(plan_file: PlanFile) -> None:
+    """After a new plan version, point matches at the same planned day. Keeps manual matches."""
+    for activity in storage.list_activities(plan_file.meta.id):
+        if not activity.match.planned_date:
+            continue
+        day = date.fromisoformat(activity.match.planned_date)
+        found = closest_session(sessions_on(plan_file, day), activity.distance_km)
+        match = Match(planned_date=activity.match.planned_date, week_number=found[0], session_index=found[1]) if found else Match()
+        if match != activity.match:
+            activity.match = match
+            storage.save_activity(activity)
 
 
 def with_review(activity: ActivitySummary) -> dict:

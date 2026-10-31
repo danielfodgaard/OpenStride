@@ -1,6 +1,6 @@
 """Semantic checks on a TrainingPlan that the JSON schema cannot express."""
 
-from app.models import DAYS, SavedRequest, TrainingPlan
+from app.models import DAYS, AdaptationResult, PlanFile, SavedRequest, TrainingPlan
 
 HARD_TYPES = {"tempo", "intervals", "long"}
 
@@ -72,3 +72,37 @@ def soft_warnings(plan: TrainingPlan) -> list[str]:
                 f"({previous.planned_km:g} to {week.planned_km:g} km)"
             )
     return warnings
+
+
+def scope_errors(result: AdaptationResult, scope_weeks: list[int]) -> list[str]:
+    if result.recommendation == "no_change":
+        return ["no_change must have empty weeks"] if result.weeks else []
+    numbers = [week.week_number for week in result.weeks]
+    if numbers != scope_weeks:
+        return [f"Return exactly weeks {scope_weeks}, got {numbers}"]
+    return []
+
+
+def facts(session) -> dict:
+    return session.model_dump(exclude={"date"})
+
+
+def validate_merge(plan_file: PlanFile, merged: PlanFile, scope_weeks: list[int], today) -> list[str]:
+    """`merged` is the plan with a proposal's weeks swapped in."""
+    errors = []
+    for old, new in zip(plan_file.plan.weeks, merged.plan.weeks):
+        if old.week_number not in scope_weeks:
+            continue
+        past_old = [facts(s) for s in old.sessions if s.date <= today]
+        past_new = [facts(s) for s in new.sessions if s.date <= today]
+        if past_old != past_new:
+            errors.append(f"Week {old.week_number}: sessions dated {today} or earlier must stay exactly as they are")
+
+    races = lambda plan: [(s.date, facts(s)) for w in plan.plan.weeks for s in w.sessions if s.type == "race"]
+    if races(plan_file) != races(merged):
+        errors.append("The race session must stay exactly as it is")
+
+    # Only new problems count: an already-imperfect plan must not block every adaptation.
+    n_weeks = len(plan_file.plan.weeks)
+    existing = validate_plan(plan_file.plan, plan_file.request, n_weeks)
+    return errors + [e for e in validate_plan(merged.plan, merged.request, n_weeks) if e not in existing]

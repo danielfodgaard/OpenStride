@@ -1,6 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
@@ -8,9 +9,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, lifecycle, review, storage
+from app import activities, adapt, lifecycle, review, storage
 from app.generator import GenerationError, generate_plan
-from app.models import ActivitySummary, PlanFile, PlanRequest, ReviewFile
+from app.models import ActivitySummary, PlanFile, PlanRequest, Proposal, ReviewFile
 
 load_dotenv()
 
@@ -51,6 +52,11 @@ class ActivityEdit(BaseModel):
     user_note: str | None = None
     rpe: int | None = Field(default=None, ge=0, le=10)
     match: MatchEdit | None = None
+
+
+class ProposalRequest(BaseModel):
+    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
+    user_context: str = ""
 
 
 # Plain defs: FastAPI runs them in a thread pool, so long API calls don't block the server.
@@ -120,6 +126,45 @@ def edit_activity(activity_id: str, edit: ActivityEdit) -> ActivitySummary:
 @app.post("/api/activities/{activity_id}/review")
 def rerun_review(activity_id: str) -> ReviewFile:
     return review.review_activity(storage.load_activity(activity_id))
+
+
+@app.post("/api/plans/{plan_id}/proposals")
+def create_proposal(plan_id: str, body: ProposalRequest) -> Proposal:
+    return adapt.create_proposal(plan_id, body.scope, body.user_context)
+
+
+@app.get("/api/plans/{plan_id}/proposals")
+def get_proposals(plan_id: str) -> list[Proposal]:
+    return storage.list_proposals(plan_id)
+
+
+@app.post("/api/proposals/{proposal_id}/accept")
+def accept_proposal(proposal_id: str) -> PlanFile:
+    return adapt.accept(proposal_id)
+
+
+@app.post("/api/proposals/{proposal_id}/reject")
+def reject_proposal(proposal_id: str) -> Proposal:
+    return adapt.reject(proposal_id)
+
+
+@app.get("/api/plans/{plan_id}/versions")
+def get_versions(plan_id: str) -> list[dict]:
+    lifecycle.require_plan(plan_id)
+    return [
+        {"version": p.meta.version, "history": [h.model_dump() for h in p.meta.history if h.version == p.meta.version]}
+        for p in storage.list_versions(plan_id)
+    ]
+
+
+@app.get("/api/plans/{plan_id}/versions/{version}")
+def get_version(plan_id: str, version: int) -> PlanFile:
+    return storage.load_version(plan_id, version)
+
+
+@app.post("/api/plans/{plan_id}/restore/{version}")
+def restore_version(plan_id: str, version: int) -> PlanFile:
+    return adapt.restore(plan_id, version)
 
 
 # Mounted last so it never shadows API routes; html=True serves index.html at /.
