@@ -72,6 +72,36 @@ def list_plans() -> list[dict]:
     return plans
 
 
+def series_path(activity_id: str) -> Path:
+    return DATA_DIR / "activities" / f"{safe_id(activity_id)}.series.json"
+
+
+def has_series(activity_id: str) -> bool:
+    return series_path(activity_id).exists()
+
+
+def save_series(series: dict) -> None:
+    write_json(series_path(series["activity_id"]), json.dumps(series))
+
+
+def load_series(activity_id: str) -> dict:
+    path = series_path(activity_id)
+    if not path.exists():
+        raise NotFound(activity_id)
+    return json.loads(path.read_text())
+
+
+def save_raw(activity_id: str, name: str, content: bytes) -> None:
+    suffix = "fit" if name.lower().endswith(".fit") else "gpx"
+    path = DATA_DIR / "activities" / "raw" / f"{safe_id(activity_id)}.{suffix}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+
+def find_raw(activity_id: str) -> Path | None:
+    return next((DATA_DIR / "activities" / "raw").glob(f"{safe_id(activity_id)}.*"), None)
+
+
 def activity_path(activity_id: str) -> Path:
     return DATA_DIR / "activities" / f"{safe_id(activity_id)}.json"
 
@@ -99,6 +129,7 @@ def list_all_activities() -> list[ActivitySummary]:
     return [
         ActivitySummary.model_validate_json(path.read_text())
         for path in sorted((DATA_DIR / "activities").glob("*.json"))  # ids start with the start time
+        if not path.name.endswith(".series.json")
     ]
 
 

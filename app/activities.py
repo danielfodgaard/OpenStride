@@ -2,13 +2,14 @@
 import io
 import math
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import fitdecode
 import gpxpy
 
 from app import generator, lifecycle, metrics, review, storage
 from app.models import ActivitySummary, Lap, Match, PlanFile
+from app.series import build_series
 
 MOVING_KM_PER_S = 0.0005  # below 0.5 m/s the runner has stopped
 ELEVATION_NOISE_M = 3  # ignores altimeter jitter when summing climbs
@@ -30,6 +31,8 @@ class Point:
     hr: int = 0
     cadence: int = 0  # strides per minute, as both formats record it
     altitude: float | None = None
+    lat: float | None = None
+    lon: float | None = None
 
 
 @dataclass
@@ -105,18 +108,19 @@ def fit_points(records: list[dict]) -> list[Point]:
             continue
         if has_distance:
             km = record["distance"] / 1000 if record.get("distance") is not None else km
-        else:  # some devices only record GPS
-            lat, lon = record.get("position_lat"), record.get("position_long")
-            if lat is not None and lon is not None:
-                here = (lat * SEMICIRCLE_DEGREES, lon * SEMICIRCLE_DEGREES)
-                km += distance_between(*position, *here) if position else 0
-                position = here
+        lat, lon = record.get("position_lat"), record.get("position_long")
+        here = (lat * SEMICIRCLE_DEGREES, lon * SEMICIRCLE_DEGREES) if lat is not None and lon is not None else None
+        if not has_distance and here:  # some devices only record GPS
+            km += distance_between(*position, *here) if position else 0
+            position = here
         points.append(Point(
             time=record["timestamp"],
             distance_km=km,
             hr=record.get("heart_rate") or 0,
             cadence=record.get("cadence") or 0,
             altitude=record.get("enhanced_altitude", record.get("altitude")),
+            lat=round(here[0], 6) if here else None,
+            lon=round(here[1], 6) if here else None,
         ))
     return points
 
@@ -213,6 +217,8 @@ def parse_gpx(content: bytes) -> Parsed:
                     hr=number(extensions.get("hr") or extensions.get("heartrate")),
                     cadence=number(extensions.get("cad") or extensions.get("cadence")),
                     altitude=point.elevation,
+                    lat=point.latitude,
+                    lon=point.longitude,
                 ))
     return Parsed(points=points, sport=gpx_sport(gpx))
 
@@ -288,6 +294,13 @@ def climbed(points: list[Point]) -> float:
     return round(gain, 1)
 
 
+def utc_start(parsed: Parsed) -> str:
+    start = parsed.start_time or parsed.points[0].time
+    if start.tzinfo is None:
+        start = start.astimezone()
+    return start.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
 def local_start(parsed: Parsed) -> datetime:
     start = parsed.start_time or parsed.points[0].time
     if start.tzinfo is None:
@@ -359,18 +372,31 @@ def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rp
         match=Match(),
         modality=modality,
         sport=parsed.sport,
+        start_utc=utc_start(parsed),
     )
 
 
-def parse_file(name: str, content: bytes, plan_id: str, user_note: str = "", rpe: int = 0) -> ActivitySummary:
+def parse_bytes(name: str, content: bytes) -> Parsed:
     suffix = name.lower().rsplit(".", 1)[-1]
     if suffix == "fit":
-        parsed = parse_fit(content)
-    elif suffix == "gpx":
-        parsed = parse_gpx(content)
-    else:
-        raise ValueError("only .fit and .gpx files are supported")
-    return summarise(parsed, name, plan_id, user_note, rpe)
+        return parse_fit(content)
+    if suffix == "gpx":
+        return parse_gpx(content)
+    raise ValueError("only .fit and .gpx files are supported")
+
+
+def parse_file(name: str, content: bytes, plan_id: str, user_note: str = "", rpe: int = 0) -> ActivitySummary:
+    return summarise(parse_bytes(name, content), name, plan_id, user_note, rpe)
+
+
+def store_series(activity: ActivitySummary, parsed: Parsed) -> None:
+    """The series, and the UTC start time that older imports didn't record."""
+    series = build_series(activity.id, rebased(parsed.points))
+    if series:
+        storage.save_series(series)
+    if not activity.start_utc:
+        activity.start_utc = utc_start(parsed)
+        storage.save_activity(activity)
 
 
 def closest_session(sessions, distance_km: float) -> tuple[int, int] | None:
@@ -397,12 +423,12 @@ def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
     return Match(planned_date=activity.date.isoformat(), week_number=found[0], session_index=found[1])
 
 
-def is_duplicate(activity: ActivitySummary) -> bool:
+def find_duplicate(activity: ActivitySummary) -> ActivitySummary | None:
     """Per plan, so a run can be imported again under a new plan."""
-    return any(
-        other.modality == activity.modality and abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW
-        for other in storage.list_activities(activity.plan_id)
-    )
+    for other in storage.list_activities(activity.plan_id):
+        if other.modality == activity.modality and abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW:
+            return other
+    return None
 
 
 def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> list[dict]:
@@ -413,16 +439,25 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
     results = []
     for name, content in uploads:
         try:
-            activity = parse_file(name, content, plan_file.meta.id, user_note, rpe)
+            parsed = parse_bytes(name, content)
+            activity = summarise(parsed, name, plan_file.meta.id, user_note, rpe)
         except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
             results.append({"file": name, "status": "error", "message": f"Could not read {name}: {error}"})
             continue
-        if is_duplicate(activity):
+        existing = find_duplicate(activity)
+        if existing and storage.find_raw(existing.id):
             results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
+            continue
+        if existing:  # imported before v3.1: keep the workout, add what its detail page needs
+            storage.save_raw(existing.id, name, content)
+            store_series(existing, parsed)
+            results.append({"file": name, "status": "updated", "message": f"{name}: route and charts added"})
             continue
         activity.id = storage.new_activity_id(activity.id)
         activity.match = match_activity(activity, plan_file)
         storage.save_activity(activity)
+        storage.save_raw(activity.id, name, content)
+        store_series(activity, parsed)
         metrics.refresh(plan_file)
         result = {"file": name, "status": "imported", "activity": activity.model_dump(mode="json")}
         try:

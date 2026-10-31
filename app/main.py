@@ -165,6 +165,11 @@ def upload_activities(files: list[UploadFile], user_note: str = Form(""), rpe: i
     return activities.import_files(uploads, user_note, rpe)
 
 
+@app.get("/api/activities/{activity_id}/series")
+def get_series(activity_id: str) -> dict:
+    return storage.load_series(activity_id)
+
+
 @app.get("/api/activities")
 def get_activities(plan_id: str) -> list[dict]:
     return logbook.all_items(plan_id)

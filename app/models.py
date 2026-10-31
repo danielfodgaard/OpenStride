@@ -223,6 +223,7 @@ class ActivitySummary(BaseModel):
     match: Match
     modality: Modality = "run"  # strength for a watch's gym file, cross for other sports
     sport: str = "running"
+    start_utc: str = ""  # as stored in the file; "" for activities imported before v3.1
 
 
 class RunReview(BaseModel):

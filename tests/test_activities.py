@@ -301,8 +301,8 @@ def test_same_run_as_fit_and_gpx_is_a_duplicate(client, active):
     client.post("/api/activities", files=[("files", ("a.gpx", read("2026-11-05_easy.gpx")))])
     start = storage.list_activities("plan")[0].start_time
     other = activities.parse_file("a.gpx", read("2026-11-05_easy.gpx"), "plan")
-    assert activities.is_duplicate(other.model_copy(update={"start_time": start + timedelta(seconds=45)}))
-    assert not activities.is_duplicate(other.model_copy(update={"start_time": start + timedelta(minutes=5)}))
+    assert activities.find_duplicate(other.model_copy(update={"start_time": start + timedelta(seconds=45)}))
+    assert not activities.find_duplicate(other.model_copy(update={"start_time": start + timedelta(minutes=5)}))
 
 
 def test_bike_cadence_is_not_doubled():
