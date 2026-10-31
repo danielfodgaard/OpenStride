@@ -1,4 +1,4 @@
-"""Garmin endpoints. In mode `off` these say so, except what needs no Garmin."""
+"""Garmin endpoints. With a capability off these say so, except what needs no Garmin."""
 from dataclasses import asdict
 
 from fastapi import APIRouter, Response
@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app import lifecycle, workout_fit
 from app.garmin import delivery, sync
-from app.garmin.provider import GarminError, current_mode, make_provider
+from app.garmin.provider import GarminError, make_provider, make_pusher, push_mode, status, sync_mode
 
 router = APIRouter()
 
@@ -21,20 +21,19 @@ def refused(error: GarminError) -> JSONResponse:
 
 def pusher():
     """The provider, or the response to send instead."""
-    if current_mode() == "off":
-        return None, not_configured()
-    provider = make_provider()
-    return (provider, None) if provider.can_push_workouts() else (None, not_configured("push_not_supported"))
+    if push_mode() == "off":
+        return None, not_configured("push_not_supported" if sync_mode() != "off" else "garmin_not_configured")
+    return make_pusher(), None
 
 
 @router.get("/api/garmin/status")
 def garmin_status():
-    return asdict(make_provider().status())
+    return asdict(status())
 
 
 @router.post("/api/garmin/sync")
 def garmin_sync():
-    return sync.sync() if current_mode() != "off" else not_configured()
+    return sync.sync() if sync_mode() != "off" else not_configured()
 
 
 @router.get("/api/plans/{plan_id}/sessions/{week}/{index}/workout.fit")

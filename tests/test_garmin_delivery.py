@@ -66,13 +66,13 @@ def plan():
 @pytest.fixture
 def pusher(monkeypatch):
     fake = FakePusher()
-    monkeypatch.setattr(garmin_router, "make_provider", lambda: fake)
-    monkeypatch.setattr(garmin_router, "current_mode", lambda: "unofficial")
+    monkeypatch.setattr(garmin_router, "make_pusher", lambda: fake)
+    monkeypatch.setattr(garmin_router, "push_mode", lambda: "unofficial")
     return fake
 
 
-def set_mode(monkeypatch, mode):
-    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_mode=mode))
+def set_mode(monkeypatch, sync="personal_api", push="off"):
+    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_sync=sync, garmin_push=push))
 
 
 def runs(plan_file, number=WEEK):
@@ -93,7 +93,7 @@ def edit_pace(plan_file, index, number=WEEK):
 
 def test_status_in_mode_off_works(client):
     body = client.get("/api/garmin/status").json()
-    assert body == {"mode": "off", "connected": False, "last_sync_at": None, "last_error": None, "can_push_workouts": False}
+    assert body == {"sync": "off", "push": "off", "connected": False, "last_sync_at": None, "last_error": None, "can_push_workouts": False}
 
 
 def test_sync_in_mode_off_is_501(client):
@@ -102,24 +102,26 @@ def test_sync_in_mode_off_is_501(client):
 
 
 def test_status_for_a_connected_mode(client, monkeypatch):
-    set_mode(monkeypatch, "unofficial")
+    set_mode(monkeypatch, push="unofficial")
+    monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_TOKEN)
     provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
     body = client.get("/api/garmin/status").json()
-    assert body["mode"] == "unofficial" and body["connected"] and body["can_push_workouts"]
+    assert body["push"] == "unofficial" and body["connected"] and body["can_push_workouts"]
+    assert FAKE_TOKEN not in json.dumps(body)
 
 
 def test_personal_mode_status_has_no_push(client, monkeypatch):
-    set_mode(monkeypatch, "personal_api")
+    set_mode(monkeypatch)
     body = client.get("/api/garmin/status").json()
-    assert body["mode"] == "personal_api" and not body["connected"] and not body["can_push_workouts"]
+    assert body["sync"] == "personal_api" and not body["connected"] and not body["can_push_workouts"]
 
 
 def test_sync_in_a_connected_mode_returns_the_spec_shape(client, monkeypatch):
-    set_mode(monkeypatch, "personal_api")  # no key saved: the error comes back in the result
+    set_mode(monkeypatch)  # no key set: the error comes back in the result
     body = client.post("/api/garmin/sync").json()
     assert body["imported"] == [] and body["skipped"] == body["matched"] == body["unplanned"] == 0
-    assert "app.garmin.login" in body["warnings"][0]
-    assert "app.garmin.login" in client.get("/api/garmin/status").json()["last_error"]
+    assert provider.PERSONAL_KEY_ENV in body["warnings"][0]
+    assert provider.PERSONAL_KEY_ENV in client.get("/api/garmin/status").json()["last_error"]
 
 
 def test_download_works_in_mode_off(client, plan):
@@ -299,7 +301,7 @@ def test_the_real_unofficial_push_path_through_the_router(client, plan, monkeypa
     import garminconnect
     from garminconnect import Garmin
 
-    set_mode(monkeypatch, "unofficial")
+    set_mode(monkeypatch, push="unofficial")
     provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
     cls = create_autospec(Garmin)
     cls.return_value.login.return_value = (None, None)
@@ -321,7 +323,7 @@ def test_tokens_stay_in_secrets_and_out_of_everything_else(client, plan, monkeyp
     from garminconnect import Garmin
 
     caplog.set_level(logging.DEBUG)
-    set_mode(monkeypatch, "unofficial")
+    set_mode(monkeypatch, push="unofficial")
     provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, json.dumps({"di_refresh_token": FAKE_TOKEN}))
     cls = create_autospec(Garmin)
     cls.return_value.login.return_value = (None, None)

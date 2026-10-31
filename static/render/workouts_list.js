@@ -26,7 +26,6 @@ function garminSection(garmin) {
   last.className = "muted";
   section.append(actions(sync, last));
   if (garmin.last_error) section.append(notice(garmin.last_error, "critical"));
-  if (garmin.mode === "unofficial") section.append(notice(UNOFFICIAL_WARNING));
   section.append(status);
   return section;
 }

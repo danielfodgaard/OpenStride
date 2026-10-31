@@ -93,7 +93,7 @@ def test_a_past_import_has_no_warning(plan, monkeypatch):
 
 def test_garmin_routes_with_mode_off(plan):
     with TestClient(main.app) as client:
-        assert client.get("/api/garmin/status").json()["mode"] == "off"
+        assert client.get("/api/garmin/status").json()["sync"] == "off"
         assert client.get("/api/plans/plan/sessions/1/0/workout.fit").status_code == 200  # needs no Garmin
         responses = [
             client.post("/api/garmin/sync"),
@@ -105,11 +105,11 @@ def test_garmin_routes_with_mode_off(plan):
 
 
 def test_settings_defaults_and_bad_mode(monkeypatch):
-    for name in ("OPENSTRIDE_HOST", "OPENSTRIDE_PORT", "OPENSTRIDE_PASSWORD", "GARMIN_MODE", "GARMIN_SYNC_MINUTES"):
+    for name in ("OPENSTRIDE_HOST", "OPENSTRIDE_PORT", "OPENSTRIDE_PASSWORD", "GARMIN_MODE", "GARMIN_SYNC", "GARMIN_PUSH", "GARMIN_SYNC_MINUTES"):
         monkeypatch.delenv(name, raising=False)
     settings = config.load()
     assert (settings.host, settings.port, settings.password) == ("127.0.0.1", 8000, "")
-    assert (settings.garmin_mode, settings.garmin_sync_minutes) == ("off", 0)
+    assert (settings.garmin_sync, settings.garmin_push, settings.garmin_sync_minutes) == ("off", "off", 0)
     monkeypatch.setenv("GARMIN_MODE", "strava")
     with pytest.raises(ValueError):
         config.load()

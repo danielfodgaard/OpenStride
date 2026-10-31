@@ -18,27 +18,32 @@ On a server without Tailscale installed, uncomment the `tailscale` service in `c
 
 On the same Wi-Fi without Tailscale, `OPENSTRIDE_HOST=0.0.0.0` with a password and `http://<laptop-ip>:8000` works too. It has no HTTPS, so the app can't be installed on the phone and the password crosses the network in the clear. Prefer Tailscale.
 
-## Garmin (experimental: not yet tested against a real Garmin account)
+## Garmin
 
-Runs can arrive from Garmin Connect, and planned sessions can go to your watch. Set `GARMIN_MODE` in `.env`, then connect once from a terminal:
+Reading your activities and sending workouts are two separate settings in `.env`:
 
-    uv run python -m app.garmin.login
+| Setting | Values | What it does |
+|---|---|---|
+| `GARMIN_SYNC` | `off`, `personal_api` | Sync runs through Garmin's official, read-only Personal API |
+| `GARMIN_PUSH` | `off`, `unofficial` | Send workouts through `python-garminconnect` |
 
-| `GARMIN_MODE` | Sync runs | Send workouts | How it connects |
-|---|---|---|---|
-| `off` (default) | no | no | Download workout .fit still works |
-| `personal_api` | yes | no | Garmin's official, read-only Personal API |
-| `unofficial` | yes | yes | `python-garminconnect`, with your Garmin login |
+Download workout .fit works with both off. The older `GARMIN_MODE` still works: `personal_api` turns on sync, and `unofficial` turns on both.
 
-**`personal_api`.** In Garmin Connect's account settings, create a Personal API key and copy it, since it is shown only once. Paste it at the login prompt. It is saved to `data/secrets/` with mode 600. Keys expire after 30 days to a year; when yours does, create a new one and run the login again. Garmin says this API is for your own data and not for commercial apps serving several users, and it cannot send workouts.
+**Syncing runs.**
 
-**`unofficial`.** **Read this first.** This mode uses `python-garminconnect`, which logs in the way Garmin's mobile app does. Garmin does not sanction it, it can break without notice whenever Garmin changes its login or endpoints, and it sits in a grey area under Garmin's terms. The login asks for your email, password and MFA code in the terminal. The password is used once and never stored. Only the tokens are, in `data/secrets/garmin_tokens.json` with mode 600. They can reach your account, so treat that file like a password; deleting it does not revoke them at Garmin. A rejected token needs the login again.
+1. Create a key at <https://connect.garmin.com/app/settings/personalApiToken> and choose 365 days. It is shown once.
+2. In `.env`, set `GARMIN_SYNC=personal_api` and `GARMIN_PERSONAL_API_KEY=<your key>`, then restart the server.
+3. Press **Sync from Garmin** on the Workouts page, or set `GARMIN_SYNC_MINUTES` to sync on a timer while the server runs (0 is manual only, minimum 15).
 
-**Syncing.** Press **Sync from Garmin**, or set `GARMIN_SYNC_MINUTES` to sync on a timer while the server runs (0 is manual only, minimum 15). Errors show in the status and never stop the server. Runs and other sports go through the same steps as an uploaded file: matching, review, charts and metrics. Strength sessions become logged sessions with no route. The first sync starts a week before the active plan, or 30 days back with no plan. Later syncs look back 3 days from the last one, so a run the watch uploads up to 3 days late is still found; anything later has to be uploaded by hand. If a review fails, for example on a bad Claude key, the run is still imported, the sync reports a warning, and you can re-run the review. An activity is imported once: if you delete a workout here, sync won't bring it back. If a file has nothing to read, the workout is built from Garmin's summary and marked partial, with no route or charts.
+When the key expires, sync reports that Garmin refused it: create a new one and replace it in `.env`. The key mints a 24-hour access token, cached in `data/secrets/` with mode 600. Garmin says this API is for your own data and not for commercial apps serving several users. It cannot send workouts.
 
-**Workouts on the watch.** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug, so test yours. In `unofficial` mode, **Send to Garmin** uploads the workout, schedules it on the session date and sends it to your last-used device, and it also reaches the watch at its next sync if that send fails. Sending a session again replaces its old Garmin workout. After a plan change, the weeks page offers to re-send only what changed. Past and completed sessions are not sent. Strength and cross sessions are not exported.
+Runs and other sports go through the same steps as an uploaded file: matching, review, charts and metrics. Strength sessions become logged sessions with no route. The first sync starts a week before the active plan, or 30 days back with no plan. Later syncs look back 3 days from the last one, so a run the watch uploads up to 3 days late is still found; anything later has to be uploaded by hand. If a review fails, the run is still imported and the sync reports a warning. An activity is imported once: if you delete a workout here, sync won't bring it back.
 
-**Secrets** live only in `data/secrets/`. They are never logged, sent to Claude, or written to plan or activity files.
+**Workouts on the watch (experimental: not yet tested against a real Garmin watch).** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug. Strength and cross sessions are not exported.
+
+**Send to Garmin (experimental: not yet tested against a real Garmin account).** This needs `GARMIN_PUSH=unofficial` and a login to your Garmin account through `python-garminconnect`, which is not sanctioned by Garmin and can break without notice. It is not finished: the app has no login for it yet, so use the .fit download for now.
+
+**Secrets** live only in `.env` and `data/secrets/`. They are never logged, sent to Claude, or written to plan or activity files.
 
 ## Password
 

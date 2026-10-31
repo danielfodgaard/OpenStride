@@ -7,6 +7,7 @@ import stat
 import zipfile
 from dataclasses import replace
 from datetime import date, datetime, timezone
+from pathlib import Path
 from unittest.mock import create_autospec
 
 import garminconnect
@@ -15,22 +16,14 @@ from garminconnect import Garmin
 from garminconnect.exceptions import GarminConnectAuthenticationError, GarminConnectConnectionError
 
 from app import storage
-from app.garmin import login, provider
+from app.garmin import provider
 from app.garmin.provider import GarminError, NotSupported, PersonalApiProvider, UnofficialProvider
 
 FAKE_KEY = "fake-personal-key-zebra"
 FAKE_REFRESH = "fake-refresh-token-zebra"
 SINCE = datetime(2026, 10, 26, tzinfo=timezone.utc)
-RAW = {
-    "activityId": 123,
-    "startTimeGMT": "2026-11-02 23:12:30",
-    "startTimeLocal": "2026-11-03 07:12:30",
-    "activityType": {"typeKey": "running"},
-    "distance": 8000.0,
-    "duration": 2690.5,
-    "averageHR": 140.0,
-    "maxHR": 160.0,
-}
+FIXTURE = json.loads(Path("tests/fixtures/garmin_activities.json").read_text())  # a real reply's shape, sanitised
+RAW = FIXTURE["running"]
 
 
 def jwt(secret="payload"):
@@ -81,11 +74,12 @@ class FakeSession:
 @pytest.fixture(autouse=True)
 def data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(provider, "PAGE_DELAY_S", 0)
 
 
 @pytest.fixture
-def personal():
-    provider.save_secret(provider.PERSONAL_KEY_FILE, FAKE_KEY)
+def personal(monkeypatch):
+    monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_KEY)
     return PersonalApiProvider(FakeSession())
 
 
@@ -103,7 +97,7 @@ def mocked(monkeypatch):
 
 
 def test_personal_api_exchanges_the_key_and_lists_activities(personal):
-    assert personal.status().connected and not personal.can_push_workouts()
+    assert not personal.can_push_workouts()
     [activity] = personal.list_activities(SINCE)
     assert activity.id == "123" and activity.sport == "running" and activity.distance_m == 8000
     assert activity.start_time == datetime(2026, 11, 2, 23, 12, 30, tzinfo=timezone.utc)
@@ -121,7 +115,7 @@ def test_personal_api_reuses_its_token_and_pages_and_filters(personal):
     old = RAW | {"activityId": 999, "startTimeGMT": "2026-10-20 10:00:00"}
     personal.session.pages = [full_page, {"activities": [RAW, old]}]
     assert len(personal.list_activities(SINCE)) == provider.PAGE_SIZE + 1
-    assert len(personal.session.gets) == 2 and len(personal.session.posts) == 1
+    assert len(personal.session.gets) == 3 and len(personal.session.posts) == 1  # to the empty page
     assert stat.S_IMODE((storage.DATA_DIR / "secrets" / provider.PERSONAL_BEARER_FILE).stat().st_mode) == 0o600
 
 
@@ -129,6 +123,30 @@ def test_personal_api_mints_a_new_token_once_after_a_401(personal):
     personal.session.fail_next_get = 401
     assert len(personal.list_activities(SINCE)) == 1
     assert len(personal.session.posts) == 2
+
+
+def test_personal_api_backs_off_on_429_then_carries_on(personal, monkeypatch):
+    waits = []
+    monkeypatch.setattr(provider.time, "sleep", waits.append)
+    personal.session.fail_next_get = 429
+    assert len(personal.list_activities(SINCE)) == 1
+    assert waits[0] == provider.BACKOFF_S[0]
+
+
+def test_personal_api_gives_up_after_the_last_backoff(personal, monkeypatch):
+    monkeypatch.setattr(provider.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(personal.session, "get", lambda *a, **k: Response(status=429, text="slow down"))
+    with pytest.raises(GarminError, match="rate limiting"):
+        personal.list_activities(SINCE)
+
+
+def test_the_real_reply_shape_gives_the_facts_sync_needs():
+    run = provider.remote_activity(FIXTURE["running"])
+    assert run.id == "123" and run.sport == "running" and run.distance_m == 8000 and run.duration_s == 2880
+    assert run.start_time == datetime(2026, 11, 2, 23, 12, 30, tzinfo=timezone.utc)
+    assert run.local_start == datetime(2026, 11, 3, 7, 12, 30)
+    assert (run.avg_hr, run.max_hr) == (152, 170)
+    assert provider.remote_activity(FIXTURE["strength"]).sport == "strength_training"
 
 
 def test_personal_api_download_unzips_the_fit(personal):
@@ -156,10 +174,8 @@ def test_personal_api_errors_carry_no_response_text(personal):
 
 
 def test_personal_api_without_a_key_says_how_to_connect():
-    plain = PersonalApiProvider(FakeSession())
-    assert not plain.status().connected
-    with pytest.raises(GarminError, match="app.garmin.login"):
-        plain.list_activities(SINCE)
+    with pytest.raises(GarminError, match=provider.PERSONAL_KEY_ENV):
+        PersonalApiProvider(FakeSession()).list_activities(SINCE)
 
 
 def test_personal_api_cannot_push():
@@ -173,17 +189,9 @@ def test_an_odd_activity_shape_is_reported_without_values():
     assert "value" not in str(caught.value).replace("values", "")
 
 
-def test_unofficial_resumes_tokens_and_reads(mocked):
-    mocked.get_activities_by_date.return_value = [RAW]
-    mocked.download_activity.return_value = zipped()
-    plain = UnofficialProvider()
-    assert plain.status().connected and plain.can_push_workouts()
-    [activity] = plain.list_activities(SINCE)
-    assert activity.id == "123"
-    assert plain.download_fit("123") == b".FITDATA"
+def test_unofficial_resumes_saved_tokens_without_a_password(mocked):
+    UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
     mocked.login.assert_called_once_with(tokenstore=str(storage.DATA_DIR / "secrets"))
-    mocked.get_activities_by_date.assert_called_once_with("2026-10-26", None, None, "asc")
-    mocked.download_activity.assert_called_once_with("123", dl_fmt=Garmin.ActivityDownloadFormat.ORIGINAL)
 
 
 def test_unofficial_push_uploads_schedules_and_sends_to_the_watch(mocked):
@@ -209,23 +217,9 @@ def test_a_failed_schedule_removes_the_upload(mocked):
 
 def test_rejected_tokens_ask_for_a_new_login(mocked):
     mocked.login.side_effect = GarminConnectAuthenticationError(f"bad {FAKE_REFRESH}")
-    with pytest.raises(GarminError, match="app.garmin.login") as caught:
-        UnofficialProvider().list_activities(SINCE)
+    with pytest.raises(GarminError, match="Garmin settings") as caught:
+        UnofficialProvider().push_workout(b"", {}, date(2026, 11, 3))
     assert FAKE_REFRESH not in str(caught.value)
-
-
-def test_mode_selects_the_provider(monkeypatch):
-    for mode, kind in (("off", provider.NullProvider), ("personal_api", PersonalApiProvider), ("unofficial", UnofficialProvider)):
-        monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_mode=mode))
-        assert type(provider.make_provider()) is kind
-    monkeypatch.setenv("OPENSTRIDE_DEMO", "1")
-    assert type(provider.make_provider()) is provider.NullProvider
-
-
-def test_status_reads_state_without_calling_garmin():
-    provider.write_json(provider.state_path(), {"last_sync_at": "t", "last_error": "e"})
-    status = provider.NullProvider().status()
-    assert (status.mode, status.connected, status.last_sync_at, status.last_error) == ("off", False, "t", "e")
 
 
 def test_secrets_are_mode_600_in_a_private_folder():
@@ -235,43 +229,55 @@ def test_secrets_are_mode_600_in_a_private_folder():
     assert stat.S_IMODE((storage.DATA_DIR / "secrets").stat().st_mode) == 0o700
 
 
-def test_a_key_saved_loosely_is_tightened_before_use(personal):
-    (storage.DATA_DIR / "secrets" / provider.PERSONAL_KEY_FILE).chmod(0o644)
-    personal.list_activities(SINCE)
-    assert stat.S_IMODE((storage.DATA_DIR / "secrets" / provider.PERSONAL_KEY_FILE).stat().st_mode) == 0o600
-
-
-def test_login_saves_the_personal_key_only(monkeypatch, capsys):
-    monkeypatch.setattr(login, "settings", replace(login.settings, garmin_mode="personal_api"))
-    monkeypatch.setattr(login, "getpass", lambda prompt: FAKE_KEY)
-    login.main()
-    assert (storage.DATA_DIR / "secrets" / provider.PERSONAL_KEY_FILE).read_text() == FAKE_KEY
-    assert FAKE_KEY not in capsys.readouterr().out
-
-
-def test_unofficial_login_uses_the_password_once_and_never_stores_it(monkeypatch, capsys):
-    cls = create_autospec(Garmin)
-    cls.return_value.login.return_value = (None, None)
-    monkeypatch.setattr(garminconnect, "Garmin", cls)
-    monkeypatch.setattr(login, "settings", replace(login.settings, garmin_mode="unofficial"))
-    monkeypatch.setattr(login, "getpass", lambda prompt: "hunter2-password")
-    monkeypatch.setattr("builtins.input", lambda prompt: "me@example.com")
-    login.main()
-    args, kwargs = cls.call_args
-    assert args == ("me@example.com", "hunter2-password") and callable(kwargs["prompt_mfa"])
-    cls.return_value.login.assert_called_once_with(tokenstore=str(storage.DATA_DIR / "secrets"))
-    assert "grey area" in capsys.readouterr().out
-    assert not any("hunter2" in path.read_text() for path in storage.DATA_DIR.rglob("*") if path.is_file())
-
-
-def test_login_with_mode_off_explains():
-    with pytest.raises(SystemExit, match="GARMIN_MODE"):
-        login.main()
-
-
 def test_failed_logs_and_errors_hide_secrets(personal, caplog):
     caplog.set_level(logging.DEBUG)
     personal.session.fail_next_get = 500
     with pytest.raises(GarminError):
         personal.list_activities(SINCE)
     assert FAKE_KEY not in caplog.text and jwt(1) not in caplog.text
+
+
+def set_modes(monkeypatch, sync, push):
+    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_sync=sync, garmin_push=push))
+
+
+def test_each_capability_has_its_own_provider(monkeypatch):
+    set_modes(monkeypatch, "personal_api", "unofficial")
+    assert type(provider.make_provider()) is PersonalApiProvider and type(provider.make_pusher()) is UnofficialProvider
+    set_modes(monkeypatch, "off", "off")
+    assert type(provider.make_provider()) is provider.NullProvider and type(provider.make_pusher()) is provider.NullProvider
+    set_modes(monkeypatch, "personal_api", "unofficial")
+    monkeypatch.setenv("OPENSTRIDE_DEMO", "1")
+    assert type(provider.make_provider()) is provider.NullProvider and type(provider.make_pusher()) is provider.NullProvider
+
+
+def test_the_unofficial_client_can_never_read_activities():
+    with pytest.raises(GarminError):
+        UnofficialProvider().list_activities(SINCE)
+    with pytest.raises(GarminError):
+        UnofficialProvider().download_fit("1")
+
+
+def test_status_reads_state_without_calling_garmin():
+    provider.write_json(provider.state_path(), {"last_sync_at": "t", "last_error": "e"})
+    status = provider.status()
+    assert (status.sync, status.push, status.connected, status.last_sync_at, status.last_error) == ("off", "off", False, "t", "e")
+
+
+def test_status_of_each_capability(monkeypatch):
+    set_modes(monkeypatch, "personal_api", "unofficial")
+    assert not provider.status().connected and not provider.status().can_push_workouts
+    monkeypatch.setenv(provider.PERSONAL_KEY_ENV, FAKE_KEY)
+    provider.save_secret(provider.UNOFFICIAL_TOKEN_FILE, "{}")
+    assert provider.status().connected and provider.status().can_push_workouts
+
+
+def test_the_old_mode_still_sets_both_capabilities(monkeypatch):
+    from app import config
+    monkeypatch.delenv("GARMIN_SYNC"); monkeypatch.delenv("GARMIN_PUSH")
+    expected = {"off": ("off", "off"), "personal_api": ("personal_api", "off"), "unofficial": ("personal_api", "unofficial")}
+    for mode, pair in expected.items():
+        monkeypatch.setenv("GARMIN_MODE", mode)
+        assert (config.load().garmin_sync, config.load().garmin_push) == pair
+    monkeypatch.setenv("GARMIN_PUSH", "off")
+    assert config.load().garmin_push == "off"

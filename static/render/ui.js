@@ -226,7 +226,7 @@ export const activePlan = () => api("/api/plans/active").catch(() => null);
 // null means Garmin is off or not set up: nothing to show.
 export async function garminStatus() {
   const status = await api("/api/garmin/status").catch(() => null);
-  return status && status.mode !== "off" ? status : null;
+  return status && (status.sync !== "off" || status.push !== "off") ? status : null;
 }
 
 export async function downloadFile(path, filename) {

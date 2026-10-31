@@ -221,7 +221,7 @@ def test_a_listing_error_is_recorded_in_status_without_raising():
 
     result = sync.sync(Broken())
     assert result["imported"] == [] and "refused" in result["warnings"][0]
-    status = provider.NullProvider().status()
+    status = provider.status()
     assert "refused" in status.last_error and status.last_sync_at is None
 
 
@@ -365,7 +365,7 @@ def test_old_activity_files_still_load():
 
 
 def test_background_sync_enforces_the_minimum(monkeypatch):
-    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_mode="unofficial"))
+    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_sync="personal_api"))
     monkeypatch.setattr(sync, "settings", replace(sync.settings, garmin_sync_minutes=1))
     waits = []
     monkeypatch.setattr(sync.stop_event, "wait", lambda seconds: waits.append(seconds) or True)
@@ -375,9 +375,9 @@ def test_background_sync_enforces_the_minimum(monkeypatch):
     assert waits == [15 * 60]
 
 
-@pytest.mark.parametrize("mode,minutes,demo", [("off", 30, ""), ("unofficial", 0, ""), ("unofficial", 30, "1")])
+@pytest.mark.parametrize("mode,minutes,demo", [("off", 30, ""), ("personal_api", 0, ""), ("personal_api", 30, "1")])
 def test_background_sync_stays_off(monkeypatch, mode, minutes, demo):
-    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_mode=mode))
+    monkeypatch.setattr(provider, "settings", replace(provider.settings, garmin_sync=mode))
     monkeypatch.setattr(sync, "settings", replace(sync.settings, garmin_sync_minutes=minutes))
     monkeypatch.setenv("OPENSTRIDE_DEMO", demo)
     sync.start()
@@ -414,7 +414,7 @@ def test_the_demo_never_starts_background_sync(monkeypatch):
 def test_a_secret_never_reaches_stored_files_or_logs(caplog):
     caplog.set_level(logging.DEBUG)
     add_active()
-    provider.save_secret(provider.PERSONAL_KEY_FILE, FAKE_TOKEN)
+    provider.save_secret(provider.PERSONAL_BEARER_FILE, FAKE_TOKEN)
 
     class Leaky(FakeProvider):
         def download_fit(self, remote_id):
@@ -425,3 +425,12 @@ def test_a_secret_never_reaches_stored_files_or_logs(caplog):
     stored = [p for p in storage.DATA_DIR.rglob("*") if p.is_file() and "secrets" not in p.parts]
     assert stored and not any(FAKE_TOKEN.encode() in path.read_bytes() for path in stored)
     assert FAKE_TOKEN not in caplog.text
+
+
+def test_a_second_sync_at_the_same_time_does_nothing():
+    assert sync.sync_lock.acquire(blocking=False)
+    try:
+        result = sync.sync(FakeProvider(TOP_LEVEL[:1]))
+    finally:
+        sync.sync_lock.release()
+    assert result["imported"] == [] and "already running" in result["warnings"][0]

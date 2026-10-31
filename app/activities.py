@@ -494,7 +494,7 @@ def import_fit_bytes(content: bytes, source: str, external_id: str) -> dict:
     name = f"{source}_{external_id.rsplit(':', 1)[-1]}.fit"
     if any(activity.external_id == external_id for activity in storage.list_all_activities()):
         return {"file": name, "status": "duplicate", "message": f"{name} is already imported"}
-    return add_review(import_one(name, content, lifecycle.active_plan(), "", 0, external_id))
+    return import_one(name, content, lifecycle.active_plan(), "", 0, external_id)  # the caller adds the review
 
 
 def rematch(plan_file: PlanFile) -> None:

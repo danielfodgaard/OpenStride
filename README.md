@@ -100,7 +100,7 @@ You describe your goal, a recent race, your current weekly volume, which days yo
 - **A Workouts page and a page per workout**: route, pace against the planned range, heart rate and laps, like Strava and Runna show a run.
 - **An installable app.** Install it from the phone's browser; this week's plan and opened workouts stay readable offline.
 - **One server for phone and laptop.** Over [Tailscale](https://tailscale.com/), your phone reaches the OpenStride running on your laptop with HTTPS, and nothing is exposed to the internet.
-- **Garmin, from your phone.** Sync runs from Garmin Connect, and send planned sessions to your watch as structured workouts (or download them as .fit files and copy them over USB). (experimental: not yet tested against a real Garmin account)
+- **Garmin, from your phone.** Sync runs from Garmin Connect. Send planned sessions to your watch as structured workouts (or download them as .fit files and copy them over USB) (experimental: not yet tested against a real Garmin account).
 
 ### Adaptation: one bad day shouldn't rewire your plan
 
@@ -123,7 +123,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **617 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, proposal merging, chat actions, metrics and the API.
+- **620 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, proposal merging, chat actions, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
@@ -188,7 +188,7 @@ Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSO
 
 ## What's next
 
-- **Daily use:** a mobile-first design and installable app, one server for phone and laptop over Tailscale, automatic run sync from Garmin Connect, and planned sessions sent to the watch as structured workouts.
+- **Garmin, verified:** testing run sync and workout sending against a real Garmin account and watch.
 - **Nutrition:** race-day fuelling and day-to-day guidance by session type, focused on eating enough for the training load.
 - **Then:** one-command install for technical testers, and eventually a hosted version for everyone else.
 
@@ -196,7 +196,7 @@ Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSO
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The dependencies are under permissive licences compatible with MIT: FastAPI, Pydantic, the Anthropic SDK, fitdecode and pytest (MIT), uvicorn and python-dotenv (BSD-3-Clause), gpxpy and python-multipart (Apache-2.0). OpenStride isn't affiliated with Runna or Strava; no Runna code, assets or trademarks are used.
+MIT, see [LICENSE](LICENSE). The dependencies are under permissive licences compatible with MIT: FastAPI, Pydantic, the Anthropic SDK, fitdecode, filelock, garminconnect and pytest (MIT), uvicorn and python-dotenv (BSD-3-Clause), gpxpy, python-multipart and garmin-connect-personal-api-python (Apache-2.0). OpenStride isn't affiliated with Runna or Strava; no Runna code, assets or trademarks are used.
 
 ---
 

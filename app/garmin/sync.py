@@ -3,7 +3,7 @@ import logging
 import threading
 from datetime import datetime, time, timedelta, timezone
 
-from app import activities, lifecycle, logbook, metrics, review, storage
+from app import activities, lifecycle, logbook, metrics, storage
 from app.config import settings
 from app.garmin import provider as garmin
 from app.models import PlanFile
@@ -80,11 +80,7 @@ def import_summary(item: garmin.RemoteActivity, external_id: str, plan_file: Pla
         if plan_file:
             metrics.refresh(plan_file)
     warnings = [*activities.date_warnings(activity), f"{name}: the file had no usable data, so only the summary was imported."]
-    try:
-        review.review_activity(activity)
-    except Exception as error:
-        warnings.append(f"{name}: imported, but the review failed: {error}")
-    return {"status": "imported", "activity": activity.model_dump(mode="json"), "warnings": warnings}
+    return {"file": name, "status": "imported", "activity": activity.model_dump(mode="json"), "warnings": warnings, "summary": activity}
 
 
 def import_remote(provider, item: garmin.RemoteActivity, external_id: str, plan_file: PlanFile | None) -> dict:
@@ -123,7 +119,8 @@ def sync_with(provider) -> dict:
     done = set(state.get("imported", []))
     known = done | {activity.external_id for activity in storage.list_all_activities()}
     failed = 0
-    for item in remote:  # oldest first, so each review sees the runs before it
+    imported = []
+    for item in remote:  # oldest first
         external_id = f"garmin:{item.id}"
         if external_id in known:
             result["skipped"] += 1
@@ -145,6 +142,11 @@ def sync_with(provider) -> dict:
         result["imported"].append(activity["id"])
         result["matched" if activity["match"]["session_index"] >= 0 else "unplanned"] += 1
         result["warnings"] += outcome["warnings"]
+        imported.append(outcome)
+
+    # All saved before any review, or a review sees the rest of the batch as missed sessions.
+    for outcome in imported:
+        activities.add_review(outcome)
         if "message" in outcome:
             result["warnings"].append(outcome["message"])
 
@@ -157,8 +159,12 @@ def sync_with(provider) -> dict:
 
 
 def sync(provider=None) -> dict:
-    with sync_lock:
+    if not sync_lock.acquire(blocking=False):
+        return {"imported": [], "skipped": 0, "matched": 0, "unplanned": 0, "warnings": ["A Garmin sync is already running."]}
+    try:
         return sync_with(provider or garmin.make_provider())
+    finally:
+        sync_lock.release()
 
 
 def loop(seconds: float) -> None:
@@ -171,7 +177,7 @@ def loop(seconds: float) -> None:
 
 def start() -> None:
     global worker
-    if settings.garmin_sync_minutes <= 0 or garmin.current_mode() == "off":
+    if settings.garmin_sync_minutes <= 0 or garmin.sync_mode() == "off":
         return
     stop_event.clear()
     minutes = max(settings.garmin_sync_minutes, MIN_SYNC_MINUTES)

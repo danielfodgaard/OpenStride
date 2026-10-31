@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GarminMode = Literal["off", "personal_api", "unofficial"]
+GarminSync = Literal["off", "personal_api"]
+GarminPush = Literal["off", "unofficial"]
 
 
 @dataclass(frozen=True)
@@ -19,21 +20,30 @@ class Settings:
     data_dir: Path
     password: str  # empty means no login
     allow_open: bool  # listen beyond localhost with no password anyway
-    garmin_mode: GarminMode
+    garmin_sync: GarminSync  # reading activities: Garmin's official Personal API
+    garmin_push: GarminPush  # sending workouts: python-garminconnect, opt-in
     garmin_sync_minutes: int  # 0 means manual only
 
 
 def load() -> Settings:
+    # GARMIN_MODE is the v4.0 name for the pair; the two settings win where they are set.
     garmin_mode = os.environ.get("GARMIN_MODE") or "off"
-    if garmin_mode not in get_args(GarminMode):
-        raise ValueError(f"GARMIN_MODE must be one of {', '.join(get_args(GarminMode))}, not {garmin_mode!r}")
+    if garmin_mode not in ("off", "personal_api", "unofficial"):
+        raise ValueError(f"GARMIN_MODE must be off, personal_api or unofficial, not {garmin_mode!r}")
+    garmin_sync = os.environ.get("GARMIN_SYNC") or ("off" if garmin_mode == "off" else "personal_api")
+    garmin_push = os.environ.get("GARMIN_PUSH") or ("unofficial" if garmin_mode == "unofficial" else "off")
+    if garmin_sync not in get_args(GarminSync):
+        raise ValueError(f"GARMIN_SYNC must be one of {', '.join(get_args(GarminSync))}, not {garmin_sync!r}")
+    if garmin_push not in get_args(GarminPush):
+        raise ValueError(f"GARMIN_PUSH must be one of {', '.join(get_args(GarminPush))}, not {garmin_push!r}")
     return Settings(
         host=os.environ.get("OPENSTRIDE_HOST") or "127.0.0.1",
         port=int(os.environ.get("OPENSTRIDE_PORT") or 8000),
         data_dir=Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data"),
         password=os.environ.get("OPENSTRIDE_PASSWORD") or "",
         allow_open=os.environ.get("OPENSTRIDE_ALLOW_OPEN") == "1",
-        garmin_mode=garmin_mode,
+        garmin_sync=garmin_sync,
+        garmin_push=garmin_push,
         garmin_sync_minutes=int(os.environ.get("GARMIN_SYNC_MINUTES") or 0),
     )
 
