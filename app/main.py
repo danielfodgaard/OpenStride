@@ -1,17 +1,21 @@
+import hashlib
+import hmac
+import logging
 import os
 import shutil
 import tempfile
+import time
 from contextlib import asynccontextmanager, contextmanager
 from datetime import date as Date
 from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, chat, clock, lifecycle, logbook, metrics, progress, review, storage
+from app import activities, adapt, chat, clock, config, lifecycle, logbook, metrics, progress, review, storage
 from app.garmin.router import router as garmin_router
 from app.generator import APP_VERSION, GenerationError, generate_plan
 from app.models import (
@@ -30,10 +34,22 @@ from app.models import (
 
 DEMO_DATA = Path(__file__).parent.parent / "examples" / "demo" / "data"
 DEMO_TODAY = "2026-11-25"
+STATIC_DIR = Path(__file__).parent.parent / "static"
+SESSION_COOKIE = "openstride_session"
+SESSION_SECONDS = 30 * 24 * 3600
+WRONG_PASSWORD_DELAY_S = 1
+PUBLIC_PATHS = {"/login", "/api/health", "/manifest.webmanifest", "/sw.js"}
+ASSET_FOLDERS = ("/icons/", "/fonts/")
+ASSET_SUFFIXES = (".css", ".js", ".png", ".svg", ".ico", ".woff", ".woff2")
+
+logger = logging.getLogger("openstride")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    problem = config.open_server_problem()
+    if problem:
+        raise RuntimeError(problem)
     if os.environ.get("OPENSTRIDE_DEMO"):
         # Work on a throwaway copy, with the clock pinned to where the demo story stands.
         with tempfile.TemporaryDirectory() as folder:
@@ -48,6 +64,48 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="OpenStride", lifespan=lifespan)
+
+
+def session_signature(expires: str) -> str:
+    """The password is part of it, so changing the password signs every device out."""
+    message = f"{expires}.{config.settings.password}".encode()
+    return hmac.new(storage.session_secret(), message, hashlib.sha256).hexdigest()
+
+
+def new_session() -> str:
+    expires = str(int(time.time()) + SESSION_SECONDS)
+    return f"{expires}.{session_signature(expires)}"
+
+
+def valid_session(cookie: str | None) -> bool:
+    expires, _, signature = (cookie or "").partition(".")
+    if not expires.isdecimal() or int(expires) < time.time():
+        return False
+    return hmac.compare_digest(signature.encode(), session_signature(expires).encode())
+
+
+def is_public(path: str) -> bool:
+    if path in PUBLIC_PATHS:
+        return True
+    if path.startswith("/api/"):
+        return False
+    return path.startswith(ASSET_FOLDERS) or path.endswith(ASSET_SUFFIXES)
+
+
+def is_https(request: Request) -> bool:
+    """Tailscale serve and Caddy end TLS in front of us and say so in this header."""
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return "https" in (request.url.scheme, forwarded)
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    path = request.scope["path"]
+    if not config.settings.password or is_public(path) or valid_session(request.cookies.get(SESSION_COOKIE)):
+        return await call_next(request)
+    if path.startswith("/api/") or "text/html" not in request.headers.get("accept", ""):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
 
 
 def error_handler(status_code: int, default: str | None = None):
@@ -133,6 +191,33 @@ class ChatInput(BaseModel):
 class ProposalRequest(BaseModel):
     scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
     user_context: str = ""
+
+
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+# A plain def, so the delay after a wrong password holds a pool thread, not the event loop.
+@app.post("/login", include_in_schema=False)
+def login(request: Request, password: str = Form("")) -> RedirectResponse:
+    expected = config.settings.password
+    if not expected:
+        return RedirectResponse("/", status_code=303)
+    if not hmac.compare_digest(password.encode(), expected.encode()):
+        logger.warning("Failed login from %s", request.client.host if request.client else "unknown")
+        time.sleep(WRONG_PASSWORD_DELAY_S)
+        return RedirectResponse("/login?failed=1", status_code=303)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        new_session(),
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=is_https(request),
+        samesite="lax",
+    )
+    return response
 
 
 # Plain defs: FastAPI runs them in a thread pool, so long API calls don't block the server.
@@ -350,4 +435,4 @@ app.include_router(garmin_router)
 
 # Mounted last so it never shadows API routes; html=True serves index.html at /.
 # It also puts /manifest.webmanifest, /sw.js and /icons/* at the root scope the service worker needs.
-app.mount("/", StaticFiles(directory=Path(__file__).parent.parent / "static", html=True))
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True))

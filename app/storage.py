@@ -6,6 +6,7 @@ always activation_lock, then plan_lock, then activities_lock, and locks never wr
 import json
 import os
 import re
+import secrets
 import tempfile
 import threading
 import uuid
@@ -129,6 +130,17 @@ def data_dir_writable() -> bool:
             return True
     except OSError:
         return False
+
+
+def session_secret() -> bytes:
+    """Kept in data/ so sessions survive a restart, in secrets/ so backups leave it out."""
+    path = DATA_DIR / "secrets" / "session_secret"
+    if not path.exists():
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with file_lock(path.parent / ".lock"):
+            if not path.exists():
+                write_file(path, secrets.token_bytes(32), mode=0o600)
+    return path.read_bytes()
 
 
 def plan_dir(plan_id: str) -> Path:
