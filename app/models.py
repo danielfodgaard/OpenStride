@@ -53,6 +53,8 @@ class SavedRequest(BaseModel):
             raise ValueError("available_days must contain at least runs_per_week different days")
         if self.cross_sessions_per_week and not self.cross_training.strip():
             raise ValueError("cross_training must name a sport when cross_sessions_per_week is set")
+        if self.hr_max and self.hr_rest and self.hr_max <= self.hr_rest:
+            raise ValueError("hr_max must be above hr_rest")
         if self.long_run_day not in self.available_days:
             raise ValueError("long_run_day must be one of available_days")
         if parse_time(self.recent_race_time) / self.recent_race_distance_km > MAX_PACE_MIN_PER_KM:
@@ -118,6 +120,14 @@ class TrainingPlan(BaseModel):
     summary: str
     warnings: list[str]
     weeks: list[Week]
+
+
+class RegeneratedPlan(TrainingPlan):
+    """A plan plus the schedule after the athlete's feedback, which can change these fields."""
+
+    long_run_day: Day
+    available_days: list[Day]
+    runs_per_week: int
 
 
 class DatedSession(Session):

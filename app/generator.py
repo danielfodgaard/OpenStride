@@ -13,6 +13,7 @@ from app.models import (
     Meta,
     Paces,
     PlanFile,
+    RegeneratedPlan,
     SavedRequest,
     TrainingPlan,
     Usage,
@@ -86,7 +87,16 @@ def add_dates(plan: TrainingPlan, starts: list[date]) -> DatedPlan:
     return DatedPlan(summary=plan.summary, warnings=plan.warnings, weeks=weeks)
 
 
-def build_plan(request, system, make_prompt, client, today, plan_id=None) -> PlanFile:
+def apply_schedule(request: SavedRequest, plan: RegeneratedPlan) -> SavedRequest:
+    """The request as the feedback left it. A schedule that doesn't hold together changes nothing."""
+    schedule = plan.model_dump(include={"long_run_day", "available_days", "runs_per_week"})
+    try:
+        return SavedRequest.model_validate(request.model_dump() | schedule)
+    except ValidationError:
+        return request
+
+
+def build_plan(request, system, make_prompt, client, today, plan_id=None, output_model=TrainingPlan) -> PlanFile:
     """Generate, validate with one retry, and wrap in a PlanFile. `make_prompt` shapes the user prompt."""
     client = client or make_client()
     model = os.environ.get("PLAN_MODEL") or os.environ.get("CLAUDE_MODEL") or DEFAULT_MODEL  # v1 name
@@ -105,12 +115,15 @@ def build_plan(request, system, make_prompt, client, today, plan_id=None) -> Pla
     user_prompt = make_prompt(build_user_prompt(request, paces, starts))
     usage = Usage(input_tokens=0, output_tokens=0)
 
-    plan = call_claude(client, model, system, user_prompt, TrainingPlan, usage)
-    errors = validate_plan(plan, request, len(starts))
+    settled = lambda plan: apply_schedule(request, plan) if output_model is RegeneratedPlan else request
+
+    plan = call_claude(client, model, system, user_prompt, output_model, usage)
+    errors = validate_plan(plan, settled(plan), len(starts))
     if errors:
         problems = "\n".join(f"- {error}" for error in errors)
-        plan = call_claude(client, model, system, f"{user_prompt}\n\nFix these problems:\n{problems}", TrainingPlan, usage)
-        errors = validate_plan(plan, request, len(starts))
+        plan = call_claude(client, model, system, f"{user_prompt}\n\nFix these problems:\n{problems}", output_model, usage)
+        errors = validate_plan(plan, settled(plan), len(starts))
+    request = settled(plan)
     # A regenerated plan can repeat warnings it saw in the draft.
     plan.warnings += [w for w in errors + soft_warnings(plan) if w not in plan.warnings]
 
@@ -144,4 +157,5 @@ def regenerate_plan(draft: PlanFile, feedback: str, request: SavedRequest, clien
         client,
         today,
         plan_id=draft.meta.id,
+        output_model=RegeneratedPlan,
     )

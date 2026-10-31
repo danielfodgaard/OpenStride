@@ -134,6 +134,13 @@ def test_every_save_refreshes_the_cache(client):
     assert '"completed_strength": 1' in cache
 
 
+def test_null_in_an_edit_changes_nothing(client):
+    entry = log(client, note="kept").json()
+    response = client.patch(f"/api/manual/{entry['id']}", json={"note": None, "rpe": 3})
+    assert response.json()["note"] == "kept" and response.json()["rpe"] == 3
+    assert client.get("/api/activities", params={"plan_id": "plan"}).status_code == 200
+
+
 def test_ids_are_unique_on_one_day(client):
     assert log(client).json()["id"] != log(client).json()["id"]
 

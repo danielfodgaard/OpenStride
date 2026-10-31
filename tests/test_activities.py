@@ -356,3 +356,27 @@ def test_a_running_watch_timer_keeps_stopped_time_in_the_splits():
 
 def test_a_paused_watch_timer_takes_out_what_it_paused():
     assert activities.moving_seconds(stop_and_go(), 600)[-1] == 600
+
+
+def test_impossible_dates_are_refused():
+    content = f"{GPX_HEAD}{GPX_BODY}".replace("2026-11-05", "1901-12-14").encode()
+    with pytest.raises(ValueError, match="timestamps look wrong"):
+        activities.parse_file("a.gpx", content, "plan")
+
+
+def test_gpx_declared_as_latin_1():
+    content = (
+        '<?xml version="1.0" encoding="ISO-8859-1"?>' + f"{GPX_HEAD}<name>L\u00f8b</name>{GPX_BODY}"
+    ).encode("latin-1")
+    assert activities.parse_file("a.gpx", content, "plan").distance_km > 0
+
+
+def test_a_run_can_be_imported_again_under_a_new_plan(client, active):
+    files = [("files", ("a.gpx", read("2026-11-05_easy.gpx")))]
+    client.post("/api/activities", files=files)
+    add_draft("next")
+    lifecycle.accept("next")
+    result = client.post("/api/activities", files=files).json()[0]
+    assert result["status"] == "imported"
+    assert [len(storage.list_activities(p)) for p in ("plan", "next")] == [1, 1]
+    assert storage.list_activities("plan")[0].id != storage.list_activities("next")[0].id

@@ -518,7 +518,8 @@ function diffTable(planFile, proposal) {
   return table(["", "Week", "Day", "Old", "New"], rows);
 }
 
-function proposalView(proposal, planFile, readOnly = false) {
+// `bases` maps a version to its plan: a proposal's diff is against the version it was made from.
+function proposalView(proposal, planFile, bases, readOnly = false) {
   const box = el("div");
   const status = statusLine();
   const { recommendation, rationale, changes } = proposal.result;
@@ -528,7 +529,7 @@ function proposalView(proposal, planFile, readOnly = false) {
   if (recommendation === "change") {
     const list = el("ul");
     for (const change of changes) list.append(el("li", `Week ${change.week_number} ${change.day}: ${change.summary}`));
-    box.append(list, diffTable(planFile, proposal));
+    box.append(list, diffTable(bases[proposal.based_on_version] ?? planFile, proposal));
     if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
     if (proposal.acceptable && proposal.status === "pending" && !readOnly) {
       const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
@@ -551,7 +552,7 @@ function proposalView(proposal, planFile, readOnly = false) {
   return box;
 }
 
-function adaptSection(planFile, proposals) {
+function adaptSection(planFile, proposals, bases) {
   const section = el("section");
   const status = statusLine();
   const scope = el("select");
@@ -581,11 +582,11 @@ function adaptSection(planFile, proposals) {
   const suggestLine = el("p");
   suggestLine.append(suggest);
   section.append(el("h2", "Adapt plan"), scopeLine, contextLine, suggestLine, status);
-  if (proposals.length) section.append(proposalView(proposals[0], planFile));
+  if (proposals.length) section.append(proposalView(proposals[0], planFile, bases));
   return section;
 }
 
-function chatMessage(message, proposals, planFile, readOnly) {
+function chatMessage(message, proposals, planFile, bases, readOnly) {
   const box = el("div");
   box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
   for (const paragraph of message.text.split(/\n+/)) box.append(el("p", paragraph));
@@ -595,15 +596,15 @@ function chatMessage(message, proposals, planFile, readOnly) {
     box.append(flags);
   }
   const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);
-  if (proposal) box.append(proposalView(proposal, planFile, readOnly));
+  if (proposal) box.append(proposalView(proposal, planFile, bases, readOnly));
   return box;
 }
 
-function chatSection(planFile, messages, proposals, readOnly) {
+function chatSection(planFile, messages, proposals, bases, readOnly) {
   const section = el("section");
   const encoded = encodeURIComponent(planFile.meta.id);
   section.append(el("h2", "Coach chat"));
-  for (const message of messages) section.append(chatMessage(message, proposals, planFile, readOnly));
+  for (const message of messages) section.append(chatMessage(message, proposals, planFile, bases, readOnly));
   if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask your coach about the plan or your training."));
   if (readOnly) return section;
 
@@ -719,6 +720,10 @@ async function planView(id) {
   const isActive = planFile.meta.status === "active";
   const proposals = isDraft ? [] : await api(`/api/plans/${encoded}/proposals`);
   const messages = isDraft ? [] : await api(`/api/plans/${encoded}/chat`);
+  const bases = {};
+  for (const version of new Set(proposals.map((p) => p.based_on_version))) {
+    bases[version] = await api(`/api/plans/${encoded}/versions/${version}`).catch(() => null);
+  }
   const progress = isActive ? await api(`/api/plans/${encoded}/progress`) : null;
   const metrics = isActive ? await api(`/api/plans/${encoded}/metrics`) : null;
   const usage = await api(`/api/plans/${encoded}/usage`);
@@ -738,11 +743,11 @@ async function planView(id) {
   if (isActive) nodes.push(
     importSection(statusLine()),
     logSection(planFile, metrics.as_of),
-    chatSection(planFile, messages, proposals, false),
-    adaptSection(planFile, proposals),
+    chatSection(planFile, messages, proposals, bases, false),
+    adaptSection(planFile, proposals, bases),
     progressSection(planFile, progress, metrics),
   );
-  if (planStatus === "archived") nodes.push(chatSection(planFile, messages, proposals, true));
+  if (planStatus === "archived") nodes.push(chatSection(planFile, messages, proposals, bases, true));
   nodes.push(usageFooter(usage));
   main.replaceChildren(...nodes);
   fullRender(planFile, status, {

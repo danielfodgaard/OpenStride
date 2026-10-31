@@ -33,7 +33,7 @@ function amount(item) {
 }
 
 function stepText(step) {
-  if (step.reps) {  // a strength exercise; absent in v1 and v2 files
+  if (step.reps || step.load) {  // a strength exercise; absent in v1 and v2 files
     return `${step.repeat} × ${step.reps} ${step.description}${step.load ? ` — ${step.load}` : ""}`;
   }
   const reps = step.repeat > 1 ? `${step.repeat} × ` : "";
@@ -168,7 +168,9 @@ function renderPlan(planFile, { actuals = false, activities = [], controls } = {
   const outside = activities.filter((a) => !planDays.has(a.date));
   if (outside.length) {
     nodes.push(el("h2", "Runs outside the plan dates"));
-    nodes.push(table(["Date", "File", "Actual"], outside.map((a) => [a.date, a.manual ? a.title : a.source_file, actualText(a)])));
+    nodes.push(table(["Date", "Title", "Actual", "Review"], outside.map((a) => [
+      a.date, a.manual ? a.title : a.source_file, actualCell([a], controls), reviewCell([a]),
+    ])));
   }
   nodes.push(el("p", `Model: ${meta.model} — created ${meta.created_at} — tokens: ${meta.usage.input_tokens} in, ${meta.usage.output_tokens} out`));
   document.getElementById("plan").replaceChildren(...nodes);

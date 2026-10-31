@@ -82,6 +82,11 @@ def test_old_plan_files_load_with_empty_v3_fields(version):
     assert plan.request.strength_sessions_per_week == 0 and plan.request.hr_max == 0
 
 
+def test_hr_max_must_be_above_hr_rest():
+    with pytest.raises(ValidationError, match="hr_max must be above hr_rest"):
+        PlanRequest(**request_data(hr_max=60, hr_rest=60))
+
+
 def test_llm_schema_is_compatible():
     def walk(node):
         if isinstance(node, dict):

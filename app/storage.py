@@ -76,6 +76,14 @@ def activity_path(activity_id: str) -> Path:
     return DATA_DIR / "activities" / f"{safe_id(activity_id)}.json"
 
 
+def new_activity_id(base: str) -> str:
+    activity_id, suffix = base, 1
+    while activity_path(activity_id).exists():
+        suffix += 1
+        activity_id = f"{base}_{suffix}"
+    return activity_id
+
+
 def save_activity(activity: ActivitySummary) -> None:
     write_json(activity_path(activity.id), activity.model_dump_json(indent=2))
 

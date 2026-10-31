@@ -183,7 +183,7 @@ def log_session(plan_id: str, body: ManualInput) -> ManualActivity:
 
 @app.patch("/api/manual/{manual_id}")
 def edit_session(manual_id: str, body: ManualEdit) -> ManualActivity:
-    changes = body.model_dump(exclude_unset=True, exclude={"match"})
+    changes = body.model_dump(exclude_none=True, exclude={"match"})
     match = body.match and (body.match.week_number, body.match.session_index)
     return logbook.edit(manual_id, changes, match)
 

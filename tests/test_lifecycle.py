@@ -9,12 +9,17 @@ from app.models import PlanFile
 from test_generator import REQUEST, SAMPLE, TODAY, FakeClient, reply
 
 SAMPLE_TEXT = Path("examples/sample_plan.json").read_text()
+SCHEDULE = {"long_run_day": "Sun", "available_days": ["Tue", "Thu", "Sat", "Sun"], "runs_per_week": 4}
 
 
 @pytest.fixture(autouse=True)
 def data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
     return tmp_path
+
+
+def regen_reply(**schedule):
+    return reply(SAMPLE["plan"] | SCHEDULE | schedule)
 
 
 def draft(plan_id):
@@ -67,7 +72,7 @@ def test_discard_removes_the_draft(client):
 
 def test_regenerate_keeps_the_previous_draft_and_records_feedback():
     draft("one")
-    fake = FakeClient(reply(SAMPLE["plan"]), reply(SAMPLE["plan"]))
+    fake = FakeClient(regen_reply(), regen_reply())
     lifecycle.regenerate("one", "less volume", None, fake, TODAY)
     result = lifecycle.regenerate("one", "long run on Sunday", None, fake, TODAY)
 
@@ -78,10 +83,37 @@ def test_regenerate_keeps_the_previous_draft_and_records_feedback():
     assert "- less volume" in fake.prompts[1] and "long run on Sunday" in fake.prompts[1]
 
 
+def moved_long_run():
+    plan = json.loads(json.dumps(SAMPLE["plan"]))
+    for week in plan["weeks"][:-1]:  # the race week has no long run
+        for session in week["sessions"]:
+            if session["type"] == "long":
+                session["day"] = "Sat"
+            elif session["day"] == "Sat":
+                session["day"] = "Sun"
+    return plan
+
+
+def test_feedback_can_change_the_schedule_with_no_form_edit():
+    draft("one")
+    plan = moved_long_run() | SCHEDULE | {"long_run_day": "Sat"}
+    result = lifecycle.regenerate("one", "long run on Saturday instead", None, FakeClient(reply(plan)), TODAY)
+    assert result.request.long_run_day == "Sat"
+    assert not any("must be on" in warning for warning in result.plan.warnings)
+    assert {s.day for w in result.plan.weeks for s in w.sessions if s.type == "long"} == {"Sat"}
+
+
+def test_an_impossible_schedule_from_the_llm_is_ignored():
+    draft("one")
+    plan = SAMPLE["plan"] | SCHEDULE | {"long_run_day": "Mon"}  # not an available day
+    result = lifecycle.regenerate("one", "x", None, FakeClient(reply(plan), reply(plan)), TODAY)
+    assert result.request.long_run_day == "Sun"
+
+
 def test_regenerate_uses_an_edited_request():
     draft("one")
     edited = REQUEST.model_copy(update={"notes": "now on trails"})
-    fake = FakeClient(reply(SAMPLE["plan"]))
+    fake = FakeClient(regen_reply())
     result = lifecycle.regenerate("one", "trails please", edited, fake, TODAY)
     assert result.request.notes == "now on trails" and "now on trails" in fake.prompts[0]
 
@@ -89,7 +121,7 @@ def test_regenerate_uses_an_edited_request():
 def test_regenerate_failure_leaves_the_draft_alone():
     draft("one")
     with pytest.raises(lifecycle.generator.GenerationError):
-        lifecycle.regenerate("one", "x", None, FakeClient(reply(SAMPLE["plan"], "refusal")), TODAY)
+        lifecycle.regenerate("one", "x", None, FakeClient(reply(SAMPLE["plan"] | SCHEDULE, "refusal")), TODAY)
     assert storage.load_plan("one").meta.feedback_history == []
     assert not (storage.plan_dir("one") / "versions").exists()
 

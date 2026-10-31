@@ -14,6 +14,7 @@ INTENSITY = {
     "recovery": 0.6, "easy": 0.75, "long": 0.85, "tempo": 1.1, "intervals": 1.3, "race": 1.4,
     "cross_training": 0.6, "strength": 0.5,
 }
+HISTORY_DAYS = 180
 EASY_TYPES = {"easy", "long", "recovery", "unplanned"}
 QUALITY_TYPES = {"tempo", "intervals", "race"}
 
@@ -32,7 +33,7 @@ class Entry:
 
 
 def entries(plan_id: str) -> list[Entry]:
-    return [
+    return sorted([
         *(
             Entry(a.id, a.date, a.modality, a.moving_time_s / 60, a.distance_km, a.avg_hr, a.match)
             for a in storage.list_activities(plan_id)
@@ -41,12 +42,13 @@ def entries(plan_id: str) -> list[Entry]:
             Entry(m.id, m.date, m.modality, m.duration_min, m.distance_km, 0, m.match)
             for m in storage.list_manual(plan_id)
         ),
-    ]
+    ], key=lambda entry: (entry.date, entry.id))
 
 
 def heart_rates(request: SavedRequest) -> tuple[float, float]:
     hr_max = request.hr_max or (208 - 0.7 * request.age if request.age else DEFAULT_HR_MAX)
-    return hr_max, request.hr_rest or DEFAULT_HR_REST
+    hr_rest = request.hr_rest or DEFAULT_HR_REST
+    return (hr_max, hr_rest) if hr_max > hr_rest else (DEFAULT_HR_MAX, DEFAULT_HR_REST)
 
 
 def trimp(minutes: float, avg_hr: int, hr_max: float, hr_rest: float) -> float:
@@ -83,8 +85,10 @@ def fitness_series(loads: list[float], seed: float) -> list[tuple[float, float, 
 
 
 def build_days(done: list[Entry], kinds: dict, plan_file: PlanFile, today: date) -> list[DayLoad]:
-    # Runs imported from before the plan still count: real history beats the seed.
-    first = min([plan_file.plan.weeks[0].start_date, *(e.date for e in done)])
+    # Runs imported from before the plan still count: real history beats the seed. Fitness
+    # forgets within months, and every day here goes into every prompt, so older ones don't.
+    plan_start = plan_file.plan.weeks[0].start_date
+    first = max(min([plan_start, *(e.date for e in done)]), plan_start - timedelta(days=HISTORY_DAYS))
     span = [first + timedelta(days=i) for i in range((today - first).days + 1)]
     hr_max, hr_rest = heart_rates(plan_file.request)
     loads = {day: 0.0 for day in span}

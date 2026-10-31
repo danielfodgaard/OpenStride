@@ -5,7 +5,7 @@ import pytest
 
 from app import activities, lifecycle, metrics, storage
 from app.metrics import Entry, fitness_series, trend_point, trimp
-from app.models import Match, PlanFile
+from app.models import ManualActivity, Match, PlanFile
 
 SAMPLES = Path("examples/activities")
 TODAY = date(2026, 11, 11)
@@ -174,3 +174,27 @@ def test_strength_and_cross_counts_for_the_chart_notes(tmp_path, monkeypatch):
     week = metrics.compute(active, TODAY).weeks[0]
     assert (week.completed_cross, week.planned_cross) == (1, 1)
     assert (week.completed_strength, week.planned_strength) == (0, 2)
+
+
+def test_old_history_does_not_grow_the_table_without_limit(plan):
+    run = activities.parse_file("a.gpx", (SAMPLES / "2026-11-05_easy.gpx").read_bytes(), "plan")
+    run = run.model_copy(update={"id": "old", "date": date(2017, 5, 1), "start_time": run.start_time.replace(year=2017, month=5, day=1)})
+    storage.save_activity(run)
+    result = metrics.compute(plan, TODAY)
+    assert len(result.days) == metrics.HISTORY_DAYS + 10
+
+
+def test_trends_are_in_date_order_with_manual_runs(plan):
+    add_run(plan, "2026-11-05_easy.gpx")
+    storage.save_manual(ManualActivity(
+        id="manual", plan_id="plan", date=date(2026, 11, 1), modality="run", title="Jog", duration_min=30,
+        distance_km=5, rpe=0, note="", details=[], match=Match(),
+    ))
+    points = metrics.compute(plan, TODAY).easy_runs
+    assert [p.date for p in points] == sorted(p.date for p in points)
+
+
+def test_equal_heart_rates_cannot_divide_by_zero(plan):
+    request = plan.request.model_copy(update={"hr_max": 0, "hr_rest": 150, "age": 120})
+    hr_max, hr_rest = metrics.heart_rates(request)
+    assert hr_max > hr_rest

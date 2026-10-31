@@ -1,5 +1,6 @@
 // Plain inline SVG charts. Every chart comes with a table of the same numbers.
 const SVG_NS = "http://www.w3.org/2000/svg";
+const MS_PER_DAY = 86400000;
 const WIDTH = 760;
 const HEIGHT = 300;
 const MARGIN = { top: 16, right: 64, bottom: 36, left: 64 };
@@ -13,9 +14,7 @@ function svgEl(tag, attributes, text) {
 }
 
 function newSvg(height, label) {
-  const svg = svgEl("svg", { viewBox: `0 0 ${WIDTH} ${height}`, width: "100%", role: "img", "aria-label": label });
-  svg.style.maxWidth = `${WIDTH}px`;
-  return svg;
+  return svgEl("svg", { viewBox: `0 0 ${WIDTH} ${height}`, width: WIDTH, height, role: "img", "aria-label": label });
 }
 
 const dayMs = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`);
@@ -76,7 +75,7 @@ function drawSeriesChart({ title, series, leftFormat = String, rightFormat = Str
   }
   const xs = filled.flatMap((s) => s.points.map((p) => p.x));
   const left = Math.min(...xs);
-  const right = Math.max(...xs, xMax ?? -Infinity);
+  const right = Math.max(...xs, xMax ?? -Infinity, left + 4 * MS_PER_DAY);  // room for 5 date labels
   const xSpan = right - left || 1;
   const toX = (x) => MARGIN.left + ((x - left) / xSpan) * (WIDTH - MARGIN.left - MARGIN.right);
   const scaleFor = (axis) => {
@@ -100,12 +99,8 @@ function drawSeriesChart({ title, series, leftFormat = String, rightFormat = Str
       svg.append(svgEl("text", { x: labelX, y: y + 4, "text-anchor": anchor, "font-size": 11 }, format(tick)));
     }
   }
-  // Short ranges would repeat a date, so fewer ticks then.
-  const xLabels = new Set();
   for (let i = 0; i <= 4; i += 1) {
     const x = left + (xSpan * i) / 4;
-    if (xLabels.has(monthDay(x))) continue;
-    xLabels.add(monthDay(x));
     svg.append(svgEl("text", { x: toX(x), y: HEIGHT - 12, "text-anchor": "middle", "font-size": 11 }, monthDay(x)));
   }
   svg.append(svgEl("line", {

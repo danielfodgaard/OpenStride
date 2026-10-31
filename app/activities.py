@@ -16,6 +16,7 @@ EARTH_RADIUS_KM = 6371.0
 SEMICIRCLE_DEGREES = 180 / 2**31
 MAX_UTC_OFFSET = timedelta(hours=14)
 MIN_SPLIT_COVERAGE = 0.9
+EARLIEST_YEAR = 2000
 MAX_RECORD_GAP = timedelta(days=2)
 MAX_STRIDES_PER_MIN = 120  # above this a device is already reporting steps per minute
 DUPLICATE_WINDOW = timedelta(seconds=60)  # the same run exported as .fit and .gpx starts a little apart
@@ -185,7 +186,11 @@ def gpx_sport(gpx) -> str:
 
 
 def parse_gpx(content: bytes) -> Parsed:
-    gpx = gpxpy.parse(content.decode("utf-8-sig"))
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:  # older exporters declare ISO-8859-1
+        text = content.decode("latin-1")
+    gpx = gpxpy.parse(text)
     points = []
     distance = 0.0
     for track in gpx.tracks:
@@ -316,6 +321,8 @@ def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rp
         raise ValueError("no timed track points")
     if parsed.start_time is None and not parsed.points:
         raise ValueError("no start time")
+    if local_start(parsed).year < EARLIEST_YEAR:
+        raise ValueError(f"its timestamps look wrong (dated {local_start(parsed).date()})")
     points = rebased(parsed.points)
     moving = moving_seconds(points, parsed.moving_time_s)
     hrs = [point.hr for point in points if point.hr]
@@ -391,9 +398,10 @@ def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
 
 
 def is_duplicate(activity: ActivitySummary) -> bool:
+    """Per plan, so a run can be imported again under a new plan."""
     return any(
         other.modality == activity.modality and abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW
-        for other in storage.list_all_activities()
+        for other in storage.list_activities(activity.plan_id)
     )
 
 
@@ -412,6 +420,7 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
         if is_duplicate(activity):
             results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
             continue
+        activity.id = storage.new_activity_id(activity.id)
         activity.match = match_activity(activity, plan_file)
         storage.save_activity(activity)
         metrics.refresh(plan_file)
