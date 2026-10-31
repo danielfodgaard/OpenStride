@@ -1,12 +1,12 @@
 // Plain inline SVG charts. Every chart comes with a table of the same numbers.
 import { el, main, table } from "./render/ui.js";
-import { paceText, timeText } from "./render/format.js";
+import { paceText, roundKm, timeText } from "./render/format.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MS_PER_DAY = 86400000;
 const HEIGHT = 280;
 const MARGIN = { top: 14, right: 12, bottom: 28, left: 40 };
-const BAR_SLOT = 32;  // narrowest week that still fits its percentage; more weeks scroll sideways
+const BAR_SLOT = 25;  // narrowest week that still fits its percentage; more weeks scroll sideways
 const COLORS = { fitness: "var(--accent)", fatigue: "var(--load-atl)", form: "var(--ink-2)", grid: "var(--grid)", axis: "var(--ink-3)" };
 
 function svgEl(tag, attributes, text) {
@@ -28,7 +28,6 @@ function availableWidth(share = 1) {
 
 const dayMs = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`);
 const monthDay = (ms) => new Date(ms).toISOString().slice(5, 10);
-const roundKm = (km) => Number(km.toFixed(1));
 
 // 4-6 round tick values covering min..max.
 function niceTicks(min, max) {
@@ -166,16 +165,16 @@ function barPath(x, y, width, base) {
 // bars: [{ label, planned, actual (null for weeks not started), percent, notes: [..], tip }]
 // Each bar reads as a progress bar: grey is the plan, the accent fill is what's done.
 function drawBarChart({ title, bars, headers, rows }) {
-  const margin = { top: 20, right: 6, left: 34 };
-  const hasNotes = bars.some((b) => b.notes.length);
-  const bottom = 22 + (hasNotes ? 22 : 0);
+  const margin = { top: 20, right: 0, left: 28 };
   const height = HEIGHT + 10;
   const width = Math.max(availableWidth(), margin.left + margin.right + bars.length * BAR_SLOT);
+  const slot = (width - margin.left - margin.right) / bars.length;
+  const hasNotes = slot >= 30 && bars.some((b) => b.notes.length);  // narrower, they live in the tooltip and table
+  const bottom = 22 + (hasNotes ? 22 : 0);
   const ticks = niceTicks(0, Math.max(1, ...bars.flatMap((b) => [b.planned, b.actual ?? 0])));
   const top = ticks[ticks.length - 1];
   const toY = (y) => height - bottom - (y / top) * (height - margin.top - bottom);
   const svg = newSvg(width, height, title);
-  const slot = (width - margin.left - margin.right) / bars.length;
   const barWidth = Math.min(slot * 0.68, 44);
   for (const tick of ticks) {
     svg.append(svgEl("line", { x1: margin.left, x2: width - margin.right, y1: toY(tick), y2: toY(tick), stroke: COLORS.grid }));
@@ -194,11 +193,11 @@ function drawBarChart({ title, bars, headers, rows }) {
     }
     if (bar.percent !== null) {
       svg.append(svgEl("text", {
-        x: middle, y: toY(Math.max(bar.planned, bar.actual)) - 5, "text-anchor": "middle", "font-size": 10,
+        x: middle, y: toY(Math.max(bar.planned, bar.actual)) - 5, "text-anchor": "middle", "font-size": slot < 30 ? 9 : 10,
       }, `${bar.percent}%`));
     }
     svg.append(svgEl("text", { x: middle, y: height - bottom + 14, "text-anchor": "middle", "font-size": 11 }, bar.label));
-    (wide ? [bar.notes.join(" · ")] : bar.notes).forEach((note, line) => svg.append(svgEl("text", {
+    if (hasNotes) (wide ? [bar.notes.join(" · ")] : bar.notes).forEach((note, line) => svg.append(svgEl("text", {
       x: middle, y: height - bottom + 26 + line * 10, "text-anchor": "middle", "font-size": 9,
     }, note)));
   });
@@ -213,7 +212,7 @@ function drawBarChart({ title, bars, headers, rows }) {
 }
 
 const signed = (value) => `${Math.round(value) < 0 ? "−" : "+"}${Math.abs(Math.round(value))}`;
-const formText = (tsb) => (tsb < 0 ? `−${Math.abs(Math.round(tsb))}` : Math.round(tsb));
+const formText = (tsb) => (Math.round(tsb) < 0 ? `−${Math.abs(Math.round(tsb))}` : Math.abs(Math.round(tsb)));
 
 export function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
   return `Fitness ${Math.round(ctl)} (${signed(change)} this week), fatigue ${Math.round(atl)}, form ${formText(tsb)}`;

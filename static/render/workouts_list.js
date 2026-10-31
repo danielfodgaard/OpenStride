@@ -1,12 +1,38 @@
 // The Workouts page: importing, logging and every recorded workout, newest first.
 import {
-  activePlan, api, button, el, input, labelled, line, link, main, postJson, refresh, rowLinks, rpeSelect, stale, statusLine, table, textarea, viewToken,
+  actions, activePlan, api, button, chip, el, foldable, garminStatus, input, labelled, link, main, notice, postJson, refresh,
+  rowLinks, rpeSelect, stale, statusLine, table, textarea, toast, viewToken,
 } from "./ui.js";
-import { clockText, dateText, monthHeading, stepText, timeText } from "./format.js";
+import { clockText, monthHeading, shortDate, stepText, timeText } from "./format.js";
 
 let importReport = "";  // survives the re-render after an upload
+let syncReport = "";
 
-function importSection() {
+const UNOFFICIAL_WARNING = "Garmin sync uses an unofficial connection: it can break without notice and is a grey area under Garmin's terms.";
+
+function garminSection(garmin) {
+  const section = el("section");
+  const status = statusLine();
+  status.textContent = syncReport;
+  syncReport = "";
+  const sync = button("Sync from Garmin", status, async () => {
+    const result = await api("/api/garmin/sync", { method: "POST" });
+    const count = result.imported.length;
+    toast(`${count} ${count === 1 ? "run" : "runs"} imported, ${result.matched} matched, ${result.unplanned} unplanned`);
+    syncReport = result.warnings.join(" ");
+    refresh();
+  }, "Syncing…", "primary");
+  const last = el("span", garmin.last_sync_at ? `Last sync ${new Date(garmin.last_sync_at).toLocaleString()}` : "Not synced yet");
+  last.className = "muted";
+  section.append(actions(sync, last));
+  if (garmin.last_error) section.append(notice(garmin.last_error, "critical"));
+  if (garmin.mode === "unofficial") section.append(notice(UNOFFICIAL_WARNING));
+  section.append(status);
+  return section;
+}
+
+function importSection(open) {
+  const startOpen = open || Boolean(importReport);
   const status = statusLine();
   status.id = "import-status";
   status.textContent = importReport;
@@ -24,20 +50,21 @@ function importSection() {
     for (const file of files.files) body.append("files", file);
     body.append("user_note", note.value);
     body.append("rpe", rpe.value);
-    importReport = reportText(await api("/api/activities", { method: "POST", body }));
+    const results = await api("/api/activities", { method: "POST", body });
+    const [summary, ...details] = reportParts(results);
+    toast(summary);
+    importReport = details.join(". ");
     refresh();
-  }, "Importing…");
-  const section = el("section");
-  section.append(el("h2", "Import runs"), labelled("Files", files), labelled("Note", note), labelled("RPE", rpe), line(upload), status);
-  return section;
+  }, "Importing…", "primary");
+  return foldable("Import runs", startOpen, labelled("Files", files), labelled("Note", note), labelled("RPE", rpe), actions(upload), status);
 }
 
-function reportText(results) {
+function reportParts(results) {
   const imported = results.filter((r) => r.status === "imported");
   const matched = imported.filter((r) => r.activity.match.session_index >= 0).length;
   const count = imported.length;
   const summary = `${count} ${count === 1 ? "run" : "runs"} imported, ${matched} matched, ${count - matched} unplanned`;
-  return [summary, ...results.flatMap((r) => [r.message, ...(r.warnings ?? [])]).filter(Boolean)].join(". ");
+  return [summary, ...results.flatMap((r) => [r.message, ...(r.warnings ?? [])]).filter(Boolean)];
 }
 
 function exerciseRow(list, step = {}) {
@@ -71,7 +98,7 @@ function readExercises(list) {
   }).filter((step) => step.description.trim());
 }
 
-function logSection(activePlan, today, prefillDate) {
+function logSection(activePlan, today, prefillDate, open) {
   const status = statusLine();
   const date = input("date", prefillDate || today);
   date.id = "log-date";
@@ -99,7 +126,8 @@ function logSection(activePlan, today, prefillDate) {
   const addExercise = el("button", "Add exercise");
   addExercise.type = "button";
   addExercise.addEventListener("click", () => exerciseRow(exercises));
-  exerciseBox.append(el("p", "Exercises"), exercises, addExercise);
+  exerciseBox.className = "field";
+  exerciseBox.append(el("h4", "Exercises"), exercises, actions(addExercise));
 
   // Prefill from the planned session that day, when there is one.
   const prefill = () => {
@@ -128,12 +156,13 @@ function logSection(activePlan, today, prefillDate) {
       rpe: Number(rpe.value),
       note: note.value,
       details: modality.value === "strength" ? readExercises(exercises) : [],
-    });
+    }, activePlan?.meta.id);
+    toast("Session logged");
     refresh();
-  });
-  const section = el("section");
-  section.append(
-    el("h2", "Log a session"),
+  }, "Working…", "primary");
+  return foldable(
+    "Log a session",
+    open,
     labelled("Date", date),
     labelled("Type", modality),
     labelled("Title", title),
@@ -142,16 +171,16 @@ function logSection(activePlan, today, prefillDate) {
     labelled("RPE", rpe),
     labelled("Note", note),
     exerciseBox,
-    line(save),
+    actions(save),
     status,
   );
-  return section;
 }
 
 function workoutRow(item) {
   const href = `#/workouts/${encodeURIComponent(item.id)}`;
-  const review = item.review ? `${item.review.review.completion} — ${item.review.review.headline}` : item.summary ?? "";
-  const when = `${dateText(item.date)} ${clockText(item.start_time)}`.trim();
+  const review = el("span", item.review ? ` ${item.review.review.headline}` : item.summary ?? "");
+  if (item.review) review.prepend(chip(item.review.review.completion));
+  const when = `${shortDate(item.date)} ${clockText(item.start_time)}`.trim();  // the month heading has the year
   if (item.manual) {
     return { href, cells: [when, link(item.title, href), item.modality, item.distance_km ? `${item.distance_km} km` : "",
       `${item.duration_min} min`, item.rpe ? `RPE ${item.rpe}` : "", "", item.match_label, review] };
@@ -182,11 +211,19 @@ function listSection(items) {
 
 export async function workoutsView(query) {
   const token = viewToken();
-  const [items, active, { today }] = await Promise.all([
+  const [items, active, { today }, garmin] = await Promise.all([
     api("/api/activities"),
-    activePlan(),
+    activePlan().then((plan) => (plan ? api(`/api/plans/${encodeURIComponent(plan.meta.id)}`) : null)),  // this read holds the ETag
     api("/api/today"),
+    garminStatus(),
   ]);
   if (stale(token)) return;
-  main.replaceChildren(el("h1", "Workouts"), importSection(), logSection(active, today, query.get("date")), listSection(items));
+  const open = query.get("open");
+  main.replaceChildren(
+    el("h1", "Workouts"),
+    ...(garmin ? [garminSection(garmin)] : []),
+    importSection(open === "import"),
+    logSection(active, today, query.get("date"), open === "log"),
+    listSection(items),
+  );
 }

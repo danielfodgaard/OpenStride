@@ -10,6 +10,8 @@ export const refresh = () => window.dispatchEvent(new HashChangeEvent("hashchang
 
 export const planPath = (id) => `#/plans/${encodeURIComponent(id)}`;
 
+export const USB_HELP = "Connect the watch by USB and copy the file into GARMIN/NewFiles. It appears under workouts after you unplug.";
+
 // Text always goes through textContent: plan files and notes can hold anything.
 export function el(tag, text) {
   const node = document.createElement(tag);
@@ -89,6 +91,12 @@ export function link(text, href) {
   return a;
 }
 
+export function buttonLink(text, href) {
+  const a = link(text, href);
+  a.className = "button";
+  return a;
+}
+
 export function bulletList(items) {
   const list = el("ul");
   for (const item of items) list.append(el("li", item));
@@ -108,8 +116,9 @@ export function table(headers, rows) {
     for (const cell of cells) {
       const td = el("td");
       td.append(cell);
-      if (NUMERIC.test(String(cell))) td.className = "num";
-      else if (String(cell).length > 28) td.className = "wrap";
+      const text = String(cell?.textContent ?? cell);
+      if (NUMERIC.test(text)) td.className = "num";
+      else if (text.length > 28) td.className = "wrap";
       row.append(td);
     }
   }
@@ -182,6 +191,13 @@ export async function garminStatus() {
 export async function downloadFile(path, filename) {
   const response = await send(path);
   saveBlob(await response.blob(), filename);
+}
+
+// The .fit download for a planned run. On 501 it shows "Garmin not set up" on `status`.
+export function fitButton(planId, weekNumber, index, session, status, text = "Download workout .fit") {
+  const path = `/api/plans/${encodeURIComponent(planId)}/sessions/${weekNumber}/${index}/workout.fit`;
+  const name = `${session.date}-${session.title.replace(/[^\w]+/g, "-")}.fit`;
+  return button(text, status, () => downloadFile(path, name), "Preparing…");
 }
 
 function saveBlob(blob, filename) {

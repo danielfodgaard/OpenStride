@@ -26,7 +26,7 @@ def test_dark_tokens_match_between_system_and_explicit_theme():
     assert tokens(system) == tokens(explicit)
 
 
-def test_only_the_pace_and_hr_tokens_colour_pace_and_hr():
+def test_chart_colours_come_from_tokens():
     charts = (STATIC / "charts.js").read_text()
     assert not re.search(r"#[0-9a-fA-F]{6}", charts), "chart colours come from tokens"
 

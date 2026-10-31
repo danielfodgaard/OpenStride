@@ -1,10 +1,12 @@
 // The workout detail page. One renderer for a planned session, a recorded workout, or both.
 import {
-  activePlan, api, breadcrumb, bulletList, button, el, input, line, link, main, patchJson, planPath, refresh,
-  rpeSelect, stale, statusLine, table, viewToken,
+  USB_HELP, actions, activePlan, api, breadcrumb, bulletList, button, buttonLink, chip, el, fitButton, garminStatus, input, labelled, line,
+  link, main, notice, patchJson, planPath, refresh, rpeSelect, stale, statStrip, statusLine, table, toast, viewToken,
 } from "./ui.js";
-import { amountText, clockText, dateText, expandSteps, paceText, stepText, targetBand, timeText, utcText } from "./format.js";
-import { drawDistanceCharts, drawRoute } from "../charts.js";
+import {
+  amountText, clockText, dateText, expandSteps, paceText, shortDate, stepText, targetBand, timeText, utcText,
+} from "./format.js";
+import { drawDistanceCharts, drawRoute, legend } from "../charts.js";
 
 const OFF_TARGET_S = 5;
 
@@ -31,16 +33,15 @@ function plannedSection(session) {
 function summarySection(activity, session) {
   const section = el("section");
   section.append(el("h2", "Summary"));
-  const stats = [
-    ["Distance", `${activity.distance_km.toFixed(2)} km`],
+  section.append(statStrip([
+    ["Distance", activity.distance_km.toFixed(2), "km"],
     ["Moving time", timeText(activity.moving_time_s)],
     ["Avg pace", activity.avg_pace || "–"],
-    ["Avg HR", activity.avg_hr ? `${activity.avg_hr} bpm` : "–"],
-    ["Max HR", activity.max_hr ? `${activity.max_hr} bpm` : "–"],
-    ["Cadence", activity.avg_cadence_spm ? `${activity.avg_cadence_spm} spm` : "–"],
-    ["Elevation gain", `${Math.round(activity.elevation_gain_m)} m`],
-  ];
-  section.append(table(stats.map(([name]) => name), [stats.map(([, value]) => value)]));
+    ["Avg HR", activity.avg_hr || "–", activity.avg_hr ? "bpm" : ""],
+    ["Max HR", activity.max_hr || "–", activity.max_hr ? "bpm" : ""],
+    ["Cadence", activity.avg_cadence_spm || "–", activity.avg_cadence_spm ? "spm" : ""],
+    ["Elevation gain", Math.round(activity.elevation_gain_m), "m"],
+  ]));
   const notes = [];
   const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
   if (band && activity.distance_km) {
@@ -49,7 +50,9 @@ function summarySection(activity, session) {
   }
   notes.push(`File ${activity.source_file}`);
   if (activity.start_utc) notes.push(`Stored start ${utcText(activity.start_utc)}`);
-  section.append(el("p", notes.join(" · ")));
+  const facts = el("p", notes.join(" · "));
+  facts.className = "muted";
+  section.append(facts);
   return section;
 }
 
@@ -58,8 +61,8 @@ function reviewSection(activity, editable) {
   section.append(el("h2", "Review"));
   const review = activity.review?.review;
   if (review) {
-    section.append(el("p", `${review.completion} — ${review.headline}`), bulletList(review.observations));
-    if (review.flags.length) section.append(el("p", "Flags"), bulletList(review.flags));
+    section.append(line(chip(review.completion), ` ${review.headline}`), bulletList(review.observations));
+    if (review.flags.length) section.append(el("h4", "Flags"), bulletList(review.flags));
     section.append(el("p", `Effort: ${review.effort.replaceAll("_", " ")}`));
   } else {
     section.append(el("p", "No review yet."));
@@ -72,46 +75,54 @@ function reviewSection(activity, editable) {
   const status = statusLine();
   const path = `/api/activities/${encodeURIComponent(activity.id)}`;
   const note = input("text", activity.user_note);
-  note.setAttribute("aria-label", "Note");
-  note.size = 50;
   const rpe = rpeSelect(activity.rpe);
+  const fields = el("div");
+  fields.className = "field-row";
+  fields.append(labelled("Note", note), labelled("RPE", rpe));
   section.append(
-    line("Note ", note, " ", rpe, " ", button("Save", status, async () => {
-      await patchJson(path, { user_note: note.value, rpe: Number(rpe.value) });
-      refresh();
-    })),
-    line(button("Re-run review", status, async () => {
-      await api(`${path}/review`, { method: "POST" });
-      refresh();
-    }, "Reviewing…")),
+    fields,
+    actions(
+      button("Save", status, async () => {
+        await patchJson(path, { user_note: note.value, rpe: Number(rpe.value) });
+        refresh();
+      }),
+      button("Re-run review", status, async () => {
+        await api(`${path}/review`, { method: "POST" });
+        refresh();
+      }, "Reviewing…"),
+    ),
     status,
   );
   return section;
 }
 
+// Route beside the charts on a laptop, stacked on a phone.
 function chartsSections(activity, series, session) {
   if (!series) {
     if (activity.has_raw) return [];
     return [el("p", "Re-import the file to see route and charts")];
   }
-  const nodes = [];
+  const top = el("div");
+  top.className = "workout-top";
   const route = drawRoute(series.points);
   if (route) {
     const section = el("section");
-    section.append(el("h2", "Route"), route.svg, el("p", "Start ● · Finish ■"));
-    nodes.push(section);
+    section.append(el("h2", "Route"), route.svg, legend([
+      { label: "Start", color: "var(--accent)" }, { label: "Finish", color: "var(--route)" },
+    ]));
+    top.append(section);
   }
   const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
   const charts = drawDistanceCharts(series.points, band, route);
   if (charts) {
     const section = el("section");
-    const parts = ["Pace, min/km, faster is higher"];
-    if (band) parts.push("shaded band is the planned range");
-    if (series.points.some((p) => p[3] !== null)) parts.push("heart rate, bpm, below");
-    section.append(el("h2", "Pace and heart rate over distance"), charts, el("p", parts.join(" · ")));
-    nodes.push(section);
+    const items = [{ label: "Pace, min/km, faster is higher", color: "var(--pace)", kind: "line" }];
+    if (band) items.push({ label: "Planned range", color: "color-mix(in srgb, var(--pace) 20%, transparent)" });
+    if (series.points.some((p) => p[3] !== null)) items.push({ label: "Heart rate, bpm", color: "var(--hr)", kind: "line" });
+    section.append(el("h2", "Pace and heart rate over distance"), charts, legend(items));
+    top.append(section);
   }
-  return nodes;
+  return top.childElementCount ? [top] : [];
 }
 
 function paceBar(width) {
@@ -122,7 +133,7 @@ function paceBar(width) {
   const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   rect.setAttribute("width", width);
   rect.setAttribute("height", 6);
-  rect.setAttribute("fill", "#0d7a87");
+  rect.setAttribute("fill", "var(--pace)");
   svg.append(rect);
   return svg;
 }
@@ -162,7 +173,6 @@ function lapsSection(activity, session) {
 
 function matchControl(workout, plan, status) {
   const select = el("select");
-  select.setAttribute("aria-label", "Planned session");
   select.add(new Option("Unplanned", "0:-1"));
   for (const week of plan.plan.weeks) {
     week.sessions.forEach((session, index) => {
@@ -172,35 +182,38 @@ function matchControl(workout, plan, status) {
   }
   select.value = `${workout.match.week_number}:${workout.match.session_index}`;
   const path = workout.manual ? `/api/manual/${encodeURIComponent(workout.id)}` : `/api/activities/${encodeURIComponent(workout.id)}`;
-  return line("Change match ", select, " ", button("Save match", status, async () => {
+  const box = el("div");
+  box.className = "field";
+  box.append(labelled("Change match", select), actions(button("Save match", status, async () => {
     const [week_number, session_index] = select.value.split(":").map(Number);
     await patchJson(path, { match: { week_number, session_index } });
     refresh();
-  }));
+  })));
+  return box;
 }
 
 function deleteControl(workout, status) {
-  const box = el("span");
+  const box = actions();
   const path = workout.manual ? `/api/manual/${encodeURIComponent(workout.id)}` : `/api/activities/${encodeURIComponent(workout.id)}`;
   const ask = button("Delete workout", status, async () => {
     const sure = button("Yes, delete it", status, async () => {
       await api(path, { method: "DELETE" });
       location.hash = "#/workouts";
-    });
+    }, "Deleting…", "danger");
     const keep = button("Keep it", status, async () => box.replaceChildren(ask));
-    box.replaceChildren("Delete this workout for good? ", sure, " ", keep);
-  });
+    box.replaceChildren("Delete this workout for good? ", sure, keep);
+  }, "Working…", "danger");
   box.append(ask);
   return box;
 }
 
-function manualDetail(entry, session, editable) {
+function manualSummary(entry, session) {
   const nodes = [];
   const section = el("section");
   section.append(el("h2", "Summary"));
-  const stats = [["Type", entry.modality], ["Duration", `${entry.duration_min} min`], ["RPE", entry.rpe || "–"]];
-  if (entry.distance_km) stats.push(["Distance", `${entry.distance_km} km`]);
-  section.append(table(stats.map(([name]) => name), [stats.map(([, value]) => value)]));
+  const stats = [["Type", entry.modality], ["Duration", entry.duration_min, "min"], ["RPE", entry.rpe || "–"]];
+  if (entry.distance_km) stats.push(["Distance", entry.distance_km, "km"]);
+  section.append(statStrip(stats));
   if (entry.note) section.append(el("p", `Note: ${entry.note}`));
   nodes.push(section);
   if (entry.details.length) {
@@ -212,61 +225,93 @@ function manualDetail(entry, session, editable) {
     exercises.append(el("h2", "Exercises"), table(["Planned", "Logged"], rows));
     nodes.push(exercises);
   }
-  if (editable) {
-    const status = statusLine();
-    const note = input("text", entry.note);
-    note.setAttribute("aria-label", "Note");
-    const duration = input("number", entry.duration_min);
-    duration.min = "0";
-    duration.setAttribute("aria-label", "Duration in minutes");
-    const rpe = rpeSelect(entry.rpe);
-    nodes.push(line("Note ", note, " Minutes ", duration, " ", rpe, " ", button("Save", status, async () => {
-      await patchJson(`/api/manual/${encodeURIComponent(entry.id)}`, {
-        note: note.value, duration_min: Number(duration.value), rpe: Number(rpe.value),
-      });
-      refresh();
-    })), status);
-  }
   return nodes;
 }
 
+function manualEdit(entry) {
+  const section = el("section");
+  const status = statusLine();
+  const note = input("text", entry.note);
+  const duration = input("number", entry.duration_min);
+  duration.min = "0";
+  const rpe = rpeSelect(entry.rpe);
+  const fields = el("div");
+  fields.className = "field-row";
+  fields.append(labelled("Note", note), labelled("Minutes", duration), labelled("RPE", rpe));
+  section.append(el("h2", "Edit"), fields, actions(button("Save", status, async () => {
+    await patchJson(`/api/manual/${encodeURIComponent(entry.id)}`, {
+      note: note.value, duration_min: Number(duration.value), rpe: Number(rpe.value),
+    });
+    refresh();
+  })), status);
+  return section;
+}
+
+// Download and Send for a planned run nobody has done yet.
+function watchSection(plan, place, session, garmin) {
+  const section = el("section");
+  const status = statusLine();
+  const buttons = actions(fitButton(plan.meta.id, place.week, place.index, session, status));
+  if (garmin?.can_push_workouts) {
+    const path = `/api/plans/${encodeURIComponent(plan.meta.id)}/sessions/${place.week}/${place.index}/send-to-garmin`;
+    buttons.append(button("Send to Garmin", status, async () => {
+      const { scheduled_date: date } = await api(path, { method: "POST" });
+      toast(`Sent to Garmin for ${shortDate(date)}`);
+    }, "Sending…", "primary"));
+  }
+  const help = el("p", USB_HELP);
+  help.className = "muted";
+  section.append(el("h2", "To your watch"), buttons, help, status);
+  return section;
+}
+
 // `plan` may be null, as may `session` or `activity`, but not both of those.
-function renderWorkout({ plan, session, activity, series, place, matchPlan, also = [] }) {
+function renderWorkout({ plan, session, activity, series, place, matchPlan, also = [], garmin }) {
   const nodes = [];
   const date = session?.date ?? activity.date;
   const title = session?.title ?? activity.title;
-  nodes.push(el("h1", title));
   const when = [dateText(date), activity?.start_time ? clockText(activity.start_time) : ""].filter(Boolean).join(" ");
   const weekLink = place ? link(`Week ${place.week}`, `${planPath(plan.meta.id)}/weeks/${place.week}`) : "Unplanned";
-  nodes.push(line(`${when} · `, weekLink));
-  for (const warning of activity?.warnings ?? []) nodes.push(el("p", warning));
-  if (session) nodes.push(plannedSection(session));
+  const head = el("div");
+  head.className = "page-head";
+  const sub = line(`${when} · `, weekLink);
+  sub.className = "sub";
+  head.append(el("h1", title), sub);
+  nodes.push(head);
+  for (const warning of activity?.warnings ?? []) nodes.push(notice(warning));
+  const editable = activity && (!activity.plan_id || plan?.meta.status === "active");
 
   if (!activity) {
+    if (session) nodes.push(plannedSection(session));
     if (plan.meta.status === "active") {
-      nodes.push(line(
-        link("Import run", `#/workouts?date=${session.date}`), " · ",
-        link("Log session", `#/workouts?date=${session.date}`),
+      if ((session.modality ?? "run") === "run") nodes.push(watchSection(plan, place, session, garmin));
+      nodes.push(actions(
+        buttonLink("Import run", `#/workouts?open=import&date=${session.date}`),
+        buttonLink("Log session", `#/workouts?open=log&date=${session.date}`),
       ));
     }
   } else if (activity.manual) {
-    const editable = !activity.plan_id || plan?.meta.status === "active";
-    nodes.push(...manualDetail(activity, session, editable));
+    nodes.push(...manualSummary(activity, session));
+    if (session) nodes.push(plannedSection(session));
+    if (editable) nodes.push(manualEdit(activity));
   } else {
-    const editable = !activity.plan_id || plan?.meta.status === "active";
-    nodes.push(summarySection(activity, session), reviewSection(activity, editable));
     nodes.push(...chartsSections(activity, series, session));
     const laps = lapsSection(activity, session);
     if (laps) nodes.push(laps);
+    nodes.push(summarySection(activity, session));
+    if (session) nodes.push(plannedSection(session));
+    nodes.push(reviewSection(activity, editable));
   }
   for (const other of also) nodes.push(line("Also on this session: ", link(other.title, `#/workouts/${encodeURIComponent(other.id)}`)));
 
   const status = statusLine();
-  if (place) nodes.push(line(link("Back to week", `${planPath(plan.meta.id)}/weeks/${place.week}`)));
+  if (place) nodes.push(actions(buttonLink("Back to week", `${planPath(plan.meta.id)}/weeks/${place.week}`)));
   if (activity) {
-    const editable = !activity.plan_id || plan?.meta.status === "active";
-    if (editable && matchPlan) nodes.push(matchControl(activity, matchPlan, status));
-    nodes.push(line(deleteControl(activity, status)), status);
+    const section = el("section");
+    section.append(el("h2", "Actions"));
+    if (editable && matchPlan) section.append(matchControl(activity, matchPlan, status));
+    section.append(deleteControl(activity, status), status);
+    nodes.push(section);
   }
   return nodes;
 }
@@ -306,6 +351,7 @@ export async function sessionView(id, weekNumber, index) {
   const first = matched[matched.length - 1];
   const activity = first ? await api(`/api/activities/${encodeURIComponent(first.id)}`) : null;
   const series = await seriesFor(activity);
+  const garmin = activity ? null : await garminStatus();
   if (stale(token)) return;
   main.replaceChildren(
     breadcrumb(
@@ -315,7 +361,8 @@ export async function sessionView(id, weekNumber, index) {
       [`Week ${week.week_number} ${session.day}`],
     ),
     ...renderWorkout({
-      plan, session, activity, series, place: { week: week.week_number }, matchPlan: plan, also: matched.slice(0, -1),
+      plan, session, activity, series, place: { week: week.week_number, index: Number(index) }, matchPlan: plan,
+      also: matched.slice(0, -1), garmin,
     }),
   );
 }

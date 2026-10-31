@@ -1,10 +1,11 @@
 // Hash router, plus the views that aren't a plan page or a workout page.
 import {
-  actions, activePlan, api, breadcrumb, button, chip, downloadButton, el, fullPlanVersionCheck, foldable, garminStatus, input,
+  actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, fullPlanVersionCheck, garminStatus, input,
   labelled, line, link, main, nextRoute,
   planPath, postJson, stale, statusLine, table, viewToken,
 } from "./render/ui.js";
-import { draftActions, planBasics, planOverview } from "./render/plan_overview.js";
+import { dateText } from "./render/format.js";
+import { daysToGo, draftActions, planBasics, planOverview, weekSummary } from "./render/plan_overview.js";
 import { weeksView } from "./render/weeks.js";
 import { sessionView, workoutView } from "./render/workout.js";
 import { workoutsView } from "./render/workouts_list.js";
@@ -62,8 +63,11 @@ async function newView(draftId) {
   const form = document.getElementById("plan-form").content.firstElementChild.cloneNode(true);
   const status = statusLine();
   const preview = el("div");
+  preview.className = "field";
   form.elements.race_date.value = defaultRaceDate();
-  main.replaceChildren(el("h1", "New plan"), form, status, preview);
+  const card = el("section");
+  card.append(form, status);
+  main.replaceChildren(el("h1", "New plan"), card, preview);
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -91,28 +95,65 @@ async function newView(draftId) {
   }
   fullPlanVersionCheck(planFile);
   fillForm(form, planFile.request);
+  const review = el("section");
+  review.append(el("h2", "Draft preview"), draftActions(planFile, status, form, formRequest), actions(downloadButton(planFile, status)));
   preview.append(
-    el("h2", "Draft preview"),
-    draftActions(planFile, status, form, formRequest),
-    line(downloadButton(planFile, status)),
+    review,
     planBasics(planFile),
     line(link("View weeks", `${planPath(draftId)}/weeks`)),
   );
 }
 
+function planRow(plan) {
+  const row = link("", planPath(plan.id));
+  row.className = "row-link";
+  const title = el("span", plan.goal_description);
+  title.className = "row-title";
+  const meta = el("span", `Race ${dateText(plan.race_date)} · version ${plan.version}`);
+  meta.className = "row-meta";
+  row.append(title, meta, chip(plan.status));
+  return row;
+}
+
+function planGroup(title, plans) {
+  const section = el("section");
+  const list = el("div");
+  list.className = "plan-list";
+  list.append(...plans.map(planRow));
+  section.append(el("h2", title), list);
+  return section;
+}
+
+async function activePlanCard(plan) {
+  const encoded = encodeURIComponent(plan.id);
+  const [status, metrics] = await Promise.all([api(`/api/plans/${encoded}/status`), api(`/api/plans/${encoded}/metrics`)]);
+  const section = el("section");
+  const goal = link(plan.goal_description, planPath(plan.id));
+  goal.className = "big";
+  const where = status.week_number ? `Week ${status.week_number} of ${status.weeks_total} · ` : "";
+  section.append(
+    el("h2", "Active plan"),
+    goal,
+    el("p", `Race ${dateText(plan.race_date)} · ${daysToGo(status.days_to_race)}`),
+    el("p", `${where}${weekSummary(status, metrics)}`),
+    actions(buttonLink("Open overview", planPath(plan.id))),
+  );
+  return section;
+}
+
 async function plansView() {
   const token = viewToken();
   const plans = await api("/api/plans");
+  const active = plans.find((p) => p.status === "active");
+  const activeCard = active ? await activePlanCard(active) : null;
   if (stale(token)) return;
-  const ordered = [...plans.filter((p) => p.status === "active"), ...plans.filter((p) => p.status !== "active")];
+  const drafts = plans.filter((p) => p.status === "draft");
+  const past = plans.filter((p) => p.status === "archived").sort((a, b) => b.created_at.localeCompare(a.created_at));
   const status = statusLine();
-  const rows = ordered.map((p) => [
-    p.goal_description, p.race_date, p.status === "active" ? "Active" : p.status, p.version, p.created_at,
-    link("Open", planPath(p.id)),
-  ]);
   const importInput = input("file");
   importInput.value = "";
   importInput.accept = ".json,application/json";
+  importInput.dataset.online = "";
   importInput.addEventListener("change", async () => {
     const file = importInput.files[0];
     if (!file) return;
@@ -126,12 +167,15 @@ async function plansView() {
       status.textContent = error.message;
     }
   });
+  const more = el("section");
+  more.append(line(link("Create a plan", "#/new")), labelled("Import plan file", importInput), status);
   main.replaceChildren(
     el("h1", "All plans"),
-    plans.length ? table(["Goal", "Race date", "Status", "Version", "Created", ""], rows) : el("p", "No plans yet."),
-    line(link("Create a plan", "#/new")),
-    labelled("Import plan file", importInput),
-    status,
+    ...(plans.length ? [] : [el("p", "No plans yet.")]),
+    ...(activeCard ? [activeCard] : []),
+    ...(drafts.length ? [planGroup("Drafts", drafts)] : []),
+    ...(past.length ? [planGroup("Past plans", past)] : []),
+    more,
   );
 }
 
@@ -147,7 +191,7 @@ async function versionsView(id) {
     view.append(link("View", `${planPath(id)}/versions/${version}`));
     if (planFile.meta.status === "active" && version !== planFile.meta.version) {
       view.append(" ", button("Restore", status, async () => {
-        await api(`/api/plans/${encoded}/restore/${version}`, { method: "POST" });
+        await api(`/api/plans/${encoded}/restore/${version}`, { method: "POST", plan: id });
         location.hash = planPath(id);
       }));
     }
@@ -176,7 +220,7 @@ async function versionView(id, version) {
       ["Versions", `${planPath(id)}/versions`],
       [`Version ${planFile.meta.version}`],
     ),
-    el("p", `Version ${planFile.meta.version}, read-only`),
+    el("h1", `Version ${planFile.meta.version}, read-only`),
     planBasics(planFile),
     table(["Week", "Date", "Day", "Type", "Session", "Planned", "Target"], rows),
   );
