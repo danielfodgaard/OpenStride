@@ -1,0 +1,28 @@
+{
+  "activity_id": "2026-11-19T12-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Intervals completed as structured: 6.8 km total, reps averaged 4:00/km against a 3:55/km target, with the jog recoveries and cool-down in range.",
+    "observations": [
+      "Warm-up 2.0 km at 5:45/km (HR 135), inside the easy band of 5:11-6:13/km.",
+      "Rep block 1.6 km at 4:00/km (HR 171, max 174), about 5 s/km off the 3:55/km target, so the reps were close to plan.",
+      "Jog recoveries 1.2 km at 6:20/km (HR 145), slightly slower than the easy band, which fits a genuine recovery.",
+      "Cool-down 2.0 km at 5:45/km (HR 142) was controlled and easy."
+    ],
+    "flags": [
+      "No RPE or athlete note was logged, so the effort on the reps is not confirmed.",
+      "Rep HR sat at 170-174 for much of the block, close to max; watch for recovery between sessions.",
+      "Week 3 is well behind plan: 15.8 km of 43.4 km and 2 of 7 sessions completed.",
+      "No runs logged since this session (none recorded after 2026-11-19 as of 2026-11-25), and CTL has fallen from 47.2 to 40.2 over the past week."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:46+00:00",
+    "usage": {
+      "input_tokens": 8131,
+      "output_tokens": 1489
+    }
+  }
+}

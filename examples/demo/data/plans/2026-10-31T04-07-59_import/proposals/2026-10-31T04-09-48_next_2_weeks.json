@@ -1,0 +1,443 @@
+{
+  "proposal_id": "2026-10-31T04-09-48_next_2_weeks",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "based_on_version": 1,
+  "scope": "next_2_weeks",
+  "scope_weeks": [
+    4,
+    5
+  ],
+  "user_context": "In week 5 (starting 2026-11-30), the athlete travels on Thursday 2026-12-03 so no run is possible that day. Do not do a plain Thu/Sat swap, because intervals on Saturday would be the day before the Sunday long run. Keep Tue 12-01 tempo 2 x 3 km and Strength A as is. Replace the Wed 12-02 easy ride with an easy 8 km run at easy pace. Remove the Thu 12-03 intervals session (4 x 0.8 km) and the Thursday easy ride/run; nothing is scheduled Thursday. Move Strength B from Thursday to Sat 12-05, alongside the existing easy 8 km run. Keep the Sun 12-06 long run 16.6 km unchanged. Do not add any other hard run. Week 5 then has four runs: Tue, Wed, Sat, Sun. No other weeks change.\n\nFrom chat:\nIs my easy pace too fast?\nSwap Thursday and Saturday next week please, I'm travelling Thursday.",
+  "status": "pending",
+  "acceptable": true,
+  "result": {
+    "recommendation": "change",
+    "rationale": "The only reason to change is the athlete's Thursday 12-03 travel in week 5, not any training trend. Week 5 now has runs on Tue, Wed, Sat and Sun, the Thursday intervals are dropped, and Strength B moves to Saturday. A plain Thu/Sat swap would put intervals the day before the Sunday long run, so that is avoided. On the easy pace question: recent easy runs at 5:42-5:52/km with HR 137-146 sit inside the 5:11-6:13 band and look genuinely easy, so no pace change is needed. Week 4 is unchanged and copied as is.",
+    "changes": [
+      {
+        "week_number": 5,
+        "day": "Wed",
+        "summary": "Replaced the 45 min easy ride with an easy 8 km run to keep four runs in the week after Thursday is lost to travel."
+      },
+      {
+        "week_number": 5,
+        "day": "Thu",
+        "summary": "Removed the 4 x 0.8 km intervals, since the athlete travels and a Saturday swap would put intervals the day before the long run."
+      },
+      {
+        "week_number": 5,
+        "day": "Sat",
+        "summary": "Moved Strength B from Thursday to Saturday alongside the easy 8 km run, because Thursday is a travel day."
+      }
+    ],
+    "weeks": [
+      {
+        "week_number": 4,
+        "phase": "base",
+        "focus": "Lighter week to absorb the load",
+        "planned_km": 38.4,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "easy",
+            "modality": "run",
+            "title": "Easy 9 km",
+            "distance_km": 9.0,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": []
+          },
+          {
+            "day": "Tue",
+            "type": "strength",
+            "modality": "strength",
+            "title": "Strength A",
+            "distance_km": 0.0,
+            "duration_min": 30.0,
+            "target_pace": "",
+            "description": "Controlled reps, stop two short of failure.",
+            "steps": [
+              {
+                "repeat": 3,
+                "description": "split squat",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 8,
+                "load": "2×12 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "calf raise",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 12,
+                "load": "bodyweight"
+              },
+              {
+                "repeat": 3,
+                "description": "romanian deadlift",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "2×16 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "plank",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 1,
+                "load": "45 s"
+              },
+              {
+                "repeat": 2,
+                "description": "single-leg glute bridge",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "bodyweight"
+              }
+            ]
+          },
+          {
+            "day": "Wed",
+            "type": "cross_training",
+            "modality": "cross",
+            "title": "Easy ride 30 min",
+            "distance_km": 0.0,
+            "duration_min": 30.0,
+            "target_pace": "RPE 4",
+            "description": "Easy spin, replaces easy running volume.",
+            "steps": []
+          },
+          {
+            "day": "Thu",
+            "type": "intervals",
+            "modality": "run",
+            "title": "4 × 0.4 km",
+            "distance_km": 6.8,
+            "duration_min": 0.0,
+            "target_pace": "3:55/km",
+            "description": "Run the reps evenly; the jog is easy.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 4,
+                "description": "Repetition",
+                "distance_km": 0.4,
+                "duration_min": 0.0,
+                "target_pace": "3:55/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 3,
+                "description": "Jog recovery",
+                "distance_km": 0.4,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              }
+            ]
+          },
+          {
+            "day": "Thu",
+            "type": "strength",
+            "modality": "strength",
+            "title": "Strength B",
+            "distance_km": 0.0,
+            "duration_min": 30.0,
+            "target_pace": "",
+            "description": "Controlled reps, stop two short of failure.",
+            "steps": [
+              {
+                "repeat": 3,
+                "description": "step-up",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 8,
+                "load": "2×10 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "eccentric calf raise",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "bodyweight"
+              },
+              {
+                "repeat": 3,
+                "description": "dumbbell row",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "16 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "side plank",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 1,
+                "load": "30 s"
+              }
+            ]
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "modality": "run",
+            "title": "Easy 8 km",
+            "distance_km": 8.0,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": []
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "modality": "run",
+            "title": "Long run 14.6 km",
+            "distance_km": 14.6,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": []
+          }
+        ]
+      },
+      {
+        "week_number": 5,
+        "phase": "build",
+        "focus": "Threshold volume (travel week, no Thursday session)",
+        "planned_km": 43.6,
+        "sessions": [
+          {
+            "day": "Tue",
+            "type": "tempo",
+            "modality": "run",
+            "title": "Tempo 2 × 3 km",
+            "distance_km": 11.0,
+            "duration_min": 0.0,
+            "target_pace": "4:37/km",
+            "description": "Comfortably hard, controlled effort.",
+            "steps": [
+              {
+                "repeat": 1,
+                "description": "Warm up",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 2,
+                "description": "Tempo",
+                "distance_km": 3.0,
+                "duration_min": 0.0,
+                "target_pace": "4:37/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 1,
+                "description": "Jog recovery",
+                "distance_km": 1.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              },
+              {
+                "repeat": 1,
+                "description": "Cool down",
+                "distance_km": 2.0,
+                "duration_min": 0.0,
+                "target_pace": "5:11-6:13/km",
+                "reps": 0,
+                "load": ""
+              }
+            ]
+          },
+          {
+            "day": "Tue",
+            "type": "strength",
+            "modality": "strength",
+            "title": "Strength A",
+            "distance_km": 0.0,
+            "duration_min": 30.0,
+            "target_pace": "",
+            "description": "Controlled reps, stop two short of failure.",
+            "steps": [
+              {
+                "repeat": 3,
+                "description": "split squat",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 8,
+                "load": "2×12 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "calf raise",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 12,
+                "load": "bodyweight"
+              },
+              {
+                "repeat": 3,
+                "description": "romanian deadlift",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "2×16 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "plank",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 1,
+                "load": "45 s"
+              },
+              {
+                "repeat": 2,
+                "description": "single-leg glute bridge",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "bodyweight"
+              }
+            ]
+          },
+          {
+            "day": "Wed",
+            "type": "easy",
+            "modality": "run",
+            "title": "Easy 8 km",
+            "distance_km": 8.0,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": []
+          },
+          {
+            "day": "Sat",
+            "type": "easy",
+            "modality": "run",
+            "title": "Easy 8 km",
+            "distance_km": 8.0,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": []
+          },
+          {
+            "day": "Sat",
+            "type": "strength",
+            "modality": "strength",
+            "title": "Strength B",
+            "distance_km": 0.0,
+            "duration_min": 30.0,
+            "target_pace": "",
+            "description": "Controlled reps, stop two short of failure.",
+            "steps": [
+              {
+                "repeat": 3,
+                "description": "step-up",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 8,
+                "load": "2×10 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "eccentric calf raise",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "bodyweight"
+              },
+              {
+                "repeat": 3,
+                "description": "dumbbell row",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 10,
+                "load": "16 kg"
+              },
+              {
+                "repeat": 3,
+                "description": "side plank",
+                "distance_km": 0.0,
+                "duration_min": 0.0,
+                "target_pace": "",
+                "reps": 1,
+                "load": "30 s"
+              }
+            ]
+          },
+          {
+            "day": "Sun",
+            "type": "long",
+            "modality": "run",
+            "title": "Long run 16.6 km",
+            "distance_km": 16.6,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Steady and unhurried; fuel as you would on race day.",
+            "steps": []
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "model": "claude-sonnet-5-5",
+    "created_at": "2026-10-31T04:09:48+00:00",
+    "usage": {
+      "input_tokens": 52011,
+      "output_tokens": 4056
+    }
+  }
+}

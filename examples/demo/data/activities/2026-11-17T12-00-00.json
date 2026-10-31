@@ -1,0 +1,112 @@
+{
+  "id": "2026-11-17T12-00-00",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "source_file": "2026-11-17_tempo.fit",
+  "start_time": "2026-11-17T12:00:00",
+  "date": "2026-11-17",
+  "distance_km": 9.0,
+  "moving_time_s": 2760,
+  "elapsed_time_s": 2760,
+  "avg_pace": "5:07/km",
+  "avg_hr": 150,
+  "max_hr": 166,
+  "avg_cadence_spm": 176,
+  "elevation_gain_m": 20.0,
+  "laps": [
+    {
+      "index": 1,
+      "distance_km": 2.0,
+      "time_s": 690,
+      "pace": "5:45/km",
+      "avg_hr": 136
+    },
+    {
+      "index": 2,
+      "distance_km": 5.0,
+      "time_s": 1380,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 3,
+      "distance_km": 2.0,
+      "time_s": 690,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    }
+  ],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 136
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 136
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 7,
+      "distance_km": 1.0,
+      "time_s": 276,
+      "pace": "4:36/km",
+      "avg_hr": 163
+    },
+    {
+      "index": 8,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    },
+    {
+      "index": 9,
+      "distance_km": 1.0,
+      "time_s": 345,
+      "pace": "5:45/km",
+      "avg_hr": 140
+    }
+  ],
+  "user_note": "",
+  "rpe": 0,
+  "match": {
+    "planned_date": "2026-11-17",
+    "week_number": 3,
+    "session_index": 0
+  },
+  "modality": "run",
+  "sport": "running"
+}

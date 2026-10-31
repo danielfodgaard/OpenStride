@@ -392,7 +392,7 @@ def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
 
 def is_duplicate(activity: ActivitySummary) -> bool:
     return any(
-        abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW
+        other.modality == activity.modality and abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW
         for other in storage.list_all_activities()
     )
 

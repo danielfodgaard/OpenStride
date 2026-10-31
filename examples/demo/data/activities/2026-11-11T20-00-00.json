@@ -1,0 +1,203 @@
+{
+  "id": "2026-11-11T20-00-00",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "source_file": "2026-11-11_ride.fit",
+  "start_time": "2026-11-11T20:00:00",
+  "date": "2026-11-11",
+  "distance_km": 23.5,
+  "moving_time_s": 2760,
+  "elapsed_time_s": 2760,
+  "avg_pace": "1:57/km",
+  "avg_hr": 126,
+  "max_hr": 134,
+  "avg_cadence_spm": 0,
+  "elevation_gain_m": 0.0,
+  "laps": [
+    {
+      "index": 1,
+      "distance_km": 23.5,
+      "time_s": 2760,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    }
+  ],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 7,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 8,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 9,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 10,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 11,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 12,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 13,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 14,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 15,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 16,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 17,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 18,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 19,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 20,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 21,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 22,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 23,
+      "distance_km": 1.0,
+      "time_s": 117,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    },
+    {
+      "index": 24,
+      "distance_km": 0.5,
+      "time_s": 59,
+      "pace": "1:57/km",
+      "avg_hr": 126
+    }
+  ],
+  "user_note": "",
+  "rpe": 0,
+  "match": {
+    "planned_date": "2026-11-11",
+    "week_number": 2,
+    "session_index": 2
+  },
+  "modality": "cross",
+  "sport": "cycling"
+}

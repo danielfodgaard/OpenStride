@@ -1,0 +1,440 @@
+{
+  "as_of": "2026-11-25",
+  "days": [
+    {
+      "date": "2026-11-02",
+      "load": 0.0,
+      "ctl": 43.0,
+      "atl": 0.0,
+      "tsb": 44.0,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-03",
+      "load": 72.6,
+      "ctl": 43.7,
+      "atl": 10.4,
+      "tsb": 43.0,
+      "km": 8.0
+    },
+    {
+      "date": "2026-11-04",
+      "load": 0.0,
+      "ctl": 42.6,
+      "atl": 8.9,
+      "tsb": 33.3,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-05",
+      "load": 69.7,
+      "ctl": 43.3,
+      "atl": 17.6,
+      "tsb": 33.7,
+      "km": 8.99
+    },
+    {
+      "date": "2026-11-06",
+      "load": 0.0,
+      "ctl": 42.2,
+      "atl": 15.1,
+      "tsb": 25.7,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-07",
+      "load": 39.4,
+      "ctl": 42.2,
+      "atl": 18.5,
+      "tsb": 27.2,
+      "km": 9.01
+    },
+    {
+      "date": "2026-11-08",
+      "load": 139.6,
+      "ctl": 44.5,
+      "atl": 35.8,
+      "tsb": 23.6,
+      "km": 15.99
+    },
+    {
+      "date": "2026-11-09",
+      "load": 0.0,
+      "ctl": 43.4,
+      "atl": 30.7,
+      "tsb": 8.7,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-10",
+      "load": 84.3,
+      "ctl": 44.4,
+      "atl": 38.4,
+      "tsb": 12.7,
+      "km": 6.0
+    },
+    {
+      "date": "2026-11-11",
+      "load": 45.5,
+      "ctl": 44.4,
+      "atl": 39.4,
+      "tsb": 6.0,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-12",
+      "load": 82.2,
+      "ctl": 45.3,
+      "atl": 45.5,
+      "tsb": 5.0,
+      "km": 10.01
+    },
+    {
+      "date": "2026-11-13",
+      "load": 0.0,
+      "ctl": 44.2,
+      "atl": 39.0,
+      "tsb": -0.2,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-14",
+      "load": 69.3,
+      "ctl": 44.8,
+      "atl": 43.3,
+      "tsb": 5.2,
+      "km": 9.0
+    },
+    {
+      "date": "2026-11-15",
+      "load": 153.5,
+      "ctl": 47.4,
+      "atl": 59.1,
+      "tsb": 1.5,
+      "km": 17.02
+    },
+    {
+      "date": "2026-11-16",
+      "load": 0.0,
+      "ctl": 46.3,
+      "atl": 50.6,
+      "tsb": -11.6,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-17",
+      "load": 100.6,
+      "ctl": 47.6,
+      "atl": 57.8,
+      "tsb": -4.3,
+      "km": 9.0
+    },
+    {
+      "date": "2026-11-18",
+      "load": 0.0,
+      "ctl": 46.5,
+      "atl": 49.5,
+      "tsb": -10.2,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-19",
+      "load": 74.2,
+      "ctl": 47.1,
+      "atl": 53.0,
+      "tsb": -3.1,
+      "km": 6.8
+    },
+    {
+      "date": "2026-11-20",
+      "load": 0.0,
+      "ctl": 46.0,
+      "atl": 45.5,
+      "tsb": -5.9,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-21",
+      "load": 72.5,
+      "ctl": 46.6,
+      "atl": 49.3,
+      "tsb": 0.5,
+      "km": 9.0
+    },
+    {
+      "date": "2026-11-22",
+      "load": 181.8,
+      "ctl": 49.8,
+      "atl": 68.2,
+      "tsb": -2.7,
+      "km": 18.6
+    },
+    {
+      "date": "2026-11-23",
+      "load": 0.0,
+      "ctl": 48.7,
+      "atl": 58.5,
+      "tsb": -18.4,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-24",
+      "load": 0.0,
+      "ctl": 47.5,
+      "atl": 50.1,
+      "tsb": -9.8,
+      "km": 0.0
+    },
+    {
+      "date": "2026-11-25",
+      "load": 0.0,
+      "ctl": 46.4,
+      "atl": 43.0,
+      "tsb": -2.6,
+      "km": 0.0
+    }
+  ],
+  "weeks": [
+    {
+      "week_number": 1,
+      "start_date": "2026-11-02",
+      "planned_km": 42.0,
+      "actual_km": 41.99,
+      "planned_sessions": 7,
+      "completed_sessions": 4,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 2,
+      "start_date": "2026-11-09",
+      "planned_km": 45.0,
+      "actual_km": 42.03,
+      "planned_sessions": 7,
+      "completed_sessions": 5,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 46.0
+    },
+    {
+      "week_number": 3,
+      "start_date": "2026-11-16",
+      "planned_km": 43.4,
+      "actual_km": 43.4,
+      "planned_sessions": 7,
+      "completed_sessions": 6,
+      "planned_strength": 2,
+      "completed_strength": 2,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 4,
+      "start_date": "2026-11-23",
+      "planned_km": 38.4,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 30.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 5,
+      "start_date": "2026-11-30",
+      "planned_km": 44.0,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 6,
+      "start_date": "2026-12-07",
+      "planned_km": 47.0,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 7,
+      "start_date": "2026-12-14",
+      "planned_km": 52.0,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 8,
+      "start_date": "2026-12-21",
+      "planned_km": 45.6,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 9,
+      "start_date": "2026-12-28",
+      "planned_km": 35.0,
+      "actual_km": 0.0,
+      "planned_sessions": 7,
+      "completed_sessions": 0,
+      "planned_strength": 2,
+      "completed_strength": 0,
+      "planned_cross_min": 45.0,
+      "actual_cross_min": 0.0
+    },
+    {
+      "week_number": 10,
+      "start_date": "2027-01-04",
+      "planned_km": 33.1,
+      "actual_km": 0.0,
+      "planned_sessions": 4,
+      "completed_sessions": 0,
+      "planned_strength": 0,
+      "completed_strength": 0,
+      "planned_cross_min": 0.0,
+      "actual_cross_min": 0.0
+    }
+  ],
+  "easy_runs": [
+    {
+      "date": "2026-11-05",
+      "activity_id": "2026-11-05T20-00-00",
+      "type": "easy",
+      "distance_km": 8.987,
+      "avg_pace_s": 342,
+      "avg_hr": 138,
+      "efficiency": 1.273
+    },
+    {
+      "date": "2026-11-07",
+      "activity_id": "2026-11-07T20-00-00",
+      "type": "easy",
+      "distance_km": 9.01,
+      "avg_pace_s": 350,
+      "avg_hr": 0,
+      "efficiency": 0.0
+    },
+    {
+      "date": "2026-11-08",
+      "activity_id": "2026-11-08T20-00-00",
+      "type": "long",
+      "distance_km": 15.995,
+      "avg_pace_s": 347,
+      "avg_hr": 142,
+      "efficiency": 1.218
+    },
+    {
+      "date": "2026-11-12",
+      "activity_id": "2026-11-12T20-00-00",
+      "type": "easy",
+      "distance_km": 10.011,
+      "avg_pace_s": 344,
+      "avg_hr": 140,
+      "efficiency": 1.247
+    },
+    {
+      "date": "2026-11-14",
+      "activity_id": "2026-11-14T20-00-00",
+      "type": "easy",
+      "distance_km": 9.004,
+      "avg_pace_s": 348,
+      "avg_hr": 137,
+      "efficiency": 1.26
+    },
+    {
+      "date": "2026-11-15",
+      "activity_id": "2026-11-15T20-00-00",
+      "type": "long",
+      "distance_km": 17.019,
+      "avg_pace_s": 350,
+      "avg_hr": 143,
+      "efficiency": 1.2
+    },
+    {
+      "date": "2026-11-21",
+      "activity_id": "2026-11-21T20-00-00",
+      "type": "easy",
+      "distance_km": 8.999,
+      "avg_pace_s": 346,
+      "avg_hr": 139,
+      "efficiency": 1.249
+    },
+    {
+      "date": "2026-11-22",
+      "activity_id": "2026-11-22T20-00-00",
+      "type": "long",
+      "distance_km": 18.6,
+      "avg_pace_s": 352,
+      "avg_hr": 146,
+      "efficiency": 1.169
+    }
+  ],
+  "quality_runs": [
+    {
+      "date": "2026-11-03",
+      "activity_id": "2026-11-03T17-30-00",
+      "type": "tempo",
+      "distance_km": 8.0,
+      "avg_pace_s": 311,
+      "avg_hr": 148,
+      "efficiency": 1.304
+    },
+    {
+      "date": "2026-11-10",
+      "activity_id": "2026-11-10T12-00-00",
+      "type": "tempo",
+      "distance_km": 6.0,
+      "avg_pace_s": 337,
+      "avg_hr": 163,
+      "efficiency": 1.093
+    },
+    {
+      "date": "2026-11-17",
+      "activity_id": "2026-11-17T12-00-00",
+      "type": "tempo",
+      "distance_km": 9.0,
+      "avg_pace_s": 307,
+      "avg_hr": 150,
+      "efficiency": 1.304
+    },
+    {
+      "date": "2026-11-19",
+      "activity_id": "2026-11-19T12-00-00",
+      "type": "intervals",
+      "distance_km": 6.8,
+      "avg_pace_s": 326,
+      "avg_hr": 145,
+      "efficiency": 1.267
+    }
+  ],
+  "current": {
+    "ctl": 46.4,
+    "atl": 43.0,
+    "tsb": -2.6,
+    "ctl_7d_change": -0.1,
+    "weekly_km_4wk_avg": 31.9,
+    "easy_pace_4wk_avg_s": 347,
+    "easy_hr_4wk_avg": 141
+  }
+}

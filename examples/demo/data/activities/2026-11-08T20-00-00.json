@@ -1,6 +1,6 @@
 {
   "id": "2026-11-08T20-00-00",
-  "plan_id": "2026-10-31T03-31-36_import",
+  "plan_id": "2026-10-31T04-07-59_import",
   "source_file": "2026-11-08_long.gpx",
   "start_time": "2026-11-08T20:00:00",
   "date": "2026-11-08",
@@ -9,7 +9,7 @@
   "elapsed_time_s": 5680,
   "avg_pace": "5:47/km",
   "avg_hr": 142,
-  "max_hr": 142,
+  "max_hr": 145,
   "avg_cadence_spm": 174,
   "elevation_gain_m": 181.8,
   "laps": [],
@@ -19,49 +19,49 @@
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 144
     },
     {
       "index": 2,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 140
     },
     {
       "index": 3,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 144
     },
     {
       "index": 4,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 141
     },
     {
       "index": 5,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 143
     },
     {
       "index": 6,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 141
     },
     {
       "index": 7,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 143
     },
     {
       "index": 8,
@@ -89,42 +89,42 @@
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 141
     },
     {
       "index": 12,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 143
     },
     {
       "index": 13,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 141
     },
     {
       "index": 14,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 143
     },
     {
       "index": 15,
       "distance_km": 1.0,
       "time_s": 348,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 140
     },
     {
       "index": 16,
       "distance_km": 0.995,
       "time_s": 346,
       "pace": "5:48/km",
-      "avg_hr": 142
+      "avg_hr": 144
     }
   ],
   "user_note": "",
@@ -132,6 +132,8 @@
   "match": {
     "planned_date": "2026-11-08",
     "week_number": 1,
-    "session_index": 3
-  }
+    "session_index": 6
+  },
+  "modality": "run",
+  "sport": "running"
 }

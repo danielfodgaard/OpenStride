@@ -1,0 +1,26 @@
+{
+  "activity_id": "2026-11-15T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "17 km long run completed steadily at 5:50/km, inside the easy band and matching the plan's intent.",
+    "observations": [
+      "Distance 17.02 km vs 17.0 planned; all 17 km splits were a flat 5:50/km, showing good pace control.",
+      "Avg HR 143 with max 146 stayed low and even across the run, consistent with an unhurried aerobic effort.",
+      "Pace sits within the 5:11-6:13/km easy band, near the middle-to-faster end, and is in line with the recent easy runs (5:44-5:48/km).",
+      "No fuelling or RPE data was logged, so the race-day fuelling instruction cannot be assessed from this file."
+    ],
+    "flags": [
+      "RPE and athlete note were not recorded for this run, so subjective effort is unknown.",
+      "Week 2 completed 5 of 7 sessions and the previous tempo run was cut short at 6 km with RPE 8, so the recent load context is mixed."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:32+00:00",
+    "usage": {
+      "input_tokens": 8337,
+      "output_tokens": 333
+    }
+  }
+}

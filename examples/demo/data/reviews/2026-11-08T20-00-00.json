@@ -2,26 +2,25 @@
   "activity_id": "2026-11-08T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "16 km long run completed at a steady, even 5:48/km, squarely within the easy band.",
+    "headline": "Steady 16 km long run at 5:47/km, inside the easy band, with even splits and HR in the low 140s.",
     "observations": [
-      "Distance 15.995 km against a 16 km target, with moving time 5550 s (92.5 min) at 5:47/km average.",
-      "Pace held almost perfectly even: 15 splits at 5:48/km, one at 5:38 (km 9) and a final 0.995 km at 5:48.",
-      "Average HR 142 and cadence 174 spm; HR stayed flat across all splits, consistent with an unhurried aerobic effort.",
-      "Pace sits inside the 5:11-6:13/km easy range and is slower than the 4:54 marathon reference, matching the 'steady and unhurried' intent."
+      "Distance 15.995 km against a 16 km plan, covered at 5:47/km average, mid-way through the 5:11-6:13/km easy range.",
+      "Splits were nearly identical, 5:48 for 14 of 16 km, with the only variation at km 9 (5:38) and km 16 (5:48 on 0.995 km), so pacing was controlled throughout.",
+      "Average HR 142 (max 145) with no visible drift across the run, consistent with a comfortably aerobic effort.",
+      "Efficiency of 1.218 is slightly below the 1.273 from the 8.99 km easy run on 11-05, but the longer distance and similar HR make that a minor difference rather than a concern."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so subjective effort cannot be confirmed.",
-      "Average HR of 142 is somewhat high for easy running relative to the 138 HR on the 2026-11-05 easy run at a similar pace.",
-      "Elevation gain of 181.8 m was not in the plan description; may have added effort on hills."
+      "No RPE or athlete note was logged, so effort is judged from pace and HR only.",
+      "No fueling information was recorded, so the race-day fueling part of the plan cannot be confirmed."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T03:31:47+00:00",
+    "created_at": "2026-10-31T04:08:13+00:00",
     "usage": {
-      "input_tokens": 3301,
-      "output_tokens": 372
+      "input_tokens": 7172,
+      "output_tokens": 834
     }
   }
 }

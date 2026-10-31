@@ -1,0 +1,26 @@
+{
+  "activity_id": "2026-11-17T12-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Tempo session completed as planned: 2 km easy, 5 km at threshold pace, 2 km easy, with the tempo block landing on target.",
+    "observations": [
+      "Tempo block averaged 4:36/km against a 4:37/km target, held steady across all five 1 km splits at 276 s each.",
+      "Warm-up and cool-down ran at 5:45/km (HR 136 and 140), inside the 5:11-6:13/km easy range, so the controlled structure was respected.",
+      "Tempo HR averaged 163 with efficiency 1.304, a clear improvement on the 6 km tempo on 11-10 (HR 163 at 5:37/km, efficiency 1.093)."
+    ],
+    "flags": [
+      "No RPE or athlete note was logged, so perceived effort is unknown for this session.",
+      "ATL (55.5) sits above CTL (47.2) with TSB at -4.3, so fatigue is building and should be watched.",
+      "Week 3 delivered 9.0 km of a 43.4 km plan and 1 of 7 sessions, so this quality session came after a heavily missed week."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:37+00:00",
+    "usage": {
+      "input_tokens": 8396,
+      "output_tokens": 977
+    }
+  }
+}

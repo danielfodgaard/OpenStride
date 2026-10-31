@@ -2,24 +2,24 @@
   "activity_id": "2026-11-05T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Easy 9 km completed on target distance, steady at 5:42/km and 138 bpm.",
+    "headline": "Easy 9 km completed on target distance at 5:42/km, inside the 5:11-6:13 easy band.",
     "observations": [
-      "Distance 8.99 km against a 9.0 km plan, fully covered.",
-      "Every km split was 5:42/km (342 s), showing very even pacing.",
-      "Average HR 138 bpm with no drift, consistent with relaxed conversational effort.",
-      "Pace sits inside the 5:11-6:13/km easy band, in the upper-middle portion, which suits recovery after Tuesday's tempo session."
+      "Distance 8.99 km against a planned 9.0 km, with no pace or HR drift across the nine splits (all 5:42/km).",
+      "Average HR 138 with a max of 141 indicates genuinely easy effort, consistent with the conversational intent.",
+      "Easy pace sits about 30 s/km slower than the 5:11 lower bound, so the run was controlled rather than fast."
     ],
     "flags": [
-      "RPE was not recorded and the athlete note is empty, so perceived effort cannot be confirmed."
+      "No RPE or athlete note was logged, so subjective effort is unknown.",
+      "Training metrics show CTL falling from 43 to 26.7 with no sessions logged after 5 Nov, so the athlete has largely stopped running."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T03:31:41+00:00",
+    "created_at": "2026-10-31T04:08:05+00:00",
     "usage": {
-      "input_tokens": 2281,
-      "output_tokens": 235
+      "input_tokens": 5915,
+      "output_tokens": 275
     }
   }
 }

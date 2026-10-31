@@ -1,0 +1,63 @@
+{
+  "id": "manual_2026-11-17_1",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "date": "2026-11-17",
+  "modality": "strength",
+  "title": "Strength A",
+  "duration_min": 32,
+  "distance_km": 0.0,
+  "rpe": 7,
+  "note": "Felt strong",
+  "details": [
+    {
+      "repeat": 3,
+      "description": "split squat",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 8,
+      "load": "2×12 kg"
+    },
+    {
+      "repeat": 3,
+      "description": "calf raise",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 12,
+      "load": "bodyweight"
+    },
+    {
+      "repeat": 3,
+      "description": "romanian deadlift",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 10,
+      "load": "2×16 kg"
+    },
+    {
+      "repeat": 3,
+      "description": "plank",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 1,
+      "load": "45 s"
+    },
+    {
+      "repeat": 2,
+      "description": "single-leg glute bridge",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 10,
+      "load": "bodyweight"
+    }
+  ],
+  "match": {
+    "planned_date": "2026-11-17",
+    "week_number": 3,
+    "session_index": 1
+  }
+}

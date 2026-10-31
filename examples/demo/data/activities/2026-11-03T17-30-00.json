@@ -1,6 +1,6 @@
 {
   "id": "2026-11-03T17-30-00",
-  "plan_id": "2026-10-31T03-31-36_import",
+  "plan_id": "2026-10-31T04-07-59_import",
   "source_file": "2026-11-03_tempo.fit",
   "start_time": "2026-11-03T17:30:00",
   "date": "2026-11-03",
@@ -99,5 +99,7 @@
     "planned_date": "2026-11-03",
     "week_number": 1,
     "session_index": 0
-  }
+  },
+  "modality": "run",
+  "sport": "running"
 }

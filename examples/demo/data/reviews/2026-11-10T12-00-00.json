@@ -1,28 +1,28 @@
 {
   "activity_id": "2026-11-10T12-00-00",
   "review": {
-    "completion": "missed_targets",
-    "headline": "Tempo abandoned at 6 km of 9 planned; calf pain and RPE 9 suggest stopping was right.",
+    "completion": "partly",
+    "headline": "Tempo cut short at 6 km of a 9 km session; first 2 km too easy, middle 3 km too fast, athlete stopped with heavy legs.",
     "observations": [
-      "Planned 2 km warm-up, 5 km tempo at 4:37/km, 2 km cool-down; ran 6.0 km in 33:40 at 5:37/km avg.",
-      "Warm-up was too fast for an easy block: laps 1 at 5:50/km with HR 150, against the 5:11-6:13/km easy range sitting at the slow end.",
-      "Tempo block was run at 5:00/km (laps 2, km 3-5), about 23 s/km faster than the 4:37/km target, with HR 176 avg and max 179, so the intended controlled effort was never held.",
-      "Only about 3 km was at tempo-range effort before the run ended, and the final km slowed to 7:00/km at HR 158-159, consistent with stopping early."
+      "Planned 2 km warm-up, 5 km at 4:37/km threshold, 2 km cool-down; actual run was 6.0 km in 33:40 at 5:37/km average.",
+      "Km 3-5 ran at 5:00/km with avg HR 176, about 23 s/km faster than the 4:37/km target's controlled intent and well above threshold effort for the planned tempo.",
+      "Opening 2 km at 5:50/km with HR 150 was slower than the 5:11-6:13 warm-up band's midpoint would suggest for a steady build, so pacing was uneven rather than controlled.",
+      "Athlete reported heavy legs, poor sleep and RPE 8, and stopped at 6 km, which is a sensible call given the session's trajectory."
     ],
     "flags": [
-      "Sharp calf pain since Tuesday, reported in the athlete's note: prioritize assessing this before any further running.",
-      "RPE 9 on a session meant to be comfortably hard.",
-      "Pace overshoot into tempo and HR near max (179) in a session that should have been controlled.",
-      "Previous tempo on 2026-11-03 was run at 4:37/km for 4 km with HR 161, so this session deviated from a recent pattern that was on target."
+      "Heart rate reached 179 max and averaged 176 during the surge, indicating the effort was well above the intended tempo zone.",
+      "Tempo efficiency fell to 1.093 from 1.304 on 2026-11-03 with HR 163 vs 148 at a similar pace band.",
+      "Fatigue signals: ATL 38.4 is the highest of the block, and only 6 km of the planned 45 km week has been completed.",
+      "Training load and fitness: CTL has fallen from 44.4 to 30.9 over the last week, and no runs have been logged since 2026-11-08."
     ],
     "effort": "harder_than_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T03:32:03+00:00",
+    "created_at": "2026-10-31T04:08:17+00:00",
     "usage": {
-      "input_tokens": 3402,
-      "output_tokens": 473
+      "input_tokens": 7438,
+      "output_tokens": 528
     }
   }
 }

@@ -1,0 +1,26 @@
+{
+  "activity_id": "2026-11-11T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "45-min easy ride completed as prescribed, with heart rate well inside easy range.",
+    "observations": [
+      "Rode 23.5 km in 2760 s (46 min), matching the 45-min easy spin plan.",
+      "Average HR 126 (max 134), well below the 140 easy-run average, so intensity stayed at RPE 4 or below.",
+      "Ride replaced easy running volume on a day after the 6 km tempo cut short on 11-10, which supports recovery."
+    ],
+    "flags": [
+      "No RPE or athlete note logged, so perceived effort is unconfirmed.",
+      "Cadence reads 0 and the pace field is shown in run format; the sensor data may be incomplete.",
+      "Week 2 running is at 6.0 of 45 km planned and CTL has dropped 5.8 over the last 7 days."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:22+00:00",
+    "usage": {
+      "input_tokens": 8157,
+      "output_tokens": 800
+    }
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "id": "2026-11-12T20-00-00",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "source_file": "2026-11-12_easy.gpx",
+  "start_time": "2026-11-12T20:00:00",
+  "date": "2026-11-12",
+  "distance_km": 10.011,
+  "moving_time_s": 3440,
+  "elapsed_time_s": 3440,
+  "avg_pace": "5:44/km",
+  "avg_hr": 140,
+  "max_hr": 143,
+  "avg_cadence_spm": 174,
+  "elevation_gain_m": 0.0,
+  "laps": [],
+  "km_splits": [
+    {
+      "index": 1,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 142
+    },
+    {
+      "index": 2,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 138
+    },
+    {
+      "index": 3,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 142
+    },
+    {
+      "index": 4,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 139
+    },
+    {
+      "index": 5,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 141
+    },
+    {
+      "index": 6,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 139
+    },
+    {
+      "index": 7,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 141
+    },
+    {
+      "index": 8,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 140
+    },
+    {
+      "index": 9,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 140
+    },
+    {
+      "index": 10,
+      "distance_km": 1.0,
+      "time_s": 344,
+      "pace": "5:44/km",
+      "avg_hr": 140
+    }
+  ],
+  "user_note": "",
+  "rpe": 0,
+  "match": {
+    "planned_date": "2026-11-12",
+    "week_number": 2,
+    "session_index": 3
+  },
+  "modality": "run",
+  "sport": "running"
+}

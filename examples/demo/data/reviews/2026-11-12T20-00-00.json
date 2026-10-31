@@ -1,0 +1,25 @@
+{
+  "activity_id": "2026-11-12T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Easy 10 km completed as planned at 5:44/km with steady HR around 140.",
+    "observations": [
+      "Distance 10.01 km against 10.0 planned, at 5:44/km, inside the 5:11-6:13 easy band.",
+      "Every km split was 344 s with HR between 138 and 142, so the effort stayed controlled and conversational.",
+      "Average HR of 140 and pace of 5:44 match the 4-week easy averages (346 s/km, 140 bpm), so this run fits the recent easy baseline."
+    ],
+    "flags": [
+      "No RPE or note was logged, so the athlete's perceived effort is unknown.",
+      "Week 2 is well behind: 16 of 45 planned km and 3 of 7 sessions completed, with strength missed. CTL has slipped from 44.4 to 33.1 over the last week."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:26+00:00",
+    "usage": {
+      "input_tokens": 7708,
+      "output_tokens": 716
+    }
+  }
+}

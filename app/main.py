@@ -31,7 +31,7 @@ from app.models import (
 load_dotenv()
 
 DEMO_DATA = Path(__file__).parent.parent / "examples" / "demo" / "data"
-DEMO_TODAY = "2026-11-11"
+DEMO_TODAY = "2026-11-25"
 
 
 @asynccontextmanager

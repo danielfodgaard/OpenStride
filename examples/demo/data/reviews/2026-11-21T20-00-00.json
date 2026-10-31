@@ -1,0 +1,26 @@
+{
+  "activity_id": "2026-11-21T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Easy 9 km done as prescribed at 5:46/km, steady and well inside the easy band.",
+    "observations": [
+      "Full 9.0 km at 5:46/km average, every km split at 346s, inside the 5:11-6:13/km easy target.",
+      "Average HR 139 and max 142, comfortably aerobic and consistent with recent easy runs (137-140 bpm).",
+      "Efficiency 1.249 sits in line with the recent easy-run trend, and cadence held steady at 174 spm.",
+      "Even splits and HR throughout suggest a controlled, conversational effort."
+    ],
+    "flags": [
+      "Athlete RPE and note were not logged (both 0 and blank), so perceived effort can't be confirmed.",
+      "Weekly volume is running well below plan (24.8 km actual vs 43.4 km planned in week 3), and CTL has slipped to 41.7."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:48+00:00",
+    "usage": {
+      "input_tokens": 7997,
+      "output_tokens": 306
+    }
+  }
+}

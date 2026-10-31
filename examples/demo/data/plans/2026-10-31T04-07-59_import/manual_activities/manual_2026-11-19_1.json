@@ -1,0 +1,54 @@
+{
+  "id": "manual_2026-11-19_1",
+  "plan_id": "2026-10-31T04-07-59_import",
+  "date": "2026-11-19",
+  "modality": "strength",
+  "title": "Strength B",
+  "duration_min": 28,
+  "distance_km": 0.0,
+  "rpe": 6,
+  "note": "",
+  "details": [
+    {
+      "repeat": 3,
+      "description": "step-up",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 8,
+      "load": "2×10 kg"
+    },
+    {
+      "repeat": 3,
+      "description": "eccentric calf raise",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 10,
+      "load": "bodyweight"
+    },
+    {
+      "repeat": 3,
+      "description": "dumbbell row",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 10,
+      "load": "16 kg"
+    },
+    {
+      "repeat": 3,
+      "description": "side plank",
+      "distance_km": 0.0,
+      "duration_min": 0.0,
+      "target_pace": "",
+      "reps": 1,
+      "load": "30 s"
+    }
+  ],
+  "match": {
+    "planned_date": "2026-11-19",
+    "week_number": 3,
+    "session_index": 4
+  }
+}

@@ -1,6 +1,6 @@
 {
   "id": "2026-11-10T12-00-00",
-  "plan_id": "2026-10-31T03-31-36_import",
+  "plan_id": "2026-10-31T04-07-59_import",
   "source_file": "2026-11-10_tempo_bad.fit",
   "start_time": "2026-11-10T12:00:00",
   "date": "2026-11-10",
@@ -79,11 +79,13 @@
       "avg_hr": 159
     }
   ],
-  "user_note": "sharp calf pain since Tuesday, stopped at 6 km",
-  "rpe": 9,
+  "user_note": "Legs heavy, slept badly, called it at 6 km",
+  "rpe": 8,
   "match": {
     "planned_date": "2026-11-10",
     "week_number": 2,
     "session_index": 0
-  }
+  },
+  "modality": "run",
+  "sport": "running"
 }

@@ -1,6 +1,6 @@
 {
   "id": "2026-11-07T20-00-00",
-  "plan_id": "2026-10-31T03-31-36_import",
+  "plan_id": "2026-10-31T04-07-59_import",
   "source_file": "2026-11-07_easy_no_hr.gpx",
   "start_time": "2026-11-07T20:00:00",
   "date": "2026-11-07",
@@ -83,6 +83,8 @@
   "match": {
     "planned_date": "2026-11-07",
     "week_number": 1,
-    "session_index": 2
-  }
+    "session_index": 5
+  },
+  "modality": "run",
+  "sport": "running"
 }

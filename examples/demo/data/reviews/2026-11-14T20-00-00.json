@@ -1,0 +1,26 @@
+{
+  "activity_id": "2026-11-14T20-00-00",
+  "review": {
+    "completion": "as_planned",
+    "headline": "Easy 9 km completed on target: 9.00 km at a steady 5:48/km, inside the 5:11-6:13 easy band.",
+    "observations": [
+      "Distance 9.004 km against 9.0 planned; moving time 3130 s with every km split at 348 s, so pacing was very even.",
+      "Average HR 137 (range 135-139) and max 140 indicate genuinely easy effort, consistent with recent easy runs (4-week average 139).",
+      "Cadence 174 spm and efficiency 1.26 are in line with the last easy runs, so no sign of fatigue or form breakdown.",
+      "The session fits the easy purpose; the run followed the Nov 10 tempo stop and the athlete logged no note or RPE."
+    ],
+    "flags": [
+      "No RPE or athlete note was logged, so subjective effort is unknown.",
+      "Week 2 completed only 25 of 45 planned km, and the Nov 10 tempo was cut short at 6 km, so the week has run below plan."
+    ],
+    "effort": "as_planned"
+  },
+  "meta": {
+    "model": "claude-haiku-5-5",
+    "created_at": "2026-10-31T04:08:29+00:00",
+    "usage": {
+      "input_tokens": 7748,
+      "output_tokens": 342
+    }
+  }
+}

@@ -1,25 +1,26 @@
 {
   "activity_id": "2026-11-03T17-30-00",
   "review": {
-    "completion": "as_planned",
-    "headline": "Tempo session executed as prescribed: 2 km easy, 4 km at threshold pace, 2 km easy, all 8.0 km completed.",
+    "completion": "partly",
+    "headline": "Tempo block ran at target pace, but the warm-up and cool-down were run at about 5:45/km, faster than the 5:11-6:13 easy band's midpoint and the session was 8 km total, so the structure was largely followed.",
     "observations": [
-      "Middle 4 km averaged 4:37/km, exactly on the 4:37/km target, with splits of 4:36 to 4:37 held steady for km 3 to 6.",
-      "Warm-up and cool-down laps at 5:45/km with HR 135 to 140 stayed in easy territory, consistent with a controlled effort.",
-      "Tempo-block HR settled at 161 to 162 and peaked at 165, a steady threshold-type load rather than a surge.",
-      "Overall 8.0 km in 2488 s, average 5:11/km, cadence 176 spm."
+      "Tempo km 3-6 averaged 4:36-4:37/km at HR 162, matching the 4:37/km threshold target almost exactly.",
+      "Warm-up and cool-down (2 km each) ran at 5:45/km with HR 135-140, which is within the easy band of 5:11-6:13/km.",
+      "Total 8.0 km in 2488 s at 5:11/km average, with consistent splits and no fade through the tempo block."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so the subjective effort of the tempo block is unknown."
+      "No RPE or athlete note was logged, so perceived effort for the tempo block is unknown.",
+      "Weekly volume is far behind plan: 8.0 km of 42 km planned in week 1, with 6 of 7 sessions and all strength and cross-training missed.",
+      "CTL has dropped from 43.7 to 25.7 over the 3 weeks since this run, with no further training logged after 2026-11-03."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T03:31:39+00:00",
+    "created_at": "2026-10-31T04:08:02+00:00",
     "usage": {
-      "input_tokens": 2144,
-      "output_tokens": 303
+      "input_tokens": 5704,
+      "output_tokens": 387
     }
   }
 }
