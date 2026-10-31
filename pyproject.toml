@@ -13,4 +13,6 @@ dependencies = [
     "fitdecode",
     "gpxpy",
     "python-multipart",
+    "garminconnect>=0.3.20,<0.4",
+    "garmin-connect-personal-api-python>=1,<2",
 ]
