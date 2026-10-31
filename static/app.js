@@ -305,8 +305,27 @@ async function renderFooter() {
   footer.append(tick);
 }
 
+// Fills the cache, so the active plan opens offline even if this device never visited its pages.
+async function warmCache() {
+  if (!navigator.onLine) return;
+  await navigator.serviceWorker.ready;
+  if (!navigator.serviceWorker.controller) {
+    await new Promise((resolve) => { navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }); });
+  }
+  const active = await activePlan();
+  const paths = ["/api/activities", "/api/plans", "/api/today"];
+  if (active) {
+    const plan = `/api/plans/${encodeURIComponent(active.meta.id)}`;
+    paths.push(`/api/activities?plan_id=${encodeURIComponent(active.meta.id)}`, plan);
+    for (const part of ["status", "metrics", "usage", "proposals", "chat", "progress"]) paths.push(`${plan}/${part}`);
+  }
+  await Promise.all(paths.map((path) => fetch(path).catch(() => null)));
+}
+
 window.addEventListener("hashchange", () => { markTab(); route(); });
 setUpTheme();
 renderFooter();
 markTab();
 route();
+// Not there on plain http: the app still works, it just can't be installed.
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then(warmCache).catch(() => null);

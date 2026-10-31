@@ -31,12 +31,18 @@ Warnings are coaching judgments. They never block anything and appear above a pr
 
 Open http://127.0.0.1:8000. Data lives in `data/`, including every uploaded file in `data/activities/raw/`.
 
-## Navigating the app
+## Using the app
 
-- **Workouts**: every recorded workout, newest first by month, across all plans. Import files and log sessions here; neither needs an active plan. Without one, workouts are saved as unplanned, and Change match on a workout attaches it to a plan later.
-- **All plans**: every plan, the active one first. A plan opens on its overview: status, next session, the fitness and weekly volume charts, coach chat, progress summary and Adapt plan.
-- **Weeks**, from the overview: foldable weeks, the current one open by default, with a linked row per session. Pace zones and the plan's summary and warnings are here.
-- **Workout detail**: one page for a planned session and what you actually ran: the plan, a summary strip, the review, route, pace and heart-rate charts with a shared hover, and laps, with a Target column when the laps line up with the session's steps.
+OpenStride works the same on a phone and a laptop: three tabs along the bottom on a phone, along the top on a laptop. The theme button in the app bar overrides the system light or dark setting on that device.
+
+- **Workouts**: every recorded workout, newest first by month, across all plans. Import runs and Log a session fold open from here; neither needs an active plan. Without one, workouts are saved as unplanned, and Change match on a workout attaches it to a plan later. When Garmin is set up, Sync from Garmin sits above them with the last sync time.
+- **Plans**: the active plan first (week, km done this week, days to go), then drafts, then past plans.
+- **Plan overview**: the This week card links to the current week and holds the next session as its own row. Below it the fitness chart, the weekly volume chart (each grey bar is the plan, filled up to the km you ran, with the percentage above it), coach chat and progress summary. Adapt plan is folded away with the version line and All versions, and opens by itself when a suggestion is waiting.
+- **Weeks**, from the overview: foldable weeks, the current one open by default, with a linked row per session. Pace zones and the plan's summary and warnings are here. A week's remaining runs can be downloaded as .fit workouts: connect the watch by USB and copy the file into `GARMIN/NewFiles`.
+- **Workout detail**: route, pace and heart-rate charts with a shared hover, and laps (with a Target column when the laps line up with the session's steps) come first, then summary, the plan and the review. A session not yet done opens on the plan, with the watch actions and the Import run and Log session shortcuts.
+- **Footer**: Download backup. With Garmin on, a tickbox adds your Garmin secrets to the backup.
+
+Over HTTPS the app installs to the home screen ("Add to Home Screen"; see Phone access). Once it has been opened online, the app, the active plan and any workout you've opened still open without a connection, under a banner saying how old the data is. Anything that needs the server (import, sync, chat, reviews, plan changes, new plans) is disabled until you're back online. After an update the new version shows from the second time you open the app.
 
 Pages to screenshot for a walkthrough: the plan overview, an open week, a done steady run (`#/plans/<id>/sessions/1/0`), an interval session with its Target column, Workouts, and a session not yet done.
 

@@ -2,7 +2,10 @@
 export const main = document.getElementById("main");
 
 let routeToken = 0;
-export const nextRoute = () => { routeToken += 1; };
+export const nextRoute = () => {
+  routeToken += 1;
+  savedAt = null;
+};
 // A view keeps its token; a slow fetch can then see that the user has moved on.
 export const viewToken = () => routeToken;
 export const stale = (token) => token !== routeToken;
@@ -147,12 +150,49 @@ export function breadcrumb(...crumbs) {
   return p;
 }
 
+const OFFLINE_HELP = "Import, sync, chat, reviews, plan changes and new plans need the server.";
+let cachedView = false;  // the service worker answered from its cache
+let savedAt = null;  // the oldest copy on this page
+
+function showOffline() {
+  const offline = cachedView || !navigator.onLine;
+  const banner = document.getElementById("offline-banner");
+  const from = savedAt ? `showing data from ${new Date(savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : "showing saved data";
+  banner.hidden = !offline;
+  banner.textContent = `Offline: ${from}. ${OFFLINE_HELP}`;
+  document.body.classList.toggle("offline", offline);
+  for (const control of document.querySelectorAll("[data-online]")) {
+    control.disabled = offline;
+    control.title = offline ? "Needs the server" : "";
+  }
+}
+
+function noteResponse(response) {
+  const copy = response.headers.get("X-OpenStride-Saved-At");
+  cachedView = Boolean(copy) || response.headers.has("X-OpenStride-Offline");
+  if (copy && (!savedAt || copy < savedAt)) savedAt = copy;
+  showOffline();
+}
+
+new MutationObserver(showOffline).observe(main, { childList: true, subtree: true });
+window.addEventListener("offline", showOffline);
+window.addEventListener("online", () => {
+  cachedView = false;
+  showOffline();
+  refresh();
+});
+
 const etags = {};  // plan id -> ETag of the last copy we read
 
 async function send(path, options = {}) {
   const { plan, ...init } = options;
   if (plan && etags[plan]) init.headers = { ...init.headers, "If-Match": etags[plan] };
-  const response = await fetch(path, init);
+  const response = await fetch(path, init).catch(() => {
+    cachedView = true;
+    showOffline();
+    throw new Error("Offline: this page isn't saved on this device yet.");
+  });
+  noteResponse(response);
   if (response.status === 401) {
     location.href = "/login";
     throw new Error("Please sign in.");
@@ -161,6 +201,7 @@ async function send(path, options = {}) {
   if (response.status === 501) throw new Error("Garmin not set up");
   const body = await response.json().catch(() => null);
   if (response.status === 409 && body?.error === "plan_changed") {
+    // TODO(v4.1): keep what was typed (a chat message, say) across this reload.
     toast("This plan changed on another device. Reloaded.");
     refresh();
     throw new Error("This plan changed on another device. Reloaded.");
@@ -228,6 +269,7 @@ export function button(text, status, action, busyText = "Working…", kind = "")
   const b = el("button", text);
   b.type = "button";
   b.className = kind;
+  b.dataset.online = "";
   b.addEventListener("click", async () => {
     b.disabled = true;
     status.textContent = busyText;
@@ -285,7 +327,9 @@ export function fullPlanVersionCheck(planFile) {
 }
 
 export function downloadButton(planFile, status) {
-  return button("Download JSON", status, async () => {
+  const b = button("Download JSON", status, async () => {
     saveBlob(new Blob([JSON.stringify(planFile, null, 2)], { type: "application/json" }), `${planFile.meta.id}.json`);
   });
+  delete b.dataset.online;  // works from the copy on screen
+  return b;
 }
