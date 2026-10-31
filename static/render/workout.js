@@ -239,6 +239,7 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
   const when = [dateText(date), activity?.start_time ? clockText(activity.start_time) : ""].filter(Boolean).join(" ");
   const weekLink = place ? link(`Week ${place.week}`, `${planPath(plan.meta.id)}/weeks/${place.week}`) : "Unplanned";
   nodes.push(line(`${when} · `, weekLink));
+  for (const warning of activity?.warnings ?? []) nodes.push(el("p", warning));
   if (session) nodes.push(plannedSection(session));
 
   if (!activity) {

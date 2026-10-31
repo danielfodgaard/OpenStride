@@ -35,11 +35,11 @@ def test_constant_load_converges_to_100():
 
 def test_ewma_by_hand():
     series = fitness_series([100, 0], 42)
-    # Day 1: ctl 42 + (100-42)/42, atl 100/7, tsb from yesterday's 42 - 0.
-    assert series[0] == pytest.approx((43.381, 14.286, 42), abs=0.001)
+    # Day 1: ctl 42 + (100-42)/42, atl 42 + (100-42)/7, tsb from yesterday's 42 - 42.
+    assert series[0] == pytest.approx((43.381, 50.286, 0), abs=0.001)
     # Day 2: tsb is day 1's ctl - atl.
-    assert series[1][2] == pytest.approx(43.381 - 14.286, abs=0.001)
-    assert series[1][1] == pytest.approx(14.286 * 6 / 7, abs=0.001)
+    assert series[1][2] == pytest.approx(43.381 - 50.286, abs=0.001)
+    assert series[1][1] == pytest.approx(50.286 * 6 / 7, abs=0.001)
 
 
 def test_trimp_at_hrr_0_7():
@@ -108,7 +108,7 @@ def test_runs_before_the_plan_do_not_decay_the_fitness_seed(plan):
 def test_before_the_plan_starts_there_are_no_days_but_no_crash(plan):
     result = metrics.compute(plan, date(2026, 10, 31))
     assert result.days == []
-    assert result.current.ctl == pytest.approx(44.0) and result.current.atl == 0
+    assert result.current.ctl == pytest.approx(44.0) and result.current.atl == pytest.approx(44.0)
 
 
 def test_day_load_and_km_sum_same_day_entries(plan):

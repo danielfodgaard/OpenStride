@@ -8,10 +8,12 @@ Judge the run against its purpose, not just the numbers: an easy run done too fa
 
 Keep it short and concrete, with real numbers. observations has 1 to 4 short points; flags lists signals worth watching and may be empty. Do not suggest plan changes here.
 
-Use completion "unplanned" when no session was planned."""
+Use completion "unplanned" when no session was planned.
+
+Sessions dated after today are not due yet. Never count them as missed or behind."""
 
 
-def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str) -> str:
+def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str, today) -> str:
     session = None
     if activity.match.session_index >= 0:
         week = next(w for w in plan_file.plan.weeks if w.week_number == activity.match.week_number)
@@ -20,7 +22,9 @@ def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, rec
     paces = plan_file.paces.model_dump_json(indent=2) if plan_file else "None: there is no active plan"
     history = json.dumps([a.model_dump(mode="json", exclude={"km_splits"}) for a in recent], indent=2)
     logged = json.dumps([m.model_dump(mode="json") for m in manual], indent=2)
-    return f"""Planned session:
+    return f"""Today: {today.isoformat()}
+
+Planned session:
 {planned}
 
 The run:

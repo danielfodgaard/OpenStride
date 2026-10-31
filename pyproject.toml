@@ -1,0 +1,16 @@
+[project]
+name = "openstride"
+version = "4.0.0"
+description = "An open-source running coach"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+    "anthropic",
+    "python-dotenv",
+    "pytest",
+    "fitdecode",
+    "gpxpy",
+    "python-multipart",
+]

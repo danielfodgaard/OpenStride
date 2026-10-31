@@ -160,6 +160,7 @@ function weekNotes(week) {
 
 export function drawProgressCharts(metrics, raceDate) {
   const days = metrics.days.map((d) => ({ ...d, x: dayMs(d.date) }));
+  const notStarted = (w) => w.start_date > metrics.as_of && !w.actual_km;
   const line = (name, color, key) => ({ name, color, axis: "left", points: days.map((d) => ({ x: d.x, y: d[key] })) });
   const fitness = drawSeriesChart({
     title: "Fitness & fatigue",
@@ -175,12 +176,12 @@ export function drawProgressCharts(metrics, raceDate) {
     bars: metrics.weeks.map((w) => ({
       label: `W${w.week_number}`,
       planned: w.planned_km,
-      actual: w.start_date > metrics.as_of ? null : w.actual_km,
+      actual: notStarted(w) ? null : w.actual_km,
       notes: weekNotes(w),
     })),
     headers: ["Week", "Start", "Planned km", "Actual km", "Sessions", "Strength", "Cross", "Cross min"],
     rows: metrics.weeks.map((w) => [
-      w.week_number, w.start_date, w.planned_km, w.start_date > metrics.as_of ? "" : w.actual_km,
+      w.week_number, w.start_date, w.planned_km, notStarted(w) ? "" : w.actual_km,
       `${w.completed_sessions}/${w.planned_sessions}`, `${w.completed_strength}/${w.planned_strength}`,
       `${w.completed_cross}/${w.planned_cross}`, `${w.actual_cross_min}/${w.planned_cross_min}`,
     ]),

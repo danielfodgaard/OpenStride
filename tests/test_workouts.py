@@ -190,9 +190,11 @@ def test_a_done_session_today_shows_as_done_with_its_numbers(client, monkeypatch
     upload(client, "2026-11-05_easy.gpx")
     monkeypatch.setenv("OPENSTRIDE_TODAY", "2026-11-05")
     client.post("/api/plans/plan/manual", json={"date": "2026-11-05", "modality": "strength", "duration_min": 30})
-    upcoming = progress.plan_status(storage.load_plan("plan"), date(2026, 11, 5))["next"]
-    assert upcoming["done"] and upcoming["workout_id"] and upcoming["actual_km"] > 8
-    assert upcoming["date"] == "2026-11-05"
+    status = progress.plan_status(storage.load_plan("plan"), date(2026, 11, 5))
+    finished = status["today_done"]
+    assert finished["done"] and finished["workout_id"] and finished["actual_km"] > 8
+    assert finished["date"] == "2026-11-05" and finished["actual_pace"]
+    assert not status["next"]["done"] and status["next"]["date"] > "2026-11-05"
 
 
 def test_status_before_the_plan_and_after_the_race():

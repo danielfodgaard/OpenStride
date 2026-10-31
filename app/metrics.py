@@ -71,7 +71,7 @@ def entry_load(entry: Entry, kind: str, hr_max: float, hr_rest: float) -> float:
 
 def fitness_series(loads: list[float], seed: float) -> list[tuple[float, float, float]]:
     """(ctl, atl, tsb) per day. tsb uses yesterday's values, so today's load doesn't count against today's form."""
-    ctl, atl = seed, 0.0
+    ctl, atl = seed, seed
     series = []
     for load in loads:
         tsb = ctl - atl
@@ -85,7 +85,8 @@ def build_days(done: list[Entry], kinds: dict, plan_file: PlanFile, today: date)
     # From plan start, as the seed stands for all training before it. Starting earlier from a
     # few old files would decay the seed across empty days and report false low fitness.
     first = plan_file.plan.weeks[0].start_date
-    span = [first + timedelta(days=i) for i in range((today - first).days + 1)]
+    last = max([today, *(entry.date for entry in done)])
+    span = [first + timedelta(days=i) for i in range((last - first).days + 1)]
     hr_max, hr_rest = heart_rates(plan_file.request)
     loads = {day: 0.0 for day in span}
     kms = {day: 0.0 for day in span}
@@ -133,9 +134,9 @@ def build_weeks(done: list[Entry], plan_file: PlanFile) -> list[WeekVolume]:
 
 
 def snapshot(days: list[DayLoad], seed: float, today: date) -> Snapshot:
-    last = days[-1] if days else DayLoad(date=today, load=0, ctl=round(seed, 1), atl=0, tsb=round(seed, 1), km=0)
+    last = days[-1] if days else DayLoad(date=today, load=0, ctl=round(seed, 1), atl=round(seed, 1), tsb=0, km=0)
     week_ago = days[-8].ctl if len(days) >= 8 else round(seed, 1)
-    since = today - timedelta(days=27)
+    since = last.date - timedelta(days=27)
     return Snapshot(
         ctl=last.ctl,
         atl=last.atl,

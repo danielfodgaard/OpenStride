@@ -2,7 +2,7 @@
 import os
 from datetime import date, datetime, timedelta, timezone
 
-from app import clock, generator, lifecycle, logbook, metrics, storage
+from app import activities, clock, generator, lifecycle, logbook, metrics, storage
 from app.models import PlanFile, ProgressFile, ProgressSummary, Proposal, ReviewMeta, Usage
 from app.prompts.progress import SYSTEM_PROMPT, build_user_prompt
 
@@ -20,15 +20,15 @@ PRICES = {
 def planned_vs_actual(plan_file: PlanFile) -> dict:
     done = metrics.entries(plan_file.meta.id)
     weeks = []
-    for week in plan_file.plan.weeks:
+    for week, volume in zip(plan_file.plan.weeks, metrics.build_weeks(done, plan_file)):
         here = [entry for entry in done if metrics.in_week(entry, week)]
         row = {
             "week_number": week.week_number,
             "start_date": week.start_date.isoformat(),
             "planned_km": week.planned_km,
-            "actual_km": round(sum(entry.km for entry in here if entry.modality == "run"), 2),
+            "actual_km": volume.actual_km,
             "sessions_planned": len(week.sessions),
-            "sessions_completed": len({entry.match.session_index for entry in here if entry.match.session_index >= 0}),
+            "sessions_completed": volume.completed_sessions,
         } | {completion: 0 for completion in COMPLETIONS}
         for entry in here:
             review_file = storage.load_review(entry.id)
@@ -54,6 +54,7 @@ def session_ref(week, index: int, session, done: dict) -> dict:
         "done": entry is not None,
         "workout_id": entry.id if entry else "",
         "actual_km": round(entry.km, 2) if entry else 0,
+        "actual_pace": activities.format_pace(entry.minutes * 60, entry.km) if entry and entry.km else "",
         "actual_min": round(entry.minutes) if entry else 0,
         "actual_hr": entry.avg_hr if entry else 0,
     }
@@ -65,9 +66,13 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     weeks = plan_file.plan.weeks
     race = plan_file.request.race_date
     current = next((w for w in weeks if w.start_date <= today <= w.start_date + timedelta(days=6)), None)
-    done_entries = [e for e in metrics.entries(plan_file.meta.id) if e.date <= today]
-    done = {(e.match.week_number, e.match.session_index): e for e in reversed(done_entries) if e.match.session_index >= 0}
-    planned = [(w, i, s) for w in weeks for i, s in enumerate(w.sessions) if s.date <= today]
+    entries = metrics.entries(plan_file.meta.id)
+    done = {(e.match.week_number, e.match.session_index): e for e in reversed(entries) if e.match.session_index >= 0}
+    # To date, plus anything already done: test data and a wrong watch clock can date a run ahead of today.
+    planned = [
+        (w, i, s) for w in weeks for i, s in enumerate(w.sessions)
+        if s.date <= today or (w.week_number, i) in done
+    ]
     completed = lambda modality: sum(
         (w.week_number, i) in done for w, i, s in planned if s.modality == modality
     )
@@ -77,11 +82,9 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
         ((w, i, s) for w in weeks for i, s in enumerate(w.sessions) if s.date >= today),
         key=lambda item: (item[2].date, item[2].modality != "run"),
     )
-    todays = [item for item in upcoming if item[2].date == today]
-    # A session still to do today comes first; a day that's all done shows as done.
-    undone = [item for item in todays if (item[0].week_number, item[1]) not in done]
-    later = [item for item in upcoming if item[2].date > today]
-    chosen = (undone or todays or later or [None])[0]
+    is_done = lambda item: (item[0].week_number, item[1]) in done
+    next_session = next((item for item in upcoming if not is_done(item)), None)
+    today_done = next((item for item in upcoming if item[2].date == today and is_done(item)), None)
     return {
         "today": today.isoformat(),
         "week_number": current.week_number if current else 0,
@@ -91,14 +94,15 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
         "finished": race < today,
         "days_to_race": (race - today).days,
         "km_planned": round(sum(s.distance_km for _, _, s in planned if s.modality == "run"), 1),
-        "km_actual": round(sum(e.km for e in done_entries if e.modality == "run"), 1),
+        "km_actual": round(sum(e.km for e in entries if e.modality == "run"), 1),
         "sessions_planned": len(planned),
         "sessions_completed": sum((w.week_number, i) in done for w, i, _ in planned),
         "strength_planned": count("strength"),
         "strength_completed": completed("strength"),
         "cross_planned": count("cross"),
         "cross_completed": completed("cross"),
-        "next": session_ref(chosen[0], chosen[1], chosen[2], done) if chosen else None,
+        "today_done": session_ref(*today_done, done) if today_done else None,
+        "next": session_ref(*next_session, done) if next_session else None,
     }
 
 

@@ -6,9 +6,10 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
+from app.config import settings
 from app.models import ActivitySummary, ChatMessage, ManualActivity, PlanFile, Proposal, ReviewFile
 
-DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
+DATA_DIR = settings.data_dir
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 

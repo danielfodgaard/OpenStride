@@ -12,6 +12,7 @@ Rules:
 - If nothing warrants a change, return recommendation "no_change" with a rationale, and empty changes and weeks. This is a valid, good outcome.
 - Otherwise return recommendation "change" and only the weeks listed in scope_weeks, complete, with every session of those weeks. Everything else stays as it is.
 - Sessions dated today or earlier have already happened: copy them exactly into the week. Do not move them.
+- Sessions dated after today are not due yet. Never count them as missed or behind.
 - Keep the race date and race session exactly as they are.
 - Fixed limits: only available days, at most runs_per_week runs per week, at most one run per day, and the same strength and cross-training limits as the request.
 - Judgments that may be overridden when the athlete asks or the situation calls for it: keep the long run on long_run_day and avoid two hard runs (tempo, intervals, long) on consecutive days.

@@ -174,8 +174,17 @@ function statusSection(status, metrics) {
   return section;
 }
 
-function nextUpSection(planFile, next, today) {
+function doneText(session) {
+  const actual = [session.actual_km ? `${session.actual_km} km` : "", `${session.actual_min} min`, session.actual_pace, session.actual_hr ? `${session.actual_hr} bpm` : ""];
+  return `Done: ${actual.filter(Boolean).join(" · ")}`;
+}
+
+function nextUpSection(planFile, next, today, todayDone) {
   const section = el("section");
+  if (todayDone) {
+    const href = `${planPath(planFile.meta.id)}/sessions/${todayDone.week_number}/${todayDone.index}`;
+    section.append(el("h2", "Today"), line(link(todayDone.title, href)), el("p", doneText(todayDone)));
+  }
   section.append(el("h2", "Next up"));
   if (!next) {
     section.append(el("p", "No sessions left on this plan."));
@@ -185,10 +194,6 @@ function nextUpSection(planFile, next, today) {
   const when = next.date === today ? "Today" : dateText(next.date);
   const planned = [next.type, amountText(next), next.target_pace].filter(Boolean).join(" · ");
   section.append(line(link(`${when}: ${next.title}`, href)), el("p", planned));
-  if (next.done) {
-    const actual = [next.actual_km ? `${next.actual_km} km` : "", `${next.actual_min} min`, next.actual_hr ? `${next.actual_hr} bpm` : ""];
-    section.append(el("p", `Done: ${actual.filter(Boolean).join(" · ")}`));
-  }
   return section;
 }
 
@@ -269,7 +274,7 @@ export async function planOverview(id) {
     if (!isActive) nodes.push(el("p", "Archived"));
     nodes.push(
       statusSection(status, metrics),
-      nextUpSection(planFile, status.next, status.today),
+      nextUpSection(planFile, status.next, status.today, status.today_done),
       ...drawProgressCharts(metrics, planFile.request.race_date),
       weeksLink,
       chatSection(planFile, messages, proposals, bases, !isActive),

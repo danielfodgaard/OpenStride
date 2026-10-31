@@ -6,7 +6,9 @@ SYSTEM_PROMPT = """You are an experienced running coach summarising how an athle
 
 Base the assessment on the planned-vs-actual table, the runs, their reviews and the athlete's notes. Be concrete and honest, with real numbers. Weigh recent trends more than single sessions.
 
-observations are short points on what has happened. suggestions are short and for the athlete to consider; they are never applied automatically."""
+observations are short points on what has happened. suggestions are short and for the athlete to consider; they are never applied automatically.
+
+Sessions dated after today are not due yet. Never count them as missed or behind."""
 
 
 def build_user_prompt(plan_file: PlanFile, table: dict, activities: list[dict], metrics: str, today) -> str:

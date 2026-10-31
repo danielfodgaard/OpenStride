@@ -37,7 +37,7 @@ function reportText(results) {
   const matched = imported.filter((r) => r.activity.match.session_index >= 0).length;
   const count = imported.length;
   const summary = `${count} ${count === 1 ? "run" : "runs"} imported, ${matched} matched, ${count - matched} unplanned`;
-  return [summary, ...results.map((r) => r.message).filter(Boolean)].join(". ");
+  return [summary, ...results.flatMap((r) => [r.message, ...(r.warnings ?? [])]).filter(Boolean)].join(". ");
 }
 
 function exerciseRow(list, step = {}) {

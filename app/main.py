@@ -6,13 +6,13 @@ from datetime import date as Date
 from pathlib import Path
 from typing import Literal
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import activities, adapt, chat, clock, lifecycle, logbook, metrics, progress, review, storage
+from app.garmin.router import router as garmin_router
 from app.generator import GenerationError, generate_plan
 from app.models import (
     ActivitySummary,
@@ -27,8 +27,6 @@ from app.models import (
     ReviewFile,
     Step,
 )
-
-load_dotenv()
 
 DEMO_DATA = Path(__file__).parent.parent / "examples" / "demo" / "data"
 DEMO_TODAY = "2026-11-25"
@@ -306,5 +304,8 @@ def get_usage(plan_id: str) -> dict:
     return progress.usage_totals(plan_id)
 
 
+app.include_router(garmin_router)
+
 # Mounted last so it never shadows API routes; html=True serves index.html at /.
+# It also puts /manifest.webmanifest, /sw.js and /icons/* at the root scope the service worker needs.
 app.mount("/", StaticFiles(directory=Path(__file__).parent.parent / "static", html=True))

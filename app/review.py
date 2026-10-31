@@ -2,7 +2,7 @@
 import os
 from datetime import timedelta
 
-from app import generator, lifecycle, metrics, storage
+from app import clock, generator, lifecycle, metrics, storage
 from app.models import ActivitySummary, ManualActivity, ReviewFile, ReviewMeta, RunReview, Usage
 from app.prompts.review import SYSTEM_PROMPT, build_user_prompt
 
@@ -28,7 +28,7 @@ def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
         client or generator.make_client(),
         model,
         SYSTEM_PROMPT,
-        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file) if plan_file else ""),
+        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file) if plan_file else "", clock.today()),
         RunReview,
         usage,
         max_tokens=MAX_TOKENS,

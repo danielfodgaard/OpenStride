@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 import fitdecode
 import gpxpy
 
-from app import generator, lifecycle, metrics, review, storage
+from app import clock, generator, lifecycle, metrics, review, storage
 from app.models import ActivitySummary, Lap, Match, PlanFile
 from app.series import build_series
 
@@ -21,6 +21,7 @@ EARLIEST_YEAR = 2000
 MAX_RECORD_GAP = timedelta(days=2)
 MAX_STRIDES_PER_MIN = 120  # above this a device is already reporting steps per minute
 DUPLICATE_WINDOW = timedelta(seconds=60)  # the same run exported as .fit and .gpx starts a little apart
+FUTURE_WARNING = "This run is dated after today. Check the watch clock or time zone."
 STRAVA_TYPES = {"1": "cycling", "4": "hiking", "9": "running", "10": "walking", "16": "swimming"}
 
 
@@ -423,6 +424,10 @@ def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
     return Match(planned_date=activity.date.isoformat(), week_number=found[0], session_index=found[1])
 
 
+def date_warnings(activity: ActivitySummary) -> list[str]:
+    return [FUTURE_WARNING] if activity.start_time > clock.now() else []
+
+
 def find_duplicate(activity: ActivitySummary) -> ActivitySummary | None:
     """Per plan, so a run can be imported again under a new plan."""
     for other in storage.list_activities(activity.plan_id):
@@ -460,7 +465,12 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
         store_series(activity, parsed)
         if plan_file:
             metrics.refresh(plan_file)
-        result = {"file": name, "status": "imported", "activity": activity.model_dump(mode="json")}
+        result = {
+            "file": name,
+            "status": "imported",
+            "activity": activity.model_dump(mode="json"),
+            "warnings": date_warnings(activity),
+        }
         try:
             review.review_activity(activity)
         except generator.GenerationError as error:
@@ -489,7 +499,10 @@ def rematch(plan_file: PlanFile) -> None:
 
 def with_review(activity: ActivitySummary) -> dict:
     review_file = storage.load_review(activity.id)
-    return activity.model_dump(mode="json") | {"review": review_file.model_dump(mode="json") if review_file else None}
+    return activity.model_dump(mode="json") | {
+        "review": review_file.model_dump(mode="json") if review_file else None,
+        "warnings": date_warnings(activity),
+    }
 
 
 def plan_for_edit(plan_id: str) -> PlanFile | None:
