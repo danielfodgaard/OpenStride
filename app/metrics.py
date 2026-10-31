@@ -85,10 +85,9 @@ def fitness_series(loads: list[float], seed: float) -> list[tuple[float, float, 
 
 
 def build_days(done: list[Entry], kinds: dict, plan_file: PlanFile, today: date) -> list[DayLoad]:
-    # Runs imported from before the plan still count: real history beats the seed. Fitness
-    # forgets within months, and every day here goes into every prompt, so older ones don't.
-    plan_start = plan_file.plan.weeks[0].start_date
-    first = max(min([plan_start, *(e.date for e in done)]), plan_start - timedelta(days=HISTORY_DAYS))
+    # From plan start, as the seed stands for all training before it. Starting earlier from a
+    # few old files would decay the seed across empty days and report false low fitness.
+    first = plan_file.plan.weeks[0].start_date
     span = [first + timedelta(days=i) for i in range((today - first).days + 1)]
     hr_max, hr_rest = heart_rates(plan_file.request)
     loads = {day: 0.0 for day in span}
@@ -172,7 +171,8 @@ def compute(plan_file: PlanFile, today: date | None = None) -> Metrics:
     done = entries(plan_file.meta.id)
     kinds = {entry.id: session_type(entry, plan_file) for entry in done}
     days = build_days(done, kinds, plan_file, today)
-    since = days[0].date if days else today  # a 2010 file would squash the trend charts
+    # Recent runs from before the plan are real trend data; a 2010 file would squash the chart.
+    since = plan_file.plan.weeks[0].start_date - timedelta(days=HISTORY_DAYS)
     runs = [e for e in done if e.modality == "run" and e.km > 0 and e.minutes > 0 and e.date >= since]
     # shortcut: unplanned runs count as easy so imported history has a trend, though some were surely hard; upgrade with a run classifier. TODO(v3.1)
     easy = [trend_point(e, kinds[e.id]) for e in runs if kinds[e.id] in EASY_TYPES]

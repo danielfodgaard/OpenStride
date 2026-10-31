@@ -97,13 +97,26 @@ def test_days_run_from_plan_start_to_today(plan):
     assert len(result.days) == 10 and result.as_of == TODAY
 
 
-def test_history_before_the_plan_extends_the_days(plan):
+def old_run(day):
     run = activities.parse_file("a.gpx", (SAMPLES / "2026-11-05_easy.gpx").read_bytes(), "plan")
-    run = run.model_copy(update={"id": "old", "date": date(2026, 10, 1), "start_time": run.start_time.replace(month=10, day=1)})
-    storage.save_activity(run)
+    start = run.start_time.replace(year=day.year, month=day.month, day=day.day)
+    return run.model_copy(update={"id": f"old-{day}", "date": day, "start_time": start})
+
+
+def test_runs_before_the_plan_do_not_decay_the_fitness_seed(plan):
+    storage.save_activity(old_run(date(2026, 6, 1)))
+    storage.save_activity(old_run(date(2017, 6, 12)))
     result = metrics.compute(plan, TODAY)
-    assert result.days[0].date == date(2026, 10, 1) and result.days[0].km == pytest.approx(run.distance_km, abs=0.01)
-    assert result.easy_runs[0].type == "unplanned"
+    assert result.days[0].date == date(2026, 11, 2) and len(result.days) == 10
+    assert result.days[0].ctl == pytest.approx(44 + (result.days[0].load - 44) / 42, abs=0.1)
+    assert result.current.ctl == pytest.approx(44 * (41 / 42) ** 10, abs=0.1)  # ten idle days, not 160
+
+
+def test_recent_runs_before_the_plan_are_in_the_trends_and_old_ones_are_not(plan):
+    storage.save_activity(old_run(date(2026, 10, 1)))
+    storage.save_activity(old_run(date(2017, 6, 12)))
+    result = metrics.compute(plan, TODAY)
+    assert [(p.date, p.type) for p in result.easy_runs] == [(date(2026, 10, 1), "unplanned")]
 
 
 def test_before_the_plan_starts_there_are_no_days_but_no_crash(plan):
@@ -176,18 +189,10 @@ def test_strength_and_cross_counts_for_the_chart_notes(tmp_path, monkeypatch):
     assert (week.completed_strength, week.planned_strength) == (0, 2)
 
 
-def test_old_history_does_not_grow_the_table_without_limit(plan):
-    run = activities.parse_file("a.gpx", (SAMPLES / "2026-11-05_easy.gpx").read_bytes(), "plan")
-    run = run.model_copy(update={"id": "old", "date": date(2017, 5, 1), "start_time": run.start_time.replace(year=2017, month=5, day=1)})
-    storage.save_activity(run)
-    result = metrics.compute(plan, TODAY)
-    assert len(result.days) == metrics.HISTORY_DAYS + 10
-
-
 def test_trends_are_in_date_order_with_manual_runs(plan):
     add_run(plan, "2026-11-05_easy.gpx")
     storage.save_manual(ManualActivity(
-        id="manual", plan_id="plan", date=date(2026, 11, 1), modality="run", title="Jog", duration_min=30,
+        id="manual", plan_id="plan", date=date(2026, 11, 2), modality="run", title="Jog", duration_min=30,
         distance_km=5, rpe=0, note="", details=[], match=Match(),
     ))
     points = metrics.compute(plan, TODAY).easy_runs
@@ -198,11 +203,3 @@ def test_equal_heart_rates_cannot_divide_by_zero(plan):
     request = plan.request.model_copy(update={"hr_max": 0, "hr_rest": 150, "age": 120})
     hr_max, hr_rest = metrics.heart_rates(request)
     assert hr_max > hr_rest
-
-
-def test_very_old_runs_stay_out_of_the_trends(plan):
-    run = activities.parse_file("a.gpx", (SAMPLES / "2026-11-05_easy.gpx").read_bytes(), "plan")
-    run = run.model_copy(update={"id": "old", "date": date(2010, 8, 5), "start_time": run.start_time.replace(year=2010, month=8, day=5)})
-    storage.save_activity(run)
-    add_run(plan, "2026-11-05_easy.gpx")
-    assert [p.date for p in metrics.compute(plan, TODAY).easy_runs] == [date(2026, 11, 5)]

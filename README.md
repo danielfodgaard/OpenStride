@@ -46,10 +46,10 @@ Offline you can read the thread, accept or reject the proposal, view and restore
 `.fit` and `.gpx` activities are summarised in code and matched to the planned session on the same date: running to runs, other sports to cross-training, and a watch's gym file to strength. The summary, not the raw file, is what reaches the LLM. GPX counts as running unless `<type>` says otherwise, including Strava's numeric types.
 
 Limits to know:
-- A `.fit` carries the runner's time zone; a `.gpx` uses the server's, so a run while travelling can land on the wrong day. The match can be changed by hand.
+- File times are UTC. A `.fit` that records its local time uses that; otherwise, as with `.gpx`, the server's time zone applies, so a run while travelling can land on the wrong day. The match can be changed by hand.
 - The same run uploaded as both `.fit` and `.gpx` counts once if the start times are within 60 seconds.
 - A multisport file counts as one activity of its longest sport.
-- Runs dated before the plan starts are shown under "Runs outside the plan dates" and count in the charts as easy runs.
+- Runs dated before the plan starts are shown under "Runs outside the plan dates". Those from the 180 days before it appear in the trend charts as unplanned easy runs. Fitness and fatigue start at plan start, from the seed below, so older runs don't affect them.
 
 ## Metrics
 
