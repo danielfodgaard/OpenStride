@@ -529,7 +529,13 @@ function proposalView(proposal, planFile, bases, readOnly = false) {
   if (recommendation === "change") {
     const list = el("ul");
     for (const change of changes) list.append(el("li", `Week ${change.week_number} ${change.day}: ${change.summary}`));
-    box.append(list, diffTable(bases[proposal.based_on_version] ?? planFile, proposal));
+    box.append(list);
+    if (proposal.warnings.length) {
+      const warnings = el("ul");
+      for (const warning of proposal.warnings) warnings.append(el("li", warning));
+      box.append(el("p", "Worth knowing before you accept:"), warnings);
+    }
+    box.append(diffTable(bases[proposal.based_on_version] ?? planFile, proposal));
     if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
     if (proposal.acceptable && proposal.status === "pending" && !readOnly) {
       const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
@@ -582,7 +588,8 @@ function adaptSection(planFile, proposals, bases) {
   const suggestLine = el("p");
   suggestLine.append(suggest);
   section.append(el("h2", "Adapt plan"), scopeLine, contextLine, suggestLine, status);
-  if (proposals.length) section.append(proposalView(proposals[0], planFile, bases));
+  const latest = proposals.find((p) => p.origin !== "chat");
+  if (latest) section.append(proposalView(latest, planFile, bases));
   return section;
 }
 

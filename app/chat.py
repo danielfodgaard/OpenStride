@@ -35,7 +35,7 @@ def run_proposal(plan_id: str, reply: CoachReply, thread: list[ChatMessage], cli
     said = [m.text for m in thread if m.role == "user"][-USER_MESSAGES_FOR_ADAPTATION:]
     context = reply.change_request + "\n\nFrom chat:\n" + "\n".join(said)
     try:
-        proposal = adapt.create_proposal(plan_id, reply.scope, context, client, today)
+        proposal = adapt.create_proposal(plan_id, reply.scope, context, client, today, origin="chat")
     except (generator.GenerationError, lifecycle.Conflict) as error:
         return f"I couldn't prepare that change: {error}", ""
     if proposal.result.recommendation == "no_change":

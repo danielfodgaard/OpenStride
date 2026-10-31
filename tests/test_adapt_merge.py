@@ -246,3 +246,84 @@ def test_versions_and_proposals_routes():
     assert versions[1]["history"][0]["rationale"] == "Calf niggle, so ease off."
     assert client.get("/api/plans/plan/versions/1").json()["meta"]["version"] == 1
     assert client.get("/api/plans/plan/versions/7").status_code == 404
+
+
+def swap_sessions(week, first, second):
+    for session in week["sessions"]:
+        if session["day"] == first:
+            session["day"] = "pending"
+        elif session["day"] == second:
+            session["day"] = first
+    for session in week["sessions"]:
+        if session["day"] == "pending":
+            session["day"] = second
+
+
+def test_a_swap_goes_through_with_the_trade_off_shown(active):
+    """Week 5: intervals move to the Saturday before the long run. Worth a warning, not a block."""
+    full = change_result(active, list(range(2, 11)), lambda weeks: swap_sessions(weeks[3], "Thu", "Sat"))
+    full["changes"] = [
+        {"week_number": 5, "day": "Thu", "summary": "Easy run moved here"},
+        {"week_number": 5, "day": "Sat", "summary": "Intervals moved here"},
+    ]
+    proposal, client = propose(active, full, scope="rest_of_plan")
+
+    assert len(client.prompts) == 1 and proposal.acceptable
+    assert proposal.warnings == ["Hard runs on consecutive days: Week 5 Sat and Week 5 Sun"]
+    merged = adapt.accept(proposal.proposal_id, TODAY)
+    week = merged.plan.weeks[4]
+    assert next(s for s in week.sessions if s.day == "Sat").type == "intervals"
+    assert next(s for s in week.sessions if s.day == "Thu").type == "easy"
+
+
+def test_a_one_off_long_run_move_is_a_warning(active):
+    def edit(weeks):
+        swap_sessions(weeks[0], "Sat", "Sun")
+
+    result = change_result(active, [2], edit)
+    result["changes"] = [{"week_number": 2, "day": "Sat", "summary": "Long run a day earlier for a wedding"}]
+    proposal, _ = propose(active, result)
+    assert proposal.acceptable
+    assert any("long run moves to Sat, away from your usual Sun" in w for w in proposal.warnings)
+
+
+def test_a_dropped_session_needs_its_own_change_entry(active):
+    def edit(weeks):
+        weeks[0]["sessions"] = [s for s in weeks[0]["sessions"] if s["day"] != "Sat"]
+
+    bad = change_result(active, [2], edit)
+    bad["changes"][0]["day"] = "Sun"  # no entry on an easy day
+    proposal, client = propose(active, bad, bad)
+    assert not proposal.acceptable and "without its own change entry" in proposal.result.rationale
+    assert "Fix these problems" in client.prompts[1]
+
+
+def test_a_dropped_session_with_a_reason_is_allowed(active):
+    def edit(weeks):
+        weeks[0]["sessions"] = [s for s in weeks[0]["sessions"] if s["day"] != "Sat"]
+
+    good = change_result(active, [2], edit)
+    good["changes"] = [{"week_number": 2, "day": "Sat", "summary": "Rest instead: calf pain"}]
+    assert propose(active, good)[0].acceptable
+
+
+def test_a_downgraded_session_needs_its_own_change_entry(active):
+    def edit(weeks):
+        next(s for s in weeks[0]["sessions"] if s["day"] == "Sun").update(type="easy", steps=[])
+
+    bad = change_result(active, [2], edit)
+    assert "a long session (Sun)" in propose(active, bad, bad)[0].result.rationale
+
+
+def test_warnings_do_not_block_accepting(active):
+    result = change_result(active, [2], lambda weeks: swap_sessions(weeks[0], "Sat", "Sun"))
+    result["changes"] = [{"week_number": 2, "day": "Sat", "summary": "x"}]
+    proposal, _ = propose(active, result)
+    assert adapt.accept(proposal.proposal_id, TODAY).meta.version == 2
+
+
+def test_a_warning_already_on_the_plan_is_not_repeated(active):
+    active.plan.weeks[4].planned_km = 200  # a volume jump the plan already has
+    storage.save_plan(active)
+    proposal, _ = propose(active, change_result(active, [2], soften_thursday))
+    assert proposal.warnings == []

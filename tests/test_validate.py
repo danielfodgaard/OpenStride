@@ -75,8 +75,15 @@ def test_strength_beyond_the_request_is_too_many(plan):
 def test_strength_is_exempt_from_the_hard_day_rule(plan):
     plan.weeks[4].sessions.append(strength_session("Wed"))
     plan.weeks[4].sessions.append(strength_session("Sat"))
-    errors = errors_for(plan, strength_sessions_per_week=2, available_days=["Tue", "Wed", "Thu", "Sat", "Sun"])
-    assert errors == []
+    assert soft_warnings(plan) == []
+
+
+def test_long_run_rule_can_be_lifted_for_proposals(plan):
+    find(plan, 0, "Sun").day = "Sat"
+    find(plan, 0, "Sat").day = "Sun"
+    assert any("long run" in e for e in errors_for(plan))
+    request = SavedRequest.model_validate(SAMPLE["request"])
+    assert validate_plan(plan, request, N_WEEKS, long_run_rule=False) == []
 
 
 def test_modality_must_match_the_type(plan):
@@ -89,14 +96,16 @@ def test_long_run_on_wrong_day(plan):
     assert any("long run" in e for e in errors_for(plan, available_days=["Tue", "Thu", "Fri", "Sat", "Sun"]))
 
 
-def test_consecutive_hard_sessions(plan):
+def test_consecutive_hard_sessions_are_a_warning_not_an_error(plan):
     find(plan, 4, "Thu").day = "Wed"
-    assert any("consecutive" in e for e in errors_for(plan, available_days=["Tue", "Wed", "Sat", "Sun"]))
+    assert errors_for(plan, available_days=["Tue", "Wed", "Thu", "Sat", "Sun"]) == []
+    assert any("consecutive days: Week 5 Tue and Week 5 Wed" in w for w in soft_warnings(plan))
 
 
 def test_consecutive_hard_sessions_across_weeks(plan):
     find(plan, 1, "Tue").day = "Mon"
-    assert any("consecutive" in e for e in errors_for(plan, available_days=["Mon", "Tue", "Thu", "Sat", "Sun"]))
+    assert errors_for(plan, available_days=["Mon", "Tue", "Thu", "Sat", "Sun"]) == []
+    assert any("Week 1 Sun and Week 2 Mon" in w for w in soft_warnings(plan))
 
 
 def test_missing_race(plan):

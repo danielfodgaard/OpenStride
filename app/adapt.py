@@ -13,7 +13,7 @@ from app.models import (
     Usage,
 )
 from app.prompts.adapt import SYSTEM_PROMPT, build_user_prompt
-from app.validate import scope_errors, validate_merge
+from app.validate import merge_warnings, scope_errors, validate_merge
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 
@@ -46,10 +46,10 @@ def check(plan_file: PlanFile, result: AdaptationResult, scope: list[int], today
     errors = scope_errors(result, scope)
     if errors or result.recommendation == "no_change":
         return errors
-    return validate_merge(plan_file, merge(plan_file, result.weeks), scope, today)
+    return validate_merge(plan_file, merge(plan_file, result.weeks), result.changes, scope, today)
 
 
-def create_proposal(plan_id: str, scope: str, user_context: str, client=None, today=None) -> Proposal:
+def create_proposal(plan_id: str, scope: str, user_context: str, client=None, today=None, origin: str = "adapt") -> Proposal:
     plan_file = lifecycle.require_active(plan_id)
     today = today or clock.today()
     weeks = compute_scope_weeks(plan_file, scope, today)
@@ -69,6 +69,10 @@ def create_proposal(plan_id: str, scope: str, user_context: str, client=None, to
     if errors:
         result.rationale += "\n\nThis proposal can't be accepted: " + " ".join(errors)
 
+    trade_offs = []
+    if not errors and result.recommendation == "change":
+        trade_offs = merge_warnings(plan_file, merge(plan_file, result.weeks))
+
     now = datetime.now(timezone.utc)
     proposal = Proposal(
         proposal_id=storage.new_proposal_id(plan_id, f"{now:%Y-%m-%dT%H-%M-%S}_{scope}"),
@@ -81,6 +85,8 @@ def create_proposal(plan_id: str, scope: str, user_context: str, client=None, to
         acceptable=not errors,
         result=result,
         meta=ReviewMeta(model=model, created_at=now.isoformat(timespec="seconds"), usage=usage),
+        origin=origin,
+        warnings=trade_offs,
     )
     storage.save_proposal(proposal)
     return proposal

@@ -271,6 +271,8 @@ class Proposal(BaseModel):
     acceptable: bool
     result: AdaptationResult
     meta: ReviewMeta
+    origin: Literal["chat", "adapt"] = "adapt"  # older files count as adapt
+    warnings: list[str] = []  # trade-offs to show above the diff; they never block
 
 
 class ProgressSummary(BaseModel):

@@ -13,6 +13,12 @@ OpenStride is a thin app on top of the LLM. The LLM makes every coaching judgmen
 
 The LLM gets as much context as is relevant: the full request, the plan, every run summary, review, logged session and note, and the same metrics table the charts draw from. Nothing changes the plan unless you press Accept on a proposal; the chat can only ask for one.
 
+## What blocks a plan and what doesn't
+
+Errors are facts and limits you set yourself. They go back to Claude to fix: sessions on available days, session counts, the proposal's scope weeks, past sessions untouched, the race fixed, and in a proposal, every removed or downgraded session having its own change entry with a reason.
+
+Warnings are coaching judgments. They never block anything and appear above a proposal's diff so you see the trade-off before accepting: hard runs on consecutive days and volume jumps, always. The long run on `long_run_day` is an error when a plan is generated, because you asked for it in the form, and only a warning in a proposal, so a one-off move is allowed.
+
 ## Setup
 
     python3 -m venv .venv

@@ -40,7 +40,7 @@ def send(text, fake):
 
 def test_an_answer_adds_one_coach_message_and_no_proposal(monkeypatch):
     calls = []
-    monkeypatch.setattr(adapt, "create_proposal", lambda *a: calls.append(a))
+    monkeypatch.setattr(adapt, "create_proposal", lambda *a, **k: calls.append(a))
     result = send("Is my easy pace too fast?", replies(ANSWER))
 
     thread = storage.load_chat("plan")
@@ -54,9 +54,9 @@ def test_propose_change_calls_the_adaptation_once(monkeypatch, plan):
     calls = []
     real = adapt.create_proposal
 
-    def spy(plan_id, scope, context, client, today):
+    def spy(plan_id, scope, context, client, today, origin):
         calls.append((plan_id, scope, context))
-        return real(plan_id, scope, context, FakeClient(fake_message(change_result(plan, [2], soften_thursday))), today)
+        return real(plan_id, scope, context, FakeClient(fake_message(change_result(plan, [2], soften_thursday))), today, origin)
 
     monkeypatch.setattr(adapt, "create_proposal", spy)
     result = send("My calf hurts, can we ease off?", replies(PROPOSE))
@@ -87,6 +87,22 @@ def test_no_change_from_the_adaptation_is_said_in_chat(plan):
     assert coach.action == "none" and coach.proposal_id == ""
     assert "One run is not a trend." in coach.text
     assert coach.text.startswith("Let's ease off Thursday.")
+
+
+def test_chat_proposals_are_marked_and_a_no_change_is_still_saved_and_billed(plan):
+    send("Change my plan", replies(PROPOSE, NO_CHANGE))
+    saved = storage.list_proposals("plan")
+    assert [p.origin for p in saved] == ["chat"] and saved[0].result.recommendation == "no_change"
+    assert progress.usage_totals("plan")["input_tokens"] == 200
+
+
+def test_form_proposals_are_adapt_and_old_files_default_to_it(plan):
+    proposal = adapt.create_proposal("plan", "this_week", "", replies(NO_CHANGE), TODAY)
+    assert proposal.origin == "adapt"
+    data = proposal.model_dump(mode="json")
+    del data["origin"], data["warnings"]
+    old = type(proposal).model_validate(data)
+    assert old.origin == "adapt" and old.warnings == []
 
 
 def test_failed_adaptation_keeps_the_reply(plan):
