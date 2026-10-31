@@ -147,7 +147,7 @@ Plan generation was measured on Haiku. On the default Sonnet 5.5, the same token
 
 | Usage | OpenStride | Runna monthly | Runna annual (per month) |
 |---|---|---|---|
-| Light: plan + every run reviewed + a weekly adaptation check | **~$0.44** | $19.99 | $9.99 |
+| Light: plan + every run reviewed + a weekly adaptation check | **~$0.1** | $19.99 | $9.99 |
 | Heavy: the above + 4 progress summaries + 20 chat messages + 2 proposals | **~$3.50** | $19.99 | $9.99 |
 | **Saving** | | **82–98%** | **65–96%** |
 
