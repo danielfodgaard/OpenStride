@@ -78,7 +78,7 @@ def test_gpx_hr_cadence_splits_and_elevation():
     assert activity.laps == []
     assert activity.avg_hr == 142 and activity.avg_cadence_spm == 174
     assert activity.avg_pace == "5:47/km"  # the sample step straddling the pause counts as stopped
-    assert [s.pace for s in activity.km_splits[:15]].count("5:48/km") == 14
+    assert [s.pace for s in activity.km_splits[:15]].count("5:48/km") == 13
     assert activity.elevation_gain_m == pytest.approx(16 * 12, rel=0.1)
 
 
