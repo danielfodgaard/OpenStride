@@ -410,6 +410,47 @@ function adaptSection(planFile, proposals) {
   return section;
 }
 
+function summaryView({ summary }) {
+  const box = el("div");
+  box.append(el("h3", summary.headline), el("p", `Status: ${summary.on_track}`));
+  const observations = el("ul");
+  for (const text of summary.observations) observations.append(el("li", text));
+  const suggestions = el("ul");
+  for (const text of summary.suggestions) suggestions.append(el("li", text));
+  box.append(observations);
+  if (summary.suggestions.length) box.append(el("p", "Suggestions (never applied automatically):"), suggestions);
+  return box;
+}
+
+function progressSection(planFile, progress) {
+  const section = el("section");
+  const status = statusLine();
+  const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "As planned", "Partly", "Missed targets", "Unplanned"];
+  const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed,
+    r.as_planned, r.partly, r.missed_targets, r.unplanned];
+  const summary = el("div");
+  if (progress.latest_summary) summary.append(summaryView(progress.latest_summary));
+  const ask = button("Progress summary", status, async () => {
+    const result = await api(`/api/plans/${encodeURIComponent(planFile.meta.id)}/progress/summary`, { method: "POST" });
+    summary.replaceChildren(summaryView(result));
+  }, "Summarising…");
+  const askLine = el("p");
+  askLine.append(ask);
+  section.append(
+    el("h2", "Progress"),
+    table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]),
+    askLine,
+    status,
+    summary,
+  );
+  return section;
+}
+
+function usageFooter(usage) {
+  const cost = usage.unpriced_models.length ? `$${usage.cost_usd} plus ${usage.unpriced_models.join(", ")}` : `$${usage.cost_usd}`;
+  return el("p", `Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`);
+}
+
 async function versionsView(id) {
   const token = routeToken;
   const encoded = encodeURIComponent(id);
@@ -451,7 +492,10 @@ async function planView(id) {
   const planFile = await api(`/api/plans/${encoded}`);
   const isDraft = planFile.meta.status === "draft";
   const activities = isDraft ? [] : await api(`/api/activities?plan_id=${encoded}`);
-  const proposals = planFile.meta.status === "active" ? await api(`/api/plans/${encoded}/proposals`) : [];
+  const isActive = planFile.meta.status === "active";
+  const proposals = isActive ? await api(`/api/plans/${encoded}/proposals`) : [];
+  const progress = isActive ? await api(`/api/plans/${encoded}/progress`) : null;
+  const usage = await api(`/api/plans/${encoded}/usage`);
   if (token !== routeToken) return;
   const status = statusLine();
   const { status: planStatus } = planFile.meta;
@@ -465,7 +509,8 @@ async function planView(id) {
     nodes.push(actions);
   }
   nodes.push(status, planDiv());
-  if (planStatus === "active") nodes.push(importSection(statusLine()), adaptSection(planFile, proposals));
+  if (isActive) nodes.push(importSection(statusLine()), adaptSection(planFile, proposals), progressSection(planFile, progress));
+  nodes.push(usageFooter(usage));
   main.replaceChildren(...nodes);
   fullRender(planFile, status, {
     actuals: !isDraft,

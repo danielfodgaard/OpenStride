@@ -234,3 +234,16 @@ class Proposal(BaseModel):
     acceptable: bool
     result: AdaptationResult
     meta: ReviewMeta
+
+
+class ProgressSummary(BaseModel):
+    headline: str
+    on_track: Literal["ahead", "on_track", "at_risk", "off_track"]
+    observations: list[str]
+    suggestions: list[str]
+
+
+class ProgressFile(BaseModel):
+    plan_id: str
+    summary: ProgressSummary
+    meta: ReviewMeta

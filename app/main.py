@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -9,15 +11,26 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, lifecycle, review, storage
+from app import activities, adapt, lifecycle, progress, review, storage
 from app.generator import GenerationError, generate_plan
-from app.models import ActivitySummary, PlanFile, PlanRequest, Proposal, ReviewFile
+from app.models import ActivitySummary, PlanFile, PlanRequest, ProgressFile, Proposal, ReviewFile
 
 load_dotenv()
+
+DEMO_DATA = Path(__file__).parent.parent / "examples" / "demo" / "data"
+DEMO_TODAY = "2026-11-11"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.environ.get("OPENSTRIDE_DEMO"):
+        # Work on a throwaway copy, with the clock pinned to where the demo story stands.
+        with tempfile.TemporaryDirectory() as folder:
+            storage.DATA_DIR = Path(folder) / "data"
+            shutil.copytree(DEMO_DATA, storage.DATA_DIR)
+            os.environ["OPENSTRIDE_TODAY"] = DEMO_TODAY
+            yield
+        return
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.")
     yield
@@ -165,6 +178,22 @@ def get_version(plan_id: str, version: int) -> PlanFile:
 @app.post("/api/plans/{plan_id}/restore/{version}")
 def restore_version(plan_id: str, version: int) -> PlanFile:
     return adapt.restore(plan_id, version)
+
+
+@app.get("/api/plans/{plan_id}/progress")
+def get_progress(plan_id: str) -> dict:
+    table = progress.planned_vs_actual(lifecycle.require_active(plan_id))
+    return table | {"latest_summary": progress.latest_summary(plan_id)}
+
+
+@app.post("/api/plans/{plan_id}/progress/summary")
+def create_progress_summary(plan_id: str) -> ProgressFile:
+    return progress.summarise(plan_id)
+
+
+@app.get("/api/plans/{plan_id}/usage")
+def get_usage(plan_id: str) -> dict:
+    return progress.usage_totals(plan_id)
 
 
 # Mounted last so it never shadows API routes; html=True serves index.html at /.
