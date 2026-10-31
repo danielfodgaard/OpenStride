@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from app import activities, adapt, chat, clock, lifecycle, logbook, metrics, progress, review, storage
 from app.garmin.router import router as garmin_router
-from app.generator import GenerationError, generate_plan
+from app.generator import APP_VERSION, GenerationError, generate_plan
 from app.models import (
     ActivitySummary,
     ChatMessage,
@@ -111,6 +111,11 @@ class ProposalRequest(BaseModel):
 
 
 # Plain defs: FastAPI runs them in a thread pool, so long API calls don't block the server.
+@app.get("/api/health")
+def health() -> dict:
+    return {"status": "ok", "version": APP_VERSION, "data_dir_writable": storage.data_dir_writable()}
+
+
 @app.post("/api/plan")
 def create_plan(request: PlanRequest) -> PlanFile:
     return generate_plan(request)

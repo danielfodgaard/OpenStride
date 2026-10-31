@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -32,6 +33,15 @@ def write_json(path: Path, text: str) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(text)
     os.replace(temporary, path)
+
+
+def data_dir_writable() -> bool:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=DATA_DIR):
+            return True
+    except OSError:
+        return False
 
 
 def plan_dir(plan_id: str) -> Path:
