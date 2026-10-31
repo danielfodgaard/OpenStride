@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 import fitdecode
 import gpxpy
 
-from app import clock, generator, lifecycle, metrics, review, storage
+from app import clock, lifecycle, metrics, review, storage
 from app.models import ActivitySummary, Lap, Match, PlanFile
 from app.series import build_series
 
@@ -436,48 +436,56 @@ def find_duplicate(activity: ActivitySummary) -> ActivitySummary | None:
     return None
 
 
+def import_one(name: str, content: bytes, plan_file: PlanFile | None, user_note: str, rpe: int, external_id: str = "") -> dict:
+    plan_id = plan_file.meta.id if plan_file else ""
+    try:
+        parsed = parse_bytes(name, content)
+        activity = summarise(parsed, name, plan_id, user_note, rpe)
+    except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
+        return {"file": name, "status": "error", "message": f"Could not read {name}: {error}"}
+    existing = find_duplicate(activity)
+    if existing and storage.find_raw(existing.id):
+        return {"file": name, "status": "duplicate", "message": f"{name} is already imported"}
+    if existing:  # imported before v3.1: keep the workout, add what its detail page needs
+        storage.save_raw(existing.id, name, content)
+        store_series(existing, parsed)
+        return {"file": name, "status": "updated", "message": f"{name}: route and charts added"}
+    activity.id = storage.new_activity_id(activity.id)
+    activity.external_id = external_id
+    if plan_file:
+        activity.match = match_activity(activity, plan_file)
+    storage.save_activity(activity)
+    storage.save_raw(activity.id, name, content)
+    store_series(activity, parsed)
+    if plan_file:
+        metrics.refresh(plan_file)
+    result = {
+        "file": name,
+        "status": "imported",
+        "activity": activity.model_dump(mode="json"),
+        "warnings": date_warnings(activity),
+    }
+    try:
+        review.review_activity(activity)
+    except Exception as error:  # a network or plan-state failure too: the run must survive its review
+        # The run is saved either way; the review can be re-run.
+        result["message"] = f"{name}: imported, but the review failed: {error}"
+    return result
+
+
 def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> list[dict]:
     """One result per file; a bad file doesn't stop the others."""
     plan_file = lifecycle.active_plan()
-    plan_id = plan_file.meta.id if plan_file else ""
-    results = []
-    for name, content in uploads:
-        try:
-            parsed = parse_bytes(name, content)
-            activity = summarise(parsed, name, plan_id, user_note, rpe)
-        except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
-            results.append({"file": name, "status": "error", "message": f"Could not read {name}: {error}"})
-            continue
-        existing = find_duplicate(activity)
-        if existing and storage.find_raw(existing.id):
-            results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
-            continue
-        if existing:  # imported before v3.1: keep the workout, add what its detail page needs
-            storage.save_raw(existing.id, name, content)
-            store_series(existing, parsed)
-            results.append({"file": name, "status": "updated", "message": f"{name}: route and charts added"})
-            continue
-        activity.id = storage.new_activity_id(activity.id)
-        if plan_file:
-            activity.match = match_activity(activity, plan_file)
-        storage.save_activity(activity)
-        storage.save_raw(activity.id, name, content)
-        store_series(activity, parsed)
-        if plan_file:
-            metrics.refresh(plan_file)
-        result = {
-            "file": name,
-            "status": "imported",
-            "activity": activity.model_dump(mode="json"),
-            "warnings": date_warnings(activity),
-        }
-        try:
-            review.review_activity(activity)
-        except generator.GenerationError as error:
-            # The run is saved either way; the review can be re-run.
-            result["message"] = f"{name}: imported, but the review failed: {error}"
-        results.append(result)
-    return results
+    return [import_one(name, content, plan_file, user_note, rpe) for name, content in uploads]
+
+
+def import_fit_bytes(content: bytes, source: str, external_id: str) -> dict:
+    """A .fit that arrived from a service: same steps as an upload, once per `external_id`."""
+    # shortcut: the file name shows as the title of an unplanned workout; TODO(v4.1) use the service's activity name.
+    name = f"{source}_{external_id.rsplit(':', 1)[-1]}.fit"
+    if any(activity.external_id == external_id for activity in storage.list_all_activities()):
+        return {"file": name, "status": "duplicate", "message": f"{name} is already imported"}
+    return import_one(name, content, lifecycle.active_plan(), "", 0, external_id)
 
 
 def rematch(plan_file: PlanFile) -> None:

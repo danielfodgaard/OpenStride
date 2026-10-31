@@ -224,6 +224,8 @@ class ActivitySummary(BaseModel):
     modality: Modality = "run"  # strength for a watch's gym file, cross for other sports
     sport: str = "running"
     start_utc: str = ""  # as stored in the file; "" for activities imported before v3.1
+    external_id: str = ""  # "garmin:<id>" for a synced activity
+    partial: bool = False  # built from a service's summary: no route, charts or laps
 
 
 class RunReview(BaseModel):

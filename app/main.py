@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import activities, adapt, chat, clock, lifecycle, logbook, metrics, progress, review, storage
+from app.garmin import sync as garmin_sync
 from app.garmin.router import router as garmin_router
 from app.generator import GenerationError, generate_plan
 from app.models import (
@@ -44,7 +45,9 @@ async def lifespan(app: FastAPI):
         return
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.")
+    garmin_sync.start()
     yield
+    garmin_sync.stop()
 
 
 app = FastAPI(title="OpenStride", lifespan=lifespan)
