@@ -30,5 +30,9 @@ services:
   #     TS_STATE_DIR: /var/lib/tailscale
   #     TS_SERVE_CONFIG: /config/serve.json
   #   volumes:
-  #     - ./data/tailscale-state:/var/lib/tailscale
+  #     - tailscale-state:/var/lib/tailscale   # node keys: kept out of ./data and its backups
   #     - ./scripts/tailscale:/config:ro   # a directory: Tailscale requires that, not a single file
+
+# Uncomment with the tailscale service.
+# volumes:
+#   tailscale-state:
