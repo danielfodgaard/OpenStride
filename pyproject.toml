@@ -13,6 +13,8 @@ dependencies = [
     "gpxpy",
     "python-multipart",
     "filelock",
+    "garminconnect>=0.3.20,<0.4",
+    "garmin-connect-personal-api-python>=1,<2",
 ]
 
 [project.scripts]

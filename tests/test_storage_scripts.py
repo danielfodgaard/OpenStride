@@ -40,7 +40,7 @@ def calls(folder):
     return log.read_text().splitlines() if log.exists() else []
 
 
-@pytest.mark.skipif(shutil.which("tailscale", path="/usr/bin:/bin"), reason="real tailscale on the system PATH")
+@pytest.mark.skipif(bool(shutil.which("tailscale", path="/usr/bin:/bin")), reason="real tailscale on the system PATH")
 def test_not_installed(tmp_path):
     result = run("phone-access.sh", tmp_path)
     assert result.returncode == 1 and "not installed" in result.stderr

@@ -91,12 +91,12 @@ def test_a_past_import_has_no_warning(plan, monkeypatch):
     assert activities.date_warnings(add_run(plan)) == []
 
 
-def test_garmin_routes_are_stubbed(plan):
+def test_garmin_routes_with_mode_off(plan):
     with TestClient(main.app) as client:
+        assert client.get("/api/garmin/status").json()["mode"] == "off"
+        assert client.get("/api/plans/plan/sessions/1/0/workout.fit").status_code == 200  # needs no Garmin
         responses = [
-            client.get("/api/garmin/status"),
             client.post("/api/garmin/sync"),
-            client.get("/api/plans/plan/sessions/1/0/workout.fit"),
             client.post("/api/plans/plan/sessions/1/0/send-to-garmin"),
             client.post("/api/plans/plan/weeks/1/send-to-garmin"),
         ]
