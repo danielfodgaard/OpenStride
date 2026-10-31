@@ -144,7 +144,7 @@ function drawBarChart({ title, bars, headers, rows }) {
   return chartBox(title, svg, "Planned km (grey) · Actual km (blue)", headers, rows);
 }
 
-const signed = (value) => `${value < 0 ? "−" : "+"}${Math.abs(Math.round(value))}`;
+const signed = (value) => `${Math.round(value) < 0 ? "−" : "+"}${Math.abs(Math.round(value))}`;
 
 export function snapshotText({ ctl, atl, tsb, ctl_7d_change: change }) {
   const form = tsb < 0 ? `−${Math.abs(Math.round(tsb))}` : Math.round(tsb);
