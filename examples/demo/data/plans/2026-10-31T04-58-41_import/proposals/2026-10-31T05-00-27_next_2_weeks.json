@@ -1,33 +1,33 @@
 {
-  "proposal_id": "2026-10-31T04-09-48_next_2_weeks",
-  "plan_id": "2026-10-31T04-07-59_import",
+  "proposal_id": "2026-10-31T05-00-27_next_2_weeks",
+  "plan_id": "2026-10-31T04-58-41_import",
   "based_on_version": 1,
   "scope": "next_2_weeks",
   "scope_weeks": [
     4,
     5
   ],
-  "user_context": "In week 5 (starting 2026-11-30), the athlete travels on Thursday 2026-12-03 so no run is possible that day. Do not do a plain Thu/Sat swap, because intervals on Saturday would be the day before the Sunday long run. Keep Tue 12-01 tempo 2 x 3 km and Strength A as is. Replace the Wed 12-02 easy ride with an easy 8 km run at easy pace. Remove the Thu 12-03 intervals session (4 x 0.8 km) and the Thursday easy ride/run; nothing is scheduled Thursday. Move Strength B from Thursday to Sat 12-05, alongside the existing easy 8 km run. Keep the Sun 12-06 long run 16.6 km unchanged. Do not add any other hard run. Week 5 then has four runs: Tue, Wed, Sat, Sun. No other weeks change.\n\nFrom chat:\nIs my easy pace too fast?\nSwap Thursday and Saturday next week please, I'm travelling Thursday.",
+  "user_context": "In week 5 (starting 2026-11-30), the athlete travels Thursday Dec 3. Keep the Tuesday Dec 1 tempo (2 x 3 km) and the Sunday Dec 6 long run unchanged. Remove the Thursday Dec 3 intervals (4 x 0.8 km) and do not move them to Saturday or Wednesday, since that would put hard runs on consecutive days. Replace the Wednesday Dec 2 easy ride with an easy 8 km run at easy pace, and move Strength B from Thursday Dec 3 to Wednesday Dec 2. Keep the Saturday Dec 5 easy 8 km. Result: runs on Tue, Wed, Sat and Sun only (4 runs), nothing on Thursday.\n\nFrom chat:\nIs my easy pace too fast?\nSwap Thursday and Saturday next week please, I'm travelling Thursday.",
   "status": "pending",
   "acceptable": true,
   "result": {
     "recommendation": "change",
-    "rationale": "The only reason to change is the athlete's Thursday 12-03 travel in week 5, not any training trend. Week 5 now has runs on Tue, Wed, Sat and Sun, the Thursday intervals are dropped, and Strength B moves to Saturday. A plain Thu/Sat swap would put intervals the day before the Sunday long run, so that is avoided. On the easy pace question: recent easy runs at 5:42-5:52/km with HR 137-146 sit inside the 5:11-6:13 band and look genuinely easy, so no pace change is needed. Week 4 is unchanged and copied as is.",
+    "rationale": "Only week 5 needs to change: the athlete travels on Thursday Dec 3, so the Thursday intervals are dropped and not moved, since Wednesday or Saturday would put hard runs on consecutive days. The Wednesday ride becomes an easy 8 km run, Strength B moves to Wednesday, and the Tuesday tempo, Saturday easy run and Sunday long run stay as planned. That gives four runs on Tue, Wed, Sat and Sun, so I did not swap Thursday and Saturday. Easy pace is fine: recent easy runs at 5:42-5:52/km with HR around 138-142 sit inside the 5:11-6:13/km band at a conversational effort, so no slowdown is needed. Week 4 is returned unchanged, with the sessions through today copied as they were.",
     "changes": [
       {
         "week_number": 5,
-        "day": "Wed",
-        "summary": "Replaced the 45 min easy ride with an easy 8 km run to keep four runs in the week after Thursday is lost to travel."
-      },
-      {
-        "week_number": 5,
         "day": "Thu",
-        "summary": "Removed the 4 x 0.8 km intervals, since the athlete travels and a Saturday swap would put intervals the day before the long run."
+        "summary": "Removed the 4 x 0.8 km intervals because the athlete travels on Dec 3, and did not move them to avoid back-to-back hard runs."
       },
       {
         "week_number": 5,
-        "day": "Sat",
-        "summary": "Moved Strength B from Thursday to Saturday alongside the easy 8 km run, because Thursday is a travel day."
+        "day": "Wed",
+        "summary": "Replaced the 45 min easy ride with an easy 8 km run at easy pace, to keep run volume in the travel week."
+      },
+      {
+        "week_number": 5,
+        "day": "Wed",
+        "summary": "Moved Strength B from Thursday to Wednesday because the athlete is travelling on Thursday."
       }
     ],
     "weeks": [
@@ -239,7 +239,7 @@
       {
         "week_number": 5,
         "phase": "build",
-        "focus": "Threshold volume (travel week, no Thursday session)",
+        "focus": "Threshold volume, travel-adjusted week",
         "planned_km": 43.6,
         "sessions": [
           {
@@ -355,22 +355,11 @@
             "distance_km": 8.0,
             "duration_min": 0.0,
             "target_pace": "5:11-6:13/km",
-            "description": "Relaxed, conversational running.",
+            "description": "Relaxed, conversational running at easy pace.",
             "steps": []
           },
           {
-            "day": "Sat",
-            "type": "easy",
-            "modality": "run",
-            "title": "Easy 8 km",
-            "distance_km": 8.0,
-            "duration_min": 0.0,
-            "target_pace": "5:11-6:13/km",
-            "description": "Relaxed, conversational running.",
-            "steps": []
-          },
-          {
-            "day": "Sat",
+            "day": "Wed",
             "type": "strength",
             "modality": "strength",
             "title": "Strength B",
@@ -418,6 +407,17 @@
             ]
           },
           {
+            "day": "Sat",
+            "type": "easy",
+            "modality": "run",
+            "title": "Easy 8 km",
+            "distance_km": 8.0,
+            "duration_min": 0.0,
+            "target_pace": "5:11-6:13/km",
+            "description": "Relaxed, conversational running.",
+            "steps": []
+          },
+          {
             "day": "Sun",
             "type": "long",
             "modality": "run",
@@ -434,10 +434,10 @@
   },
   "meta": {
     "model": "claude-sonnet-5-5",
-    "created_at": "2026-10-31T04:09:48+00:00",
+    "created_at": "2026-10-31T05:00:27+00:00",
     "usage": {
-      "input_tokens": 52011,
-      "output_tokens": 4056
+      "input_tokens": 52428,
+      "output_tokens": 4271
     }
   }
 }

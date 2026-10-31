@@ -2,25 +2,27 @@
   "activity_id": "2026-11-17T12-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "Tempo session completed as planned: 2 km easy, 5 km at threshold pace, 2 km easy, with the tempo block landing on target.",
+    "headline": "Tempo session completed as prescribed: 5 km at 4:36/km against a 4:37/km target, with easy warm-up and cool-down.",
     "observations": [
-      "Tempo block averaged 4:36/km against a 4:37/km target, held steady across all five 1 km splits at 276 s each.",
-      "Warm-up and cool-down ran at 5:45/km (HR 136 and 140), inside the 5:11-6:13/km easy range, so the controlled structure was respected.",
-      "Tempo HR averaged 163 with efficiency 1.304, a clear improvement on the 6 km tempo on 11-10 (HR 163 at 5:37/km, efficiency 1.093)."
+      "Warm-up and cool-down each 2 km at 5:45/km, inside the 5:11-6:13 easy band, with HR 136-140.",
+      "Tempo block held 4:36/km across all five km splits, 1 s/km inside target, with steady avg HR 163.",
+      "Efficiency 1.30 matches the 2026-11-03 tempo (1.30) and is well above the 2026-11-10 session (1.09), which was cut short at 6 km.",
+      "Full 9.0 km in 2760 s, with the structure of the planned session carried out."
     ],
     "flags": [
-      "No RPE or athlete note was logged, so perceived effort is unknown for this session.",
-      "ATL (55.5) sits above CTL (47.2) with TSB at -4.3, so fatigue is building and should be watched.",
-      "Week 3 delivered 9.0 km of a 43.4 km plan and 1 of 7 sessions, so this quality session came after a heavily missed week."
+      "No RPE or athlete note logged, so effort is judged only from pace and HR.",
+      "ATL 55.5 is above CTL 47.2 (TSB -4.3), so fatigue is building.",
+      "Week 3 shows 9.0 of 43.4 planned km, and no runs are logged after this session through 2026-11-25.",
+      "CTL has fallen 7.2 over the last 7 days, so fitness is trending down during the gap."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:08:37+00:00",
+    "created_at": "2026-10-31T04:59:21+00:00",
     "usage": {
-      "input_tokens": 8396,
-      "output_tokens": 977
+      "input_tokens": 8636,
+      "output_tokens": 1268
     }
   }
 }

@@ -2,27 +2,28 @@
   "activity_id": "2026-11-10T12-00-00",
   "review": {
     "completion": "partly",
-    "headline": "Tempo cut short at 6 km of a 9 km session; first 2 km too easy, middle 3 km too fast, athlete stopped with heavy legs.",
+    "headline": "Tempo cut short at 6 km of a planned 9 km; the 5 km tempo block was run too fast and the athlete stopped early, reporting heavy legs and poor sleep.",
     "observations": [
-      "Planned 2 km warm-up, 5 km at 4:37/km threshold, 2 km cool-down; actual run was 6.0 km in 33:40 at 5:37/km average.",
-      "Km 3-5 ran at 5:00/km with avg HR 176, about 23 s/km faster than the 4:37/km target's controlled intent and well above threshold effort for the planned tempo.",
-      "Opening 2 km at 5:50/km with HR 150 was slower than the 5:11-6:13 warm-up band's midpoint would suggest for a steady build, so pacing was uneven rather than controlled.",
-      "Athlete reported heavy legs, poor sleep and RPE 8, and stopped at 6 km, which is a sensible call given the session's trajectory."
+      "Planned 2 km warm-up, 5 km at 4:37/km threshold, 2 km cool-down; actual run was 6.0 km at 5:37/km average and stopped at 6 km.",
+      "Km 3-5 ran at 5:00/km, about 23 s/km faster than the 4:37/km threshold target, with HR 176 and cadence drop not evident; the tempo block was overcooked from the start.",
+      "Opening 2 km at 5:50/km was roughly warm-up pace, but the jump to 5:00/km was abrupt and unsustainable at the planned threshold effort.",
+      "Final km at 7:00/km and HR 159 show the athlete was fading and effectively finished the session early; the athlete's note and RPE 8 are consistent with this."
     ],
     "flags": [
-      "Heart rate reached 179 max and averaged 176 during the surge, indicating the effort was well above the intended tempo zone.",
-      "Tempo efficiency fell to 1.093 from 1.304 on 2026-11-03 with HR 163 vs 148 at a similar pace band.",
-      "Fatigue signals: ATL 38.4 is the highest of the block, and only 6 km of the planned 45 km week has been completed.",
-      "Training load and fitness: CTL has fallen from 44.4 to 30.9 over the last week, and no runs have been logged since 2026-11-08."
+      "Session cut short: 6.0 of 9.0 km planned, roughly 3 km missed.",
+      "Tempo pace about 23 s/km faster than target while HR reached 176 (max 179), well above the 163 average of the previous tempo at a slower pace.",
+      "Efficiency fell to 1.093 from 1.304 on the 11-03 tempo, a notable drop in pace-to-HR economy.",
+      "Reported heavy legs and poor sleep, RPE 8 for a threshold session.",
+      "Only one of seven planned sessions completed this week (6.0 of 45 km), and CTL has dropped 5.7 over 7 days."
     ],
     "effort": "harder_than_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:08:17+00:00",
+    "created_at": "2026-10-31T04:58:59+00:00",
     "usage": {
-      "input_tokens": 7438,
-      "output_tokens": 528
+      "input_tokens": 7678,
+      "output_tokens": 553
     }
   }
 }

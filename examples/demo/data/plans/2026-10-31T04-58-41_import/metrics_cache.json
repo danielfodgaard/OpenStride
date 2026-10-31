@@ -205,7 +205,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 2,
@@ -217,7 +219,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 46.0
+      "actual_cross_min": 46.0,
+      "planned_cross": 1,
+      "completed_cross": 1
     },
     {
       "week_number": 3,
@@ -229,7 +233,9 @@
       "planned_strength": 2,
       "completed_strength": 2,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 4,
@@ -241,7 +247,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 30.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 5,
@@ -253,7 +261,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 6,
@@ -265,7 +275,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 7,
@@ -277,7 +289,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 8,
@@ -289,7 +303,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 9,
@@ -301,7 +317,9 @@
       "planned_strength": 2,
       "completed_strength": 0,
       "planned_cross_min": 45.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 1,
+      "completed_cross": 0
     },
     {
       "week_number": 10,
@@ -313,7 +331,9 @@
       "planned_strength": 0,
       "completed_strength": 0,
       "planned_cross_min": 0.0,
-      "actual_cross_min": 0.0
+      "actual_cross_min": 0.0,
+      "planned_cross": 0,
+      "completed_cross": 0
     }
   ],
   "easy_runs": [

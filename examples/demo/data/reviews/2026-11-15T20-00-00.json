@@ -2,25 +2,25 @@
   "activity_id": "2026-11-15T20-00-00",
   "review": {
     "completion": "as_planned",
-    "headline": "17 km long run completed steadily at 5:50/km, inside the easy band and matching the plan's intent.",
+    "headline": "Long run 17.0 km completed at a steady, controlled 5:50/km, squarely inside the 5:11-6:13/km easy band.",
     "observations": [
-      "Distance 17.02 km vs 17.0 planned; all 17 km splits were a flat 5:50/km, showing good pace control.",
-      "Avg HR 143 with max 146 stayed low and even across the run, consistent with an unhurried aerobic effort.",
-      "Pace sits within the 5:11-6:13/km easy band, near the middle-to-faster end, and is in line with the recent easy runs (5:44-5:48/km).",
-      "No fuelling or RPE data was logged, so the race-day fuelling instruction cannot be assessed from this file."
+      "All 17 km splits were exactly 5:50/km with avg HR 141-145 (mean ~143), a flat even effort that matches the 'steady and unhurried' intent.",
+      "Average HR 143 and max 146 sit in the easy zone, consistent with the 4-week easy HR average of 140.",
+      "Cadence held at 174 spm, matching recent runs, and efficiency of 1.20 is in line with the recent long run (1.22).",
+      "Distance and duration match the plan (17.02 km vs 17.0 km), with 113 m of elevation gain."
     ],
     "flags": [
-      "RPE and athlete note were not recorded for this run, so subjective effort is unknown.",
-      "Week 2 completed 5 of 7 sessions and the previous tempo run was cut short at 6 km with RPE 8, so the recent load context is mixed."
+      "Athlete note and RPE were not logged (RPE 0, no note), so subjective fatigue is unknown after this 17 km.",
+      "Week 2 completed 5 of 7 sessions and strength was not completed; CTL has drifted down (-6.8 over 7 days) while TSB is near neutral at +1.5."
     ],
     "effort": "as_planned"
   },
   "meta": {
     "model": "claude-haiku-5-5",
-    "created_at": "2026-10-31T04:08:32+00:00",
+    "created_at": "2026-10-31T04:59:14+00:00",
     "usage": {
-      "input_tokens": 8337,
-      "output_tokens": 333
+      "input_tokens": 8577,
+      "output_tokens": 369
     }
   }
 }
