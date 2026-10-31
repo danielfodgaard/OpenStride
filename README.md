@@ -19,17 +19,73 @@ Errors are facts and limits you set yourself. They go back to Claude to fix: ses
 
 Warnings are coaching judgments. They never block anything and appear above a proposal's diff so you see the trade-off before accepting: hard runs on consecutive days and volume jumps, always. The long run on `long_run_day` is an error when a plan is generated, because you asked for it in the form, and only a warning in a proposal, so a one-off move is allowed.
 
-## Setup
+## Install and phone access
 
-    python3 -m venv .venv
-    .venv/bin/pip install -r requirements.txt
+### Install and run
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
+
     cp .env.example .env   # then set ANTHROPIC_API_KEY
+    uv run openstride
 
-## Run
+Open http://127.0.0.1:8000. `uv run` creates the environment from `pyproject.toml`, the only list of dependencies. Data lives in `data/`, including every uploaded file in `data/activities/raw/`. Settings are in `.env`: `OPENSTRIDE_HOST`, `OPENSTRIDE_PORT`, `OPENSTRIDE_DATA_DIR`, `OPENSTRIDE_PASSWORD` and `OPENSTRIDE_ALLOW_OPEN`.
 
-    .venv/bin/uvicorn app.main:app
+Or with Docker, which keeps the same `./data` folder and restarts by itself:
 
-Open http://127.0.0.1:8000. Data lives in `data/`, including every uploaded file in `data/activities/raw/`.
+    cp .env.example .env   # then set ANTHROPIC_API_KEY
+    docker compose up -d
+
+`GET /api/health` returns the status, the version and whether the data folder is writable.
+
+### Phone access
+
+Phone and laptop use one server over HTTPS. Nothing syncs: both talk to the same OpenStride, and the laptop must be on and running it. The recommended way is Tailscale, which needs no public port and gives a valid certificate:
+
+1. Install Tailscale on the laptop and the phone, and log in with the same account on both.
+2. Once per tailnet: in the [admin console](https://login.tailscale.com/admin/dns), enable MagicDNS and HTTPS Certificates. The script tells you if this is missing.
+3. Start OpenStride, then run `scripts/phone-access.sh` (Windows: `powershell -File scripts\phone-access.ps1`). If you changed the port, set `OPENSTRIDE_PORT` for the script too.
+4. Open the printed `https://<machine>.<tailnet>.ts.net` URL on the phone and use Add to Home Screen.
+
+The server stays bound to localhost; only devices in your tailnet can reach it. `scripts/phone-access-off.sh` (or `.ps1`) turns it off, and clears any other `tailscale serve` setting on the machine too. No password is needed unless you share the tailnet with other people.
+
+On a server without Tailscale installed, uncomment the `tailscale` service in `compose.yaml`, follow the notes there, and put `TS_AUTHKEY` in `.env`.
+
+On the same Wi-Fi without Tailscale, `OPENSTRIDE_HOST=0.0.0.0` with a password and `http://<laptop-ip>:8000` works too. It has no HTTPS, so the app can't be installed on the phone and the password crosses the network in the clear. Prefer Tailscale.
+
+### Password
+
+Set `OPENSTRIDE_PASSWORD` for any setup other than localhost or Tailscale. Every page and API route then needs a login, valid for 30 days on that device. Changing the password signs every device out.
+
+The server refuses to listen beyond localhost with no password, because it holds your API key and an open server can spend your money. `OPENSTRIDE_ALLOW_OPEN=1` overrides that; `compose.yaml` sets it because the container must listen on all its interfaces while the only published port is on the host's localhost. If you change `ports:` to publish wider, set a password.
+
+### Two devices at once
+
+Writes are atomic and locked, so phone and laptop can act at the same moment. If a plan changed on the other device after you loaded it, the action is refused with a reload rather than overwriting.
+
+### Backups
+
+`GET /api/backup` downloads `openstride-backup-<date>.zip`: the data folder without lock files, `data/secrets/` and earlier backups. Add `?include_secrets=1` to include secrets, which are tokens, so keep that file private.
+
+`scripts/backup.sh <folder>` writes the same zip to a folder, and is safe while the server runs. For a daily backup at 03:00, in `crontab -e`:
+
+    0 3 * * * PATH=$HOME/.local/bin:$PATH /path/to/OpenStride/scripts/backup.sh $HOME/openstride-backups
+
+To restore, stop the server and unzip into an empty data folder. A backup without secrets means logging in again. Migrations write a backup to `data/backups/` first.
+
+With Docker: `docker compose exec openstride openstride backup /app/data/backups`.
+
+### Running on an always-on server
+
+The laptop can be replaced by a small VPS or home server, using the same `compose.yaml` and `.env`.
+
+- **Through Tailscale (recommended):** no public port. Install Tailscale on the server and run `scripts/phone-access.sh`, or use the sidecar in `compose.yaml`.
+- **Behind Caddy:** automatic HTTPS on a domain you own. Set `OPENSTRIDE_PASSWORD` in `.env`, keep the port on `127.0.0.1` as `compose.yaml` has it, install Caddy on the server, and use this `Caddyfile`:
+
+      openstride.example.com {
+          reverse_proxy 127.0.0.1:8000
+      }
+
+  This one is on the public internet, so the password is not optional, and pick a long one.
 
 ## Navigating the app
 
@@ -42,13 +98,13 @@ Pages to screenshot for a walkthrough: the plan overview, an open week, a done s
 
 Workouts from before v3.1 have no stored file, so their detail page asks you to import the file again. Doing that adds the route and charts to the existing workout.
 
-Upgrading from v1: run `.venv/bin/python -m app.migrate` once. It moves `plans/*.json` to `data/plans/<id>/plan.json` as drafts.
+Upgrading from v1: run `uv run python -m app.migrate` once. It moves `plans/*.json` to `data/plans/<id>/plan.json` as drafts.
 
 ## Offline demo
 
 No API key or network needed:
 
-    OPENSTRIDE_DEMO=1 .venv/bin/uvicorn app.main:app
+    OPENSTRIDE_DEMO=1 uv run openstride
 
 This serves a throwaway copy of `examples/demo/data`, including route and chart data for every file, with the date pinned to Wednesday 25 November 2026: an active half-marathon plan with strength and cycling, three weeks of runs with real reviews, two logged strength sessions, a cycling file, one bad run with a note, the charts, a chat thread with a pending proposal, and a progress summary. Your `data/` is not touched and every change disappears when the server stops.
 
@@ -56,7 +112,7 @@ Offline you can open every page, hover the workout charts, read the thread, acce
 
 ## Test
 
-    .venv/bin/pytest
+    uv run pytest
 
 ## Importing files
 

@@ -49,7 +49,7 @@ def api_routes():
 
 def test_the_route_list_reaches_everything_that_matters():
     routes = {path for _, path in api_routes()}
-    assert {"/api/garmin/status", "/api/garmin/sync", "/api/plans/1/accept"} <= routes
+    assert {"/api/garmin/status", "/api/garmin/sync", "/api/plans/1/accept", "/api/backup"} <= routes
     assert "/api/plans/1/sessions/1/1/workout.fit" in routes and len(routes) > 30
 
 

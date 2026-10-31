@@ -1,6 +1,6 @@
 """One-off: build series for activities that have a raw file but no series.
 
-Run from the repo root: .venv/bin/python scripts/backfill_series.py
+Run from the repo root: uv run python scripts/backfill_series.py
 Set OPENSTRIDE_DATA_DIR to use another data folder. Activities imported before v3.1 have no
 raw file; for those, import the file again and its series is added to the existing workout.
 """

@@ -19,7 +19,7 @@ dependencies = [
 openstride = "app.cli:main"
 
 [dependency-groups]
-dev = ["pytest", "httpx"]
+dev = ["pytest"]
 
 [build-system]
 requires = ["hatchling"]
