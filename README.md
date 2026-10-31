@@ -11,7 +11,7 @@
 | | Runna | OpenStride |
 |---|---|---|
 | Price | $19.99/month or $119.99/year (US, Oct 2026) | $0 software, MIT licence |
-| Running cost | included | your own Claude API key: about $0.45–3.50 per month (see [cost](#before--after-cost)) |
+| Running cost | included | your own Claude API key: about $0.1 one time cost (see [cost](#before--after-cost)) |
 | See your whole plan? | only on the annual plan | always: it's a JSON file on your disk |
 | Why did my plan change? | not shown | every change comes with a written reason and a diff you accept or reject |
 | Your data | their servers | a folder on your computer |
