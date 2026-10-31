@@ -1,11 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#2456c8"/>
-  <g fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="300" cy="112" r="38" fill="#ffffff" stroke="none"/>
-    <path d="M272 186 L228 286"/>
-    <path d="M228 286 L320 322 L304 418"/>
-    <path d="M228 286 L168 356 L84 346"/>
-    <path d="M272 186 L350 238 L424 214"/>
-    <path d="M272 186 L190 204 L142 262"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <title>OpenStride</title>
+  <rect width="240" height="240" rx="54" fill="#0E1621"/>
+  <g transform="translate(32 32) scale(1.76)">
+    <path d="M62 30 H35 A20 20 0 0 0 35 70 H65 A20 20 0 0 0 85 50" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="78" cy="35" r="7" fill="#E8501A"/>
   </g>
 </svg>

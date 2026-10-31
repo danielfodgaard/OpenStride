@@ -81,7 +81,7 @@ a { color: var(--accent); }
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
   font: 700 21px/1 var(--font-display); color: var(--ink); text-decoration: none;
 }
-.brand img { width: 26px; height: 26px; }
+.brand svg { width: 32px; height: 32px; }
 .tabs {
   position: fixed; inset: auto 0 0 0; z-index: 10; display: grid; grid-template-columns: repeat(3, 1fr);
   background: var(--panel); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom, 0px);

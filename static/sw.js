@@ -1,6 +1,6 @@
 // App shell from the cache, so the app opens at once even when the server can't be reached.
 // API reads go to the network first; the last good copy answers when it fails.
-const SHELL_CACHE = "openstride-shell-v1";  // bump when SHELL changes
+const SHELL_CACHE = "openstride-shell-v2";  // bump when SHELL changes
 const API_CACHE = "openstride-api-v1";
 const SHELL = [
   "/",
@@ -21,6 +21,7 @@ const SHELL = [
   "/fonts/jetbrains-mono-latin-400-normal.woff2",
   "/fonts/jetbrains-mono-latin-500-normal.woff2",
   "/icons/icon.svg",
+  "/icons/favicon.svg",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-maskable-512.png",

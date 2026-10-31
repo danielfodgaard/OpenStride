@@ -113,3 +113,11 @@ def test_settings_defaults_and_bad_mode(monkeypatch):
     monkeypatch.setenv("GARMIN_MODE", "strava")
     with pytest.raises(ValueError):
         config.load()
+
+
+def test_a_batch_is_saved_before_any_review_runs(plan, monkeypatch):
+    names = (RUN, "2026-11-05_thu_easy_easy-run.fit")
+    seen = []
+    monkeypatch.setattr(activities.review, "review_activity", lambda activity: seen.append(len(storage.list_activities("plan"))))
+    activities.import_files([(name, (SAMPLES / name).read_bytes()) for name in names], "", 0)
+    assert seen == [2, 2]

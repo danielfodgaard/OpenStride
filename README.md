@@ -95,6 +95,13 @@ You describe your goal, a recent race, your current weekly volume, which days yo
 - **Every imported run gets an automatic review** from a small, cheap model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
 - **Strength and cross-training** sessions can be logged by hand or imported (rides and swims match cross-training sessions).
 
+### On your phone and your watch
+
+- **A Workouts page and a page per workout**: route, pace against the planned range, heart rate and laps, like Strava and Runna show a run.
+- **An installable app.** Install it from the phone's browser; this week's plan and opened workouts stay readable offline.
+- **One server for phone and laptop.** Over [Tailscale](https://tailscale.com/), your phone reaches the OpenStride running on your laptop with HTTPS, and nothing is exposed to the internet.
+- **Garmin, from your phone.** Sync runs from Garmin Connect, and send planned sessions to your watch as structured workouts (or download them as .fit files and copy them over USB). (experimental: not yet tested against a real Garmin account)
+
 ### Adaptation: one bad day shouldn't rewire your plan
 
 **Nothing changes your plan unless you ask, and then accept.**
@@ -116,7 +123,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **216 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, proposal merging, chat actions, metrics and the API.
+- **617 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, proposal merging, chat actions, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
@@ -157,32 +164,23 @@ Chat is most of the heavy-use cost, because every message sends the full plan an
 
 ## Run it
 
-You need Python 3.11+ and a [Claude API key](https://platform.claude.com/).
+You need [uv](https://docs.astral.sh/uv/) and a [Claude API key](https://platform.claude.com/).
 
 ```bash
 git clone https://github.com/danielfodgaard/OpenStride.git
 cd OpenStride
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync
 cp .env.example .env        # then set ANTHROPIC_API_KEY
-.venv/bin/uvicorn app.main:app
+uv run openstride
 ```
 
 Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSON files in `data/`.
 
-**Offline demo, no API key needed:**
+**Offline demo, no API key needed:** `OPENSTRIDE_DEMO=1 uv run openstride`
 
-```bash
-OPENSTRIDE_DEMO=1 .venv/bin/uvicorn app.main:app
-```
+**Tests:** `uv run pytest`
 
-This serves a throwaway copy of the demo data with the date pinned to 25 November 2026: an active half-marathon plan, three weeks of reviewed runs, logged strength sessions, a cycling file, a chat thread with a pending proposal, and the charts. Your own `data/` is not touched, and every change disappears when the server stops. Actions that need Claude show an error unless a key is set in `.env`.
-
-**Tests:**
-
-```bash
-.venv/bin/pytest
-```
+**Phone access, Garmin, password and backups:** see [docs/SETUP.md](docs/SETUP.md).
 
 **Models:** set per task in `.env` (`PLAN_MODEL`, `ADAPT_MODEL`, `REVIEW_MODEL`, `PROGRESS_MODEL`, `CHAT_MODEL`) to trade quality for cost.
 

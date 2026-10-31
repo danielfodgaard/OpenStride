@@ -461,24 +461,31 @@ def import_one(name: str, content: bytes, plan_file: PlanFile | None, user_note:
         store_series(activity, parsed)
         if plan_file:
             metrics.refresh(plan_file)
-    result = {
+    return {
         "file": name,
         "status": "imported",
         "activity": activity.model_dump(mode="json"),
         "warnings": date_warnings(activity),
+        "summary": activity,
     }
-    try:
-        review.review_activity(activity)
-    except Exception as error:  # a network or plan-state failure too: the run must survive its review
-        # The run is saved either way; the review can be re-run.
-        result["message"] = f"{name}: imported, but the review failed: {error}"
+
+
+def add_review(result: dict) -> dict:
+    activity = result.pop("summary", None)
+    if activity:
+        try:
+            review.review_activity(activity)
+        except Exception as error:  # a network or plan-state failure too: the run must survive its review
+            # The run is saved either way; the review can be re-run.
+            result["message"] = f"{result['file']}: imported, but the review failed: {error}"
     return result
 
 
 def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> list[dict]:
     """One result per file; a bad file doesn't stop the others."""
     plan_file = lifecycle.active_plan()
-    return [import_one(name, content, plan_file, user_note, rpe) for name, content in uploads]
+    # All saved before any review, or a review sees the rest of the batch as missed sessions.
+    return [add_review(result) for result in [import_one(name, content, plan_file, user_note, rpe) for name, content in uploads]]
 
 
 def import_fit_bytes(content: bytes, source: str, external_id: str) -> dict:
@@ -487,7 +494,7 @@ def import_fit_bytes(content: bytes, source: str, external_id: str) -> dict:
     name = f"{source}_{external_id.rsplit(':', 1)[-1]}.fit"
     if any(activity.external_id == external_id for activity in storage.list_all_activities()):
         return {"file": name, "status": "duplicate", "message": f"{name} is already imported"}
-    return import_one(name, content, lifecycle.active_plan(), "", 0, external_id)
+    return add_review(import_one(name, content, lifecycle.active_plan(), "", 0, external_id))
 
 
 def rematch(plan_file: PlanFile) -> None:

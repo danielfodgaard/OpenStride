@@ -135,14 +135,13 @@ function summaryView({ summary }) {
 }
 
 function progressSection(planFile, progress, readOnly) {
-  const section = el("section");
   const status = statusLine();
   const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "As planned", "Partly", "Missed targets", "Unplanned"];
   const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed,
     r.as_planned, r.partly, r.missed_targets, r.unplanned];
   const summary = el("div");
   if (progress.latest_summary) summary.append(summaryView(progress.latest_summary));
-  section.append(el("h2", "Progress summary"));
+  const section = foldable("Progress summary", false);
   if (!readOnly) {
     const ask = button("Progress summary", status, async () => {
       const result = await api(`/api/plans/${encodeURIComponent(planFile.meta.id)}/progress/summary`, { method: "POST" });
