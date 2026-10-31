@@ -172,7 +172,8 @@ def compute(plan_file: PlanFile, today: date | None = None) -> Metrics:
     done = entries(plan_file.meta.id)
     kinds = {entry.id: session_type(entry, plan_file) for entry in done}
     days = build_days(done, kinds, plan_file, today)
-    runs = [e for e in done if e.modality == "run" and e.km > 0 and e.minutes > 0]
+    since = days[0].date if days else today  # a 2010 file would squash the trend charts
+    runs = [e for e in done if e.modality == "run" and e.km > 0 and e.minutes > 0 and e.date >= since]
     # shortcut: unplanned runs count as easy so imported history has a trend, though some were surely hard; upgrade with a run classifier. TODO(v3.1)
     easy = [trend_point(e, kinds[e.id]) for e in runs if kinds[e.id] in EASY_TYPES]
     quality = [trend_point(e, kinds[e.id]) for e in runs if kinds[e.id] in QUALITY_TYPES]

@@ -198,3 +198,11 @@ def test_equal_heart_rates_cannot_divide_by_zero(plan):
     request = plan.request.model_copy(update={"hr_max": 0, "hr_rest": 150, "age": 120})
     hr_max, hr_rest = metrics.heart_rates(request)
     assert hr_max > hr_rest
+
+
+def test_very_old_runs_stay_out_of_the_trends(plan):
+    run = activities.parse_file("a.gpx", (SAMPLES / "2026-11-05_easy.gpx").read_bytes(), "plan")
+    run = run.model_copy(update={"id": "old", "date": date(2010, 8, 5), "start_time": run.start_time.replace(year=2010, month=8, day=5)})
+    storage.save_activity(run)
+    add_run(plan, "2026-11-05_easy.gpx")
+    assert [p.date for p in metrics.compute(plan, TODAY).easy_runs] == [date(2026, 11, 5)]
