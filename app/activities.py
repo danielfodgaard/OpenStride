@@ -1,17 +1,25 @@
 """Turns .fit/.gpx files into ActivitySummary facts and matches them to planned sessions."""
 import io
-from dataclasses import dataclass, field
+import math
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
 import fitdecode
 import gpxpy
-from gpxpy.gpx import GPXException
 
 from app import generator, lifecycle, metrics, review, storage
 from app.models import ActivitySummary, Lap, Match, PlanFile
 
 MOVING_KM_PER_S = 0.0005  # below 0.5 m/s the runner has stopped
 ELEVATION_NOISE_M = 3  # ignores altimeter jitter when summing climbs
+EARTH_RADIUS_KM = 6371.0
+SEMICIRCLE_DEGREES = 180 / 2**31
+MAX_UTC_OFFSET = timedelta(hours=14)
+MIN_SPLIT_COVERAGE = 0.9
+MAX_RECORD_GAP = timedelta(days=2)
+MAX_STRIDES_PER_MIN = 120  # above this a device is already reporting steps per minute
+DUPLICATE_WINDOW = timedelta(seconds=60)  # the same run exported as .fit and .gpx starts a little apart
+STRAVA_TYPES = {"1": "cycling", "4": "hiking", "9": "running", "10": "walking", "16": "swimming"}
 
 
 @dataclass
@@ -29,6 +37,8 @@ class Parsed:
 
     points: list[Point]
     laps: list[Lap] = field(default_factory=list)
+    sport: str = "running"
+    start_time: datetime | None = None
     utc_offset: timedelta | None = None
     distance_km: float | None = None
     moving_time_s: float | None = None
@@ -46,61 +56,139 @@ def format_pace(seconds: float, km: float) -> str:
     return f"{total // 60}:{total % 60:02d}/km"
 
 
+def distance_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Kilometres, by haversine."""
+    a = math.sin(math.radians(lat2 - lat1) / 2) ** 2 + (
+        math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    )
+    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+
+
+def fit_sport(session: dict) -> str:
+    sport = str(session.get("sport") or "running")
+    if str(session.get("sub_sport")) == "strength_training":
+        return "strength_training"
+    return "running" if sport == "generic" else sport
+
+
+def read_fit_frames(content: bytes) -> tuple[list[dict], list[dict], list[dict], dict, dict]:
+    records, laps, sessions = [], [], []
+    activity, file_id = {}, {}
+    collect = {"record": records, "lap": laps, "session": sessions}
+    try:
+        # Watches do write files with bad checksums, so don't refuse them for that.
+        with fitdecode.FitReader(io.BytesIO(content), check_crc=fitdecode.CrcCheck.DISABLED) as reader:
+            for frame in reader:
+                if not isinstance(frame, fitdecode.FitDataMessage):
+                    continue
+                values = {f.name: f.value for f in frame.fields}
+                if frame.name in collect:
+                    collect[frame.name].append(values)
+                elif frame.name == "activity":
+                    activity = values
+                elif frame.name == "file_id":
+                    file_id = values
+    except fitdecode.FitError:
+        if not records and not sessions:  # a watch that died mid-run still left the run
+            raise
+    return records, laps, sessions, activity, file_id
+
+
+def fit_points(records: list[dict]) -> list[Point]:
+    points = []
+    km = 0.0
+    position = None
+    has_distance = any(r.get("distance") is not None for r in records)
+    for record in records:
+        if not isinstance(record.get("timestamp"), datetime):
+            continue
+        if has_distance:
+            km = record["distance"] / 1000 if record.get("distance") is not None else km
+        else:  # some devices only record GPS
+            lat, lon = record.get("position_lat"), record.get("position_long")
+            if lat is not None and lon is not None:
+                here = (lat * SEMICIRCLE_DEGREES, lon * SEMICIRCLE_DEGREES)
+                km += distance_between(*position, *here) if position else 0
+                position = here
+        points.append(Point(
+            time=record["timestamp"],
+            distance_km=km,
+            hr=record.get("heart_rate") or 0,
+            cadence=record.get("cadence") or 0,
+            altitude=record.get("enhanced_altitude", record.get("altitude")),
+        ))
+    return points
+
+
 def parse_fit(content: bytes) -> Parsed:
-    points, laps = [], []
-    session, activity = {}, {}
-    with fitdecode.FitReader(io.BytesIO(content)) as reader:
-        for frame in reader:
-            if not isinstance(frame, fitdecode.FitDataMessage):
-                continue
-            values = {f.name: f.value for f in frame.fields}
-            if frame.name == "record" and values.get("timestamp"):
-                distance = values.get("distance")
-                points.append(Point(
-                    time=values["timestamp"],
-                    distance_km=distance / 1000 if distance is not None else (points[-1].distance_km if points else 0),
-                    hr=values.get("heart_rate") or 0,
-                    cadence=values.get("cadence") or 0,
-                    altitude=values.get("enhanced_altitude", values.get("altitude")),
-                ))
-            elif frame.name == "lap":
-                km = (values.get("total_distance") or 0) / 1000
-                seconds = values.get("total_timer_time") or 0
-                laps.append(Lap(
-                    index=len(laps) + 1,
-                    distance_km=round(km, 3),
-                    time_s=round(seconds),
-                    pace=format_pace(seconds, km),
-                    avg_hr=values.get("avg_heart_rate") or 0,
-                ))
-            elif frame.name == "session":
-                session = values
-            elif frame.name == "activity":
-                activity = values
+    records, lap_values, sessions, activity, file_id = read_fit_frames(content)
+    if file_id.get("type") not in (None, "activity"):
+        raise ValueError(f"this is a {file_id['type']} file, not an activity")
+
+    laps = []
+    for values in lap_values:
+        km = (values.get("total_distance") or 0) / 1000
+        seconds = values.get("total_timer_time") or 0
+        laps.append(Lap(
+            index=len(laps) + 1,
+            distance_km=round(km, 3),
+            time_s=round(seconds),
+            pace=format_pace(seconds, km),
+            avg_hr=values.get("avg_heart_rate") or 0,
+        ))
 
     offset = None
-    if activity.get("local_timestamp") and activity.get("timestamp"):
+    if isinstance(activity.get("local_timestamp"), datetime) and isinstance(activity.get("timestamp"), datetime):
         # fitdecode tags the local wall clock as UTC, so the difference is the offset.
         offset = activity["local_timestamp"] - activity["timestamp"]
-    distance = session.get("total_distance")
+        if abs(offset) > MAX_UTC_OFFSET:  # some devices write a counter here, not a time
+            offset = None
+
+    # shortcut: a multisport file counts as one activity of its longest sport; upgrade by splitting it. TODO(v3.1)
+    main = max(sessions, key=lambda s: s.get("total_timer_time") or 0, default={})
+    total = lambda key: sum(s.get(key) or 0 for s in sessions) or None
+    distance = total("total_distance")
+    start = main.get("start_time") if isinstance(main.get("start_time"), datetime) else None
+    points = fit_points(records)
+    if start:  # one Strava Android build wrote some records dated decades ahead
+        points = [point for point in points if start - MAX_RECORD_GAP <= point.time <= start + MAX_RECORD_GAP]
     return Parsed(
         points=points,
         laps=laps,
         utc_offset=offset,
-        distance_km=distance / 1000 if distance is not None else None,
-        moving_time_s=session.get("total_timer_time"),
-        elapsed_time_s=session.get("total_elapsed_time"),
-        avg_hr=session.get("avg_heart_rate"),
-        max_hr=session.get("max_heart_rate"),
-        avg_cadence=session.get("avg_running_cadence") or session.get("avg_cadence"),
-        elevation_gain_m=session.get("total_ascent"),
+        sport=fit_sport(main),
+        start_time=start,
+        distance_km=distance / 1000 if distance else None,
+        moving_time_s=total("total_timer_time"),
+        elapsed_time_s=total("total_elapsed_time"),
+        avg_hr=main.get("avg_heart_rate"),
+        max_hr=main.get("max_heart_rate"),
+        avg_cadence=main.get("avg_running_cadence") or main.get("avg_cadence"),
+        elevation_gain_m=total("total_ascent"),
     )
 
 
+def number(text: str | None) -> int:
+    try:
+        return round(float(text or 0))
+    except ValueError:
+        return 0
+
+
+def gpx_sport(gpx) -> str:
+    """Running unless <type> says otherwise. Strava writes numbers there."""
+    text = next((track.type for track in gpx.tracks if track.type), None)
+    if text is None:
+        return "running"
+    kind = STRAVA_TYPES.get(text.strip(), text.strip().lower())
+    return "running" if any(word in kind for word in ("run", "jog", "treadmill")) else kind
+
+
 def parse_gpx(content: bytes) -> Parsed:
+    gpx = gpxpy.parse(content.decode("utf-8-sig"))
     points = []
     distance = 0.0
-    for track in gpxpy.parse(content.decode("utf-8")).tracks:
+    for track in gpx.tracks:
         for segment in track.segments:
             previous = None
             for point in segment.points:
@@ -110,18 +198,18 @@ def parse_gpx(content: bytes) -> Parsed:
                     distance += point.distance_2d(previous) / 1000
                 previous = point
                 extensions = {
-                    node.tag.rsplit("}", 1)[-1]: node.text
+                    node.tag.rsplit("}", 1)[-1].lower(): node.text
                     for extension in point.extensions
                     for node in extension.iter()
                 }
                 points.append(Point(
                     time=point.time,
                     distance_km=distance,
-                    hr=int(extensions.get("hr") or 0),
-                    cadence=int(extensions.get("cad") or 0),
+                    hr=number(extensions.get("hr") or extensions.get("heartrate")),
+                    cadence=number(extensions.get("cad") or extensions.get("cadence")),
                     altitude=point.elevation,
                 ))
-    return Parsed(points=points)
+    return Parsed(points=points, sport=gpx_sport(gpx))
 
 
 def moving_seconds(points: list[Point]) -> list[float]:
@@ -181,7 +269,7 @@ def climbed(points: list[Point]) -> float:
 
 
 def local_start(parsed: Parsed) -> datetime:
-    start = parsed.points[0].time
+    start = parsed.start_time or parsed.points[0].time
     if start.tzinfo is None:
         return start  # a GPX time with no zone is already local
     if parsed.utc_offset is not None:
@@ -190,16 +278,43 @@ def local_start(parsed: Parsed) -> datetime:
     return start.astimezone().replace(tzinfo=None)
 
 
+def rebased(points: list[Point]) -> list[Point]:
+    """Distance from the start of the file, since a device may start counting anywhere."""
+    if not points or not points[0].distance_km:
+        return points
+    offset = points[0].distance_km
+    return [replace(point, distance_km=point.distance_km - offset) for point in points]
+
+
+def steps_per_minute(cadence: int) -> int:
+    return cadence if cadence > MAX_STRIDES_PER_MIN else 2 * cadence
+
+
+def modality_of(sport: str) -> str:
+    if sport == "strength_training":
+        return "strength"
+    return "run" if sport == "running" else "cross"
+
+
 def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rpe: int) -> ActivitySummary:
-    points = parsed.points
-    if len(points) < 2:
+    if parsed.distance_km is None and parsed.moving_time_s is None and len(parsed.points) < 2:
         raise ValueError("no timed track points")
+    if parsed.start_time is None and not parsed.points:
+        raise ValueError("no start time")
+    points = rebased(parsed.points)
     moving = moving_seconds(points)
-    distance_km = parsed.distance_km if parsed.distance_km is not None else points[-1].distance_km
-    moving_s = parsed.moving_time_s if parsed.moving_time_s is not None else moving[-1]
-    elapsed_s = parsed.elapsed_time_s if parsed.elapsed_time_s is not None else (points[-1].time - points[0].time).total_seconds()
     hrs = [point.hr for point in points if point.hr]
     cadences = [point.cadence for point in points if point.cadence]
+    distance_km = parsed.distance_km if parsed.distance_km is not None else (points[-1].distance_km if points else 0)
+    moving_s = parsed.moving_time_s if parsed.moving_time_s is not None else moving[-1]
+    elapsed_s = parsed.elapsed_time_s
+    if elapsed_s is None:
+        elapsed_s = (points[-1].time - points[0].time).total_seconds() if points else moving_s
+    elapsed_s = max(elapsed_s, moving_s)  # files with out-of-order times can suggest otherwise
+    modality = modality_of(parsed.sport)
+    cadence = parsed.avg_cadence or (round(sum(cadences) / len(cadences)) if cadences else 0)
+    # Records covering only part of the distance would give splits that don't add up.
+    covered = bool(points) and points[-1].distance_km >= MIN_SPLIT_COVERAGE * distance_km
     start = local_start(parsed)
     return ActivitySummary(
         id=f"{start:%Y-%m-%dT%H-%M-%S}",
@@ -213,13 +328,15 @@ def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rp
         avg_pace=format_pace(moving_s, distance_km),
         avg_hr=parsed.avg_hr or (round(sum(hrs) / len(hrs)) if hrs else 0),
         max_hr=parsed.max_hr or max(hrs, default=0),
-        avg_cadence_spm=2 * (parsed.avg_cadence or (round(sum(cadences) / len(cadences)) if cadences else 0)),
+        avg_cadence_spm=steps_per_minute(cadence) if modality == "run" else cadence,  # bike rpm isn't strides
         elevation_gain_m=parsed.elevation_gain_m if parsed.elevation_gain_m is not None else climbed(points),
         laps=parsed.laps,
-        km_splits=km_splits(points, moving),
+        km_splits=km_splits(points, moving) if covered else [],
         user_note=user_note,
         rpe=rpe,
         match=Match(),
+        modality=modality,
+        sport=parsed.sport,
     )
 
 
@@ -258,6 +375,13 @@ def match_activity(activity: ActivitySummary, plan_file: PlanFile) -> Match:
     return Match(planned_date=activity.date.isoformat(), week_number=found[0], session_index=found[1])
 
 
+def is_duplicate(activity: ActivitySummary) -> bool:
+    return any(
+        abs(other.start_time - activity.start_time) <= DUPLICATE_WINDOW
+        for other in storage.list_all_activities()
+    )
+
+
 def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> list[dict]:
     """One result per file; a bad file doesn't stop the others."""
     plan_file = lifecycle.active_plan()
@@ -267,10 +391,10 @@ def import_files(uploads: list[tuple[str, bytes]], user_note: str, rpe: int) -> 
     for name, content in uploads:
         try:
             activity = parse_file(name, content, plan_file.meta.id, user_note, rpe)
-        except (ValueError, IndexError, fitdecode.FitError, GPXException) as error:
+        except Exception as error:  # third-party parsers on arbitrary files; one bad file must not stop the rest
             results.append({"file": name, "status": "error", "message": f"Could not read {name}: {error}"})
             continue
-        if storage.activity_path(activity.id).exists():
+        if is_duplicate(activity):
             results.append({"file": name, "status": "duplicate", "message": f"{name} is already imported"})
             continue
         activity.match = match_activity(activity, plan_file)
@@ -308,11 +432,13 @@ def with_review(activity: ActivitySummary) -> dict:
     return activity.model_dump(mode="json") | {"review": review_file.model_dump(mode="json") if review_file else None}
 
 
-def planned_match(plan_file: PlanFile, week_number: int, index: int) -> Match:
-    """A match the user chose by hand. It has to point at a real session."""
+def planned_match(plan_file: PlanFile, week_number: int, index: int, modality: str) -> Match:
+    """A match the user chose by hand. It has to point at a real session of the same kind."""
     week = next((w for w in plan_file.plan.weeks if w.week_number == week_number), None)
     if week is None or not 0 <= index < len(week.sessions):
         raise lifecycle.Conflict("That planned session doesn't exist.")
+    if week.sessions[index].modality != modality:
+        raise lifecycle.Conflict(f"A {modality} session can only match a planned {modality} session.")
     return Match(planned_date=week.sessions[index].date.isoformat(), week_number=week_number, session_index=index)
 
 
@@ -328,7 +454,7 @@ def edit(activity_id: str, user_note: str | None, rpe: int | None, match: tuple[
         if index == -1:
             activity.match = Match()
         else:
-            activity.match = planned_match(plan_file, week_number, index)
+            activity.match = planned_match(plan_file, week_number, index, activity.modality)
     storage.save_activity(activity)
     metrics.refresh(plan_file)
     return activity

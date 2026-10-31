@@ -211,7 +211,7 @@ class ActivitySummary(BaseModel):
     user_note: str
     rpe: int
     match: Match
-    modality: Literal["run", "cross"] = "run"
+    modality: Modality = "run"  # strength for a watch's gym file, cross for other sports
     sport: str = "running"
 
 
@@ -274,6 +274,26 @@ class ProgressFile(BaseModel):
     plan_id: str
     summary: ProgressSummary
     meta: ReviewMeta
+
+
+class CoachReply(BaseModel):
+    reply: str
+    action: Literal["none", "propose_change"]
+    change_request: str
+    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
+    flags: list[str]
+
+
+class ChatMessage(BaseModel):
+    id: str
+    role: Literal["user", "coach"]
+    created_at: str
+    text: str
+    action: Literal["none", "proposal_created"] = "none"
+    proposal_id: str = ""
+    usage: Usage = Usage(input_tokens=0, output_tokens=0)
+    model: str = ""
+    flags: list[str] = []
 
 
 class DayLoad(BaseModel):

@@ -171,3 +171,166 @@ def test_splits_interpolate_a_pause_out_of_moving_time():
     moving = activities.moving_seconds(points)
     assert moving[-1] == 600
     assert [s.time_s for s in activities.km_splits(points, moving)] == [300, 300]
+
+
+CROSS = SAMPLES / "cross"
+GPX_HEAD = '<gpx version="1.1" creator="t" xmlns="http://www.topografix.com/GPX/1/1"><trk>'
+GPX_BODY = (
+    '<trkseg><trkpt lat="56.0" lon="10.0"><time>2026-11-05T12:00:00Z</time></trkpt>'
+    '<trkpt lat="56.0" lon="10.01"><time>2026-11-05T12:03:00Z</time></trkpt></trkseg></trk></gpx>'
+)
+
+
+def add_v3_plan():
+    plan_file = PlanFile.model_validate_json(Path("examples/sample_plan_v3.json").read_text())
+    plan_file.meta.id = "v3"
+    storage.save_plan(plan_file)
+    return lifecycle.accept("v3")
+
+
+def test_cycling_fit_is_cross_training():
+    activity = activities.parse_file("a.fit", (CROSS / "2026-11-04_ride.fit").read_bytes(), "plan")
+    assert activity.sport == "cycling" and activity.modality == "cross"
+    assert activity.distance_km == 21.0 and activity.moving_time_s == 2700
+
+
+def test_cycling_matches_the_cross_session_and_never_a_run():
+    plan_file = add_v3_plan()
+    ride = activities.parse_file("a.fit", (CROSS / "2026-11-04_ride.fit").read_bytes(), "v3")
+    match = activities.match_activity(ride, plan_file)
+    assert plan_file.plan.weeks[0].sessions[match.session_index].type == "cross_training"
+
+    # The same ride on a run day has no cross session to match, so it stays unplanned.
+    sunday = ride.model_copy(update={"date": date(2026, 11, 8)})
+    assert activities.match_activity(sunday, plan_file).session_index == -1
+
+
+def test_a_run_never_matches_strength_or_cross():
+    plan_file = add_v3_plan()
+    run = activities.parse_file("a.fit", read("2026-11-03_tempo.fit"), "v3")  # Tue has a run and strength
+    session = plan_file.plan.weeks[0].sessions[activities.match_activity(run, plan_file).session_index]
+    assert session.modality == "run"
+    wednesday = run.model_copy(update={"date": date(2026, 11, 4)})  # Wed has only a ride
+    assert activities.match_activity(wednesday, plan_file).session_index == -1
+
+
+def test_a_run_cannot_be_matched_to_strength_by_hand(client):
+    add_v3_plan()
+    client.post("/api/activities", files=[("files", ("a.fit", read("2026-11-03_tempo.fit")))])
+    activity_id = storage.list_activities("v3")[0].id
+    plan_file = storage.load_plan("v3")
+    index = next(i for i, s in enumerate(plan_file.plan.weeks[0].sessions) if s.modality == "strength")
+    response = client.patch(f"/api/activities/{activity_id}", json={"match": {"week_number": 1, "session_index": index}})
+    assert response.status_code == 409
+
+
+def test_pool_swim_without_records_uses_the_session_totals():
+    activity = activities.parse_file("a.fit", (CROSS / "2026-11-12_pool_swim.fit").read_bytes(), "plan")
+    assert activity.sport == "swimming" and activity.modality == "cross"
+    assert activity.distance_km == 1.5 and activity.moving_time_s == 1800
+    assert activity.km_splits == [] and activity.avg_hr == 130 and activity.date == date(2026, 11, 12)
+
+
+@pytest.mark.parametrize(
+    "kind,sport,modality",
+    [
+        ("running", "running", "run"),
+        ("trail_running", "running", "run"),
+        ("Run", "running", "run"),
+        ("9", "running", "run"),
+        ("cycling", "cycling", "cross"),
+        ("1", "cycling", "cross"),
+        ("hiking", "hiking", "cross"),
+    ],
+)
+def test_gpx_type(kind, sport, modality):
+    content = f"{GPX_HEAD}<type>{kind}</type>{GPX_BODY}".encode()
+    activity = activities.parse_file("a.gpx", content, "plan")
+    assert (activity.sport, activity.modality) == (sport, modality)
+
+
+def test_gpx_without_a_type_is_a_run():
+    assert activities.parse_file("a.gpx", f"{GPX_HEAD}{GPX_BODY}".encode(), "plan").modality == "run"
+
+
+def test_gpx_tolerates_a_bom_and_decimal_extensions():
+    content = (
+        '﻿<?xml version="1.0" encoding="UTF-8"?>' + GPX_HEAD.replace("<trk>", '<trk>')
+        + GPX_BODY.replace("<time>2026-11-05T12:00:00Z</time>", "<time>2026-11-05T12:00:00Z</time><extensions><hr>150.0</hr><cadence>85.5</cadence></extensions>")
+    ).encode("utf-8")
+    activity = activities.parse_file("a.gpx", content, "plan")
+    assert activity.avg_hr == 150 and activity.avg_cadence_spm == 172
+
+
+@pytest.mark.parametrize("cadence,expected", [(0, 0), (88, 176), (120, 240), (176, 176)])
+def test_cadence_in_strides_or_steps(cadence, expected):
+    assert activities.steps_per_minute(cadence) == expected
+
+
+def test_distance_counters_that_do_not_start_at_zero():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    points = [activities.Point(t0 + timedelta(seconds=300 * i), 5.0 + i) for i in range(3)]
+    parsed = activities.Parsed(points=points)
+    activity = activities.summarise(parsed, "a", "plan", "", 0)
+    assert [s.time_s for s in activity.km_splits] == [300, 300]
+
+
+def test_fit_records_with_gps_but_no_distance():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    semicircle = 2**31 / 180
+    records = [
+        {"timestamp": t0, "position_lat": 56 * semicircle, "position_long": 10 * semicircle},
+        {"timestamp": t0 + timedelta(seconds=60), "position_lat": 56.01 * semicircle, "position_long": 10 * semicircle},
+    ]
+    assert activities.fit_points(records)[-1].distance_km == pytest.approx(1.112, abs=0.01)
+
+
+def test_truncated_fit_keeps_what_was_recorded():
+    content = read("2026-11-03_tempo.fit")
+    activity = activities.parse_file("a.fit", content[: len(content) // 2], "plan")
+    assert 0 < activity.distance_km < 8
+
+
+def test_bad_checksum_is_not_fatal():
+    content = bytearray(read("2026-11-03_tempo.fit"))
+    content[-1] ^= 0xFF
+    assert activities.parse_file("a.fit", bytes(content), "plan").distance_km == 8.0
+
+
+def test_same_run_as_fit_and_gpx_is_a_duplicate(client, active):
+    client.post("/api/activities", files=[("files", ("a.gpx", read("2026-11-05_easy.gpx")))])
+    start = storage.list_activities("plan")[0].start_time
+    other = activities.parse_file("a.gpx", read("2026-11-05_easy.gpx"), "plan")
+    assert activities.is_duplicate(other.model_copy(update={"start_time": start + timedelta(seconds=45)}))
+    assert not activities.is_duplicate(other.model_copy(update={"start_time": start + timedelta(minutes=5)}))
+
+
+def test_bike_cadence_is_not_doubled():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    points = [activities.Point(t0 + timedelta(seconds=60 * i), i * 0.5, cadence=85) for i in range(3)]
+    activity = activities.summarise(activities.Parsed(points=points, sport="cycling"), "a", "plan", "", 0)
+    assert activity.avg_cadence_spm == 85
+
+
+def test_garbage_timestamps_are_dropped_and_partial_records_give_no_splits():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    frames = [{"timestamp": t0 + timedelta(seconds=30 * i), "distance": 100.0 * i} for i in range(4)]
+    frames.append({"timestamp": datetime(2085, 1, 1, tzinfo=timezone.utc), "distance": 400.0})
+    session = {"start_time": t0, "total_elapsed_time": 3000, "total_timer_time": 3000, "total_distance": 11000}
+    original = activities.read_fit_frames
+    activities.read_fit_frames = lambda content: (frames, [], [session], {}, {"type": "activity"})
+    try:
+        parsed = activities.parse_fit(b"")
+    finally:
+        activities.read_fit_frames = original
+    assert len(parsed.points) == 4
+    activity = activities.summarise(parsed, "a", "plan", "", 0)
+    assert activity.distance_km == 11 and activity.km_splits == []
+
+
+def test_out_of_order_times_never_give_moving_above_elapsed():
+    t0 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    seconds = [0, 300, 600, 60]
+    points = [activities.Point(t0 + timedelta(seconds=s), i * 1.0) for i, s in enumerate(seconds)]
+    activity = activities.summarise(activities.Parsed(points=points), "a", "plan", "", 0)
+    assert activity.moving_time_s <= activity.elapsed_time_s

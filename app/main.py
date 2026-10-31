@@ -12,10 +12,11 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, lifecycle, logbook, metrics, progress, review, storage
+from app import activities, adapt, chat, lifecycle, logbook, metrics, progress, review, storage
 from app.generator import GenerationError, generate_plan
 from app.models import (
     ActivitySummary,
+    ChatMessage,
     ManualActivity,
     Metrics,
     Modality,
@@ -100,6 +101,10 @@ class ManualEdit(BaseModel):
     note: str | None = None
     details: list[Step] | None = None
     match: MatchEdit | None = None
+
+
+class ChatInput(BaseModel):
+    text: str = Field(min_length=1, pattern=r"\S")
 
 
 class ProposalRequest(BaseModel):
@@ -241,6 +246,22 @@ def get_progress(plan_id: str) -> dict:
 @app.post("/api/plans/{plan_id}/progress/summary")
 def create_progress_summary(plan_id: str) -> ProgressFile:
     return progress.summarise(plan_id)
+
+
+@app.post("/api/plans/{plan_id}/chat")
+def send_chat(plan_id: str, body: ChatInput) -> dict:
+    return chat.send(plan_id, body.text)
+
+
+@app.get("/api/plans/{plan_id}/chat")
+def get_chat(plan_id: str) -> list[ChatMessage]:
+    lifecycle.require_plan(plan_id)
+    return storage.load_chat(plan_id)
+
+
+@app.post("/api/plans/{plan_id}/chat/clear", status_code=204)
+def clear_chat(plan_id: str) -> None:
+    chat.clear(plan_id)
 
 
 @app.get("/api/plans/{plan_id}/metrics")

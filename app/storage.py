@@ -4,10 +4,15 @@ import os
 import re
 from pathlib import Path
 
-from app.models import ActivitySummary, ManualActivity, PlanFile, Proposal, ReviewFile
+from pydantic import TypeAdapter
+
+from app.models import ActivitySummary, ChatMessage, ManualActivity, PlanFile, Proposal, ReviewFile
 
 DATA_DIR = Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+
+
+CHAT_THREAD = TypeAdapter(list[ChatMessage])
 
 
 class NotFound(Exception):
@@ -82,12 +87,15 @@ def load_activity(activity_id: str) -> ActivitySummary:
     return ActivitySummary.model_validate_json(path.read_text())
 
 
-def list_activities(plan_id: str) -> list[ActivitySummary]:
-    activities = [
+def list_all_activities() -> list[ActivitySummary]:
+    return [
         ActivitySummary.model_validate_json(path.read_text())
         for path in sorted((DATA_DIR / "activities").glob("*.json"))  # ids start with the start time
     ]
-    return [activity for activity in activities if activity.plan_id == plan_id]
+
+
+def list_activities(plan_id: str) -> list[ActivitySummary]:
+    return [activity for activity in list_all_activities() if activity.plan_id == plan_id]
 
 
 def review_path(activity_id: str) -> Path:
@@ -139,6 +147,27 @@ def list_manual(plan_id: str) -> list[ManualActivity]:
 
 def delete_manual(entry: ManualActivity) -> None:
     (manual_dir(entry.plan_id) / f"{safe_id(entry.id)}.json").unlink()
+
+
+def load_chat(plan_id: str) -> list[ChatMessage]:
+    path = plan_dir(plan_id) / "chat.json"
+    return CHAT_THREAD.validate_json(path.read_text()) if path.exists() else []
+
+
+def save_chat(plan_id: str, messages: list[ChatMessage]) -> None:
+    write_json(plan_dir(plan_id) / "chat.json", CHAT_THREAD.dump_json(messages, indent=2).decode())
+
+
+def archive_chat(plan_id: str, stamp: str) -> None:
+    path = plan_dir(plan_id) / "chat.json"
+    if path.exists():
+        os.replace(path, plan_dir(plan_id) / f"chat_{stamp}.json")
+
+
+def all_chat_messages(plan_id: str) -> list[ChatMessage]:
+    """The live thread and every cleared one."""
+    paths = plan_dir(plan_id).glob("chat*.json")
+    return [message for path in paths for message in CHAT_THREAD.validate_json(path.read_text())]
 
 
 def save_proposal(proposal: Proposal) -> None:

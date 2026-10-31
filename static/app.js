@@ -254,6 +254,7 @@ function matchSelect(activity, planFile) {
   match.add(new Option("Unplanned", "0:-1"));
   for (const week of planFile.plan.weeks) {
     week.sessions.forEach((session, index) => {
+      if ((session.modality ?? "run") !== (activity.modality ?? "run")) return;
       match.add(new Option(`${session.date} ${session.title}`, `${week.week_number}:${index}`));
     });
   }
@@ -517,7 +518,7 @@ function diffTable(planFile, proposal) {
   return table(["", "Week", "Day", "Old", "New"], rows);
 }
 
-function proposalView(proposal, planFile) {
+function proposalView(proposal, planFile, readOnly = false) {
   const box = el("div");
   const status = statusLine();
   const { recommendation, rationale, changes } = proposal.result;
@@ -529,7 +530,7 @@ function proposalView(proposal, planFile) {
     for (const change of changes) list.append(el("li", `Week ${change.week_number} ${change.day}: ${change.summary}`));
     box.append(list, diffTable(planFile, proposal));
     if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
-    if (proposal.acceptable && proposal.status === "pending") {
+    if (proposal.acceptable && proposal.status === "pending" && !readOnly) {
       const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
       const actions = el("p");
       actions.append(
@@ -581,6 +582,53 @@ function adaptSection(planFile, proposals) {
   suggestLine.append(suggest);
   section.append(el("h2", "Adapt plan"), scopeLine, contextLine, suggestLine, status);
   if (proposals.length) section.append(proposalView(proposals[0], planFile));
+  return section;
+}
+
+function chatMessage(message, proposals, planFile, readOnly) {
+  const box = el("div");
+  box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
+  for (const paragraph of message.text.split(/\n+/)) box.append(el("p", paragraph));
+  if (message.flags.length) {
+    const flags = el("ul");
+    for (const flag of message.flags) flags.append(el("li", flag));
+    box.append(flags);
+  }
+  const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);
+  if (proposal) box.append(proposalView(proposal, planFile, readOnly));
+  return box;
+}
+
+function chatSection(planFile, messages, proposals, readOnly) {
+  const section = el("section");
+  const encoded = encodeURIComponent(planFile.meta.id);
+  section.append(el("h2", "Coach chat"));
+  for (const message of messages) section.append(chatMessage(message, proposals, planFile, readOnly));
+  if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask your coach about the plan or your training."));
+  if (readOnly) return section;
+
+  const status = statusLine();
+  const text = el("textarea");
+  text.id = "chat-text";
+  text.rows = 3;
+  text.cols = 60;
+  const label = el("label", "Message ");
+  label.htmlFor = text.id;
+  const send = button("Send", status, async () => {
+    if (!text.value.trim()) throw new Error("Write a message first.");
+    await postJson(`/api/plans/${encoded}/chat`, { text: text.value });
+    await route();
+  }, "The coach is thinking…");
+  const clear = button("Clear chat", status, async () => {
+    if (!confirm("Clear the chat? The coach loses this history.")) return;
+    await api(`/api/plans/${encoded}/chat/clear`, { method: "POST" });
+    await route();
+  });
+  const line = el("p");
+  line.append(label, text);
+  const actions = el("p");
+  actions.append(send, " ", clear);
+  section.append(line, actions, status);
   return section;
 }
 
@@ -669,7 +717,8 @@ async function planView(id) {
   const isDraft = planFile.meta.status === "draft";
   const activities = isDraft ? [] : await api(`/api/activities?plan_id=${encoded}`);
   const isActive = planFile.meta.status === "active";
-  const proposals = isActive ? await api(`/api/plans/${encoded}/proposals`) : [];
+  const proposals = isDraft ? [] : await api(`/api/plans/${encoded}/proposals`);
+  const messages = isDraft ? [] : await api(`/api/plans/${encoded}/chat`);
   const progress = isActive ? await api(`/api/plans/${encoded}/progress`) : null;
   const metrics = isActive ? await api(`/api/plans/${encoded}/metrics`) : null;
   const usage = await api(`/api/plans/${encoded}/usage`);
@@ -686,7 +735,14 @@ async function planView(id) {
     nodes.push(actions);
   }
   nodes.push(status, planDiv());
-  if (isActive) nodes.push(importSection(statusLine()), logSection(planFile, metrics.as_of), adaptSection(planFile, proposals), progressSection(planFile, progress, metrics));
+  if (isActive) nodes.push(
+    importSection(statusLine()),
+    logSection(planFile, metrics.as_of),
+    chatSection(planFile, messages, proposals, false),
+    adaptSection(planFile, proposals),
+    progressSection(planFile, progress, metrics),
+  );
+  if (planStatus === "archived") nodes.push(chatSection(planFile, messages, proposals, true));
   nodes.push(usageFooter(usage));
   main.replaceChildren(...nodes);
   fullRender(planFile, status, {

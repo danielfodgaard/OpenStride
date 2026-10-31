@@ -73,7 +73,7 @@ def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
 
 
 def usage_totals(plan_id: str) -> dict:
-    """Every saved meta.usage for this plan: drafts, proposals, reviews and summaries."""
+    """Every saved usage for this plan: drafts, proposals, reviews, summaries and chat."""
     plan_file = lifecycle.require_plan(plan_id)
     folder = storage.plan_dir(plan_id)
     metas = [plan_file.meta]
@@ -87,6 +87,8 @@ def usage_totals(plan_id: str) -> dict:
         ProgressFile.model_validate_json(p.read_text()).meta
         for p in (storage.DATA_DIR / "progress").glob(f"{storage.safe_id(plan_id)}_*.json")
     ]
+
+    metas += [m for m in storage.all_chat_messages(plan_id) if m.role == "coach"]
 
     cost = 0.0
     for meta in metas:

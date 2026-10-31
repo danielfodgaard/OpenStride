@@ -70,7 +70,7 @@ def edit(manual_id: str, changes: dict, match: tuple[int, int] | None) -> Manual
     entry = entry.model_copy(update=changes)
     if match is not None:
         week_number, index = match
-        entry.match = Match() if index == -1 else activities.planned_match(plan_file, week_number, index)
+        entry.match = Match() if index == -1 else activities.planned_match(plan_file, week_number, index, entry.modality)
     elif moved:
         entry.match = match_entry(entry, plan_file)
     storage.save_manual(entry)
