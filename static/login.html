@@ -4,15 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OpenStride login</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <script>
+    try { const t = localStorage.getItem("openstride:theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
 </head>
-<body>
-  <h1>OpenStride</h1>
-  <p id="failed" role="alert" hidden>Wrong password.</p>
-  <form method="post" action="/login">
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-    <button type="submit">Log in</button>
-  </form>
+<body class="login">
+  <main><section>
+    <h1><img src="icons/icon.svg" alt="" width="32" height="32"> OpenStride</h1>
+    <p id="failed" role="alert" class="login-error" hidden>Wrong password.</p>
+    <form method="post" action="/login">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit" class="primary">Log in</button>
+    </form>
+  </section></main>
   <script>
     if (location.search.includes("failed")) document.getElementById("failed").hidden = false;
   </script>

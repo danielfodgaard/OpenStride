@@ -258,3 +258,10 @@ svg text { font-family: var(--font-data); fill: var(--ink-3); }
   .workout-top { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 }
 @media print { .tabs, .toasts, .footer { display: none; } }
+
+/* Login */
+body.login { min-height: 100dvh; padding: 16px; display: grid; place-items: center; }
+body.login main { max-width: 360px; padding: 0; }
+body.login h1 { display: flex; align-items: center; gap: 8px; }
+body.login form { display: grid; gap: 10px; }
+.login-error { color: var(--critical); font-weight: 600; }

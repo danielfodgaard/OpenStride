@@ -43,7 +43,7 @@ Phone and laptop use one server over HTTPS. Nothing syncs: both talk to the same
 
 1. Install Tailscale on the laptop and the phone, and log in with the same account on both.
 2. Once per tailnet: in the [admin console](https://login.tailscale.com/admin/dns), enable MagicDNS and HTTPS Certificates. The script tells you if this is missing.
-3. Start OpenStride, then run `scripts/phone-access.sh` (Windows: `powershell -File scripts\phone-access.ps1`). If you changed the port, set `OPENSTRIDE_PORT` for the script too.
+3. Start OpenStride, then run `scripts/phone-access.sh` (Windows: `powershell -File scripts\phone-access.ps1`). If you changed the port, set `OPENSTRIDE_PORT` for the script too. If Tailscale answers "Access denied", run `sudo tailscale set --operator=$USER` once, then the script again.
 4. Open the printed `https://<machine>.<tailnet>.ts.net` URL on the phone and use Add to Home Screen.
 
 The server stays bound to localhost; only devices in your tailnet can reach it. `scripts/phone-access-off.sh` (or `.ps1`) turns it off, and clears any other `tailscale serve` setting on the machine too. No password is needed unless you share the tailnet with other people.
@@ -100,7 +100,15 @@ OpenStride works the same on a phone and a laptop: three tabs along the bottom o
 
 Over HTTPS the app installs to the home screen ("Add to Home Screen"; see Phone access). Once it has been opened online, the app, the active plan and any workout you've opened still open without a connection, under a banner saying how old the data is. Anything that needs the server (import, sync, chat, reviews, plan changes, new plans) is disabled until you're back online. After an update the new version shows from the second time you open the app.
 
-Pages to screenshot for a walkthrough: the plan overview, an open week, a done steady run (`#/plans/<id>/sessions/1/0`), an interval session with its Target column, Workouts, and a session not yet done.
+Screenshots from the demo, light and dark:
+
+| Page | Light | Dark |
+|---|---|---|
+| Plan overview | ![Plan overview, light](docs/screenshots/overview-light.png) | ![Plan overview, dark](docs/screenshots/overview-dark.png) |
+| Weeks | ![Weeks, light](docs/screenshots/weeks-light.png) | ![Weeks, dark](docs/screenshots/weeks-dark.png) |
+| Workout detail | ![Workout detail, light](docs/screenshots/workout-light.png) | ![Workout detail, dark](docs/screenshots/workout-dark.png) |
+| Workouts | ![Workouts, light](docs/screenshots/workouts-light.png) | ![Workouts, dark](docs/screenshots/workouts-dark.png) |
+| Plans | ![Plans, light](docs/screenshots/plans-light.png) | ![Plans, dark](docs/screenshots/plans-dark.png) |
 
 Workouts from before v3.1 have no stored file, so their detail page asks you to import the file again. Doing that adds the route and charts to the existing workout.
 
