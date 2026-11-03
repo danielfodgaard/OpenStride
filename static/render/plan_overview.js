@@ -1,7 +1,7 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, putJson, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
+  line, link, main, muted, notice, planPath, postJson, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -71,7 +71,7 @@ function chatMessage(message, proposals, planFile, bases, readOnly) {
   box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
   box.append(...richText(message.text));
   if (message.flags.length) box.append(bulletList(message.flags));
-  if (message.memory_updated) box.append(muted("The coach updated its notes about you.", "p"));
+  if (message.memory_updated) box.append(line(muted("The coach updated "), link("its notes about you", "#/coach"), muted(".")));
   const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);
   if (proposal) box.append(proposalView(proposal, planFile, bases, readOnly));
   return box;
@@ -108,37 +108,6 @@ function progressSection(progress) {
   const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed, r.sessions_skipped, r.sessions_replaced,
     r.as_planned, r.partly, r.missed_targets, r.unplanned];
   return foldable("Planned vs actual", false, table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]));
-}
-
-// The coach's notes: the one thing that carries across plans. The coach writes them; you can correct them.
-function memorySection(notes) {
-  const status = statusLine();
-  const text = textarea(12);
-  text.value = notes.content || notes.template;
-  const save = button("Save notes", status, async () => {
-    await putJson("/api/memory", { content: text.value });
-    refresh();
-  }, "Saving…", "primary");
-  const children = [
-    el("p", notes.updated_at ? `Last updated ${notes.updated_at} by the ${notes.updated_by}.` : "Nothing written yet. The coach fills this in as you talk; you can also write it yourself."),
-    labelled("Notes", text),
-    actions(save),
-    status,
-  ];
-  if (notes.versions.length) {
-    const pick = el("select");
-    for (const stamp of notes.versions) pick.add(new Option(stamp, stamp));
-    children.push(labelled("Earlier version", pick), actions(button("Restore this version", status, async () => {
-      await api(`/api/memory/restore/${encodeURIComponent(pick.value)}`, { method: "POST" });
-      refresh();
-    })));
-  }
-  return foldable("What your coach remembers", false, ...children);
-}
-
-function usageFooter(usage) {
-  const cost = usage.unpriced_models.length ? `$${usage.cost_usd} plus ${usage.unpriced_models.join(", ")}` : `$${usage.cost_usd}`;
-  return muted(`Models: ${usage.models.join(", ")} — ${usage.input_tokens} tokens in, ${usage.output_tokens} out — about ${cost} so far`, "p");
 }
 
 export const daysToGo = (days) => (days >= 0 ? `${days} days to go` : "race day has passed");
@@ -263,15 +232,13 @@ export async function planOverview(id) {
   const planFile = await api(`/api/plans/${encoded}`);
   const isDraft = planFile.meta.status === "draft";
   const isActive = planFile.meta.status === "active";
-  const [status, metrics, usage] = await Promise.all([
+  const [status, metrics] = await Promise.all([
     api(`/api/plans/${encoded}/status`),
     api(`/api/plans/${encoded}/metrics`),
-    api(`/api/plans/${encoded}/usage`),
   ]);
   const proposals = isDraft ? [] : await api(`/api/plans/${encoded}/proposals`);
   const messages = isDraft ? [] : await api(`/api/plans/${encoded}/chat`);
   const progress = isDraft ? null : await api(`/api/plans/${encoded}/progress`);
-  const notes = isDraft ? null : await api("/api/memory");
   const bases = {};
   for (const version of new Set(proposals.map((p) => p.based_on_version))) {
     bases[version] = await api(`/api/plans/${encoded}/versions/${version}`).catch(() => null);
@@ -298,11 +265,10 @@ export async function planOverview(id) {
       volumeCard,
       weeksLink,
       chatSection(planFile, messages, proposals, bases, !isActive),
-      memorySection(notes),
       progressSection(progress),
       foldable("Plan versions", false, versionLine(planFile), ...recentEdits(planFile)),
     );
   }
-  nodes.push(actions(downloadButton(planFile, actionStatus)), usageFooter(usage));
+  nodes.push(actions(downloadButton(planFile, actionStatus)));
   main.replaceChildren(...nodes);
 }

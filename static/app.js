@@ -1,4 +1,5 @@
 // Hash router, plus the views that aren't a plan page or a workout page.
+import { coachDataView } from "./render/coach_data.js";
 import { garminView } from "./render/garmin.js";
 import {
   actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, garminStatus, input,
@@ -230,6 +231,7 @@ async function route() {
     else if (page === "workouts") await workoutView(id);
     else if (page === "new") await newView(id);
     else if (page === "garmin") await garminView();
+    else if (page === "coach") await coachDataView();
     else if (page === "plans" && !id) await plansView();
     else if (page === "plans" && !section) await planOverview(id);
     else if (page === "plans" && section === "weeks") await weeksView(id, a);

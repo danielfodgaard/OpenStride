@@ -83,8 +83,8 @@ After a hand edit, the toast offers "Ask the coach to check this week", which op
 The coach's notes are one Markdown file, `data/athlete/memory.md`, that outlives plans and cleared chats. It holds what the app's data can't say: who you are, your goals beyond this plan, your life and schedule, injury and health history, how you respond to training, agreements you've made with the coach, how each plan went, and the questions the coach still wants to ask. Facts the app already holds (paces, volume, which sessions you did) stay out of it, because they are recomputed on every call and a copy would go stale.
 
 - **Every LLM call reads it**: the coach, plan generation, proposals and run reviews. A new plan starts from what the last one taught.
-- **Only two writers.** The coach rewrites the file through its tool, in the same reply, without asking. You can read and edit it under "What your coach remembers" on the plan page. Code never writes it.
-- **Every rewrite keeps the previous version**, and you can restore one from the same box.
+- **Only two writers.** The coach rewrites the file through its tool, in the same reply, without asking. You can read and edit it on the Coach data tab, which also shows what the coaching has cost in tokens. Code never writes it.
+- **Every rewrite keeps the previous version**, and you can restore one from the same page.
 - **The conversation itself stays windowed** (the last 30 messages go into the prompt). Anything worth keeping longer, the coach is told to write down.
 
 ### Training load, in code
