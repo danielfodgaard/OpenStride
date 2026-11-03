@@ -65,7 +65,7 @@ class LoopClient(FakeClient):
         return super().create(**kwargs)
 
     def stream(self, **kwargs):
-        self.requests.append(kwargs)
+        self.requests.append(kwargs | {"messages": list(kwargs["messages"])})
         return super().stream(**kwargs)
 
 
@@ -248,12 +248,41 @@ def test_clear_archives_the_thread_and_keeps_its_cost_and_the_notes():
     assert progress.usage_totals("plan")["input_tokens"] == 200
 
 
+def events(response):
+    """(event, data) pairs from a server-sent-events body."""
+    import json
+    out = []
+    for chunk in response.text.strip().split("\n\n"):
+        event, data = chunk.split("\n", 1)
+        out.append((event.removeprefix("event: "), json.loads(data.removeprefix("data: "))))
+    return out
+
+
+def test_the_route_streams_the_words_then_the_saved_messages(plan, monkeypatch):
+    fake = LoopClient(reply_tool("update_notes", text="Noting that.", content="# Profile\nx"), reply_text("Done."))
+    monkeypatch.setattr(chat.generator, "make_client", lambda: fake)
+    client = TestClient(main.app)
+    response = client.post("/api/plans/plan/chat", json={"text": "I'm 34"})
+    assert response.headers["content-type"].startswith("text/event-stream")
+    got = events(response)
+    assert got[:-1] == [("delta", "Noting that."), ("delta", "\n\n"), ("delta", "Done.")]
+    assert got[-1][0] == "done" and [m["role"] for m in got[-1][1]["messages"]] == ["user", "coach"]
+    assert storage.load_chat("plan")[1].text == "Noting that.\n\nDone."
+
+
+def test_a_failure_mid_stream_is_an_error_event(plan, monkeypatch):
+    fake = LoopClient(reply_text("", stop_reason="max_tokens"))
+    monkeypatch.setattr(chat.generator, "make_client", lambda: fake)
+    assert events(TestClient(main.app).post("/api/plans/plan/chat", json={"text": "hi"}))[-1][0] == "error"
+    assert storage.load_chat("plan") == []
+
+
 def test_routes_and_non_active_plans(monkeypatch):
     fake = LoopClient(reply_text("ok"))
     monkeypatch.setattr(chat.generator, "make_client", lambda: fake)
     monkeypatch.setenv("OPENSTRIDE_TODAY", "2026-11-11")
     client = TestClient(main.app)
-    result = client.post("/api/plans/plan/chat", json={"text": "hello"}).json()
+    result = events(client.post("/api/plans/plan/chat", json={"text": "hello"}))[-1][1]
     assert [m["role"] for m in result["messages"]] == ["user", "coach"]
     assert client.post("/api/plans/plan/chat", json={"text": "   "}).status_code == 422
 

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import hmac
 import logging
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, Form, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
@@ -448,10 +449,35 @@ def get_progress(plan_id: str) -> dict:
     return progress.planned_vs_actual(plan_file)
 
 
+def sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def chat_events(first: str | None, words):
+    """Text deltas as they come, then `done` with the saved messages, or `error` with the reason."""
+    try:
+        if first is not None:
+            yield sse("delta", first)
+        while True:
+            try:
+                yield sse("delta", next(words))
+            except StopIteration as done:
+                yield sse("done", done.value)
+                return
+    except (GenerationError, lifecycle.Conflict, lifecycle.PlanChanged, storage.FileLockTimeout) as error:
+        yield sse("error", str(error))
+
+
 @app.post("/api/plans/{plan_id}/chat")
-def send_chat(plan_id: str, body: ChatInput, if_match: str | None = Header(None)) -> dict:
+def send_chat(plan_id: str, body: ChatInput, if_match: str | None = Header(None)) -> StreamingResponse:
+    """Streams the reply as server-sent events. The checks run before the first byte, so a refused plan is still a 409."""
     check_etag(plan_id, if_match)
-    return chat.send(plan_id, body.text)
+    words = chat.stream(plan_id, body.text)
+    try:
+        first = next(words)
+    except StopIteration as done:  # nothing to stream, but a result all the same
+        return StreamingResponse(iter([sse("done", done.value)]), media_type="text/event-stream")
+    return StreamingResponse(chat_events(first, words), media_type="text/event-stream")
 
 
 @app.get("/api/plans/{plan_id}/chat")

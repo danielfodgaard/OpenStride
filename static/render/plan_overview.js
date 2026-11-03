@@ -1,7 +1,7 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
+  line, link, main, muted, notice, planPath, postJson, postStream, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -93,9 +93,19 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   const text = textarea(3);
   text.value = editMemo.chatDraft;
   editMemo.chatDraft = "";
+  const composer = labelled("Message", text);
   const send = button("Send", status, async () => {
     if (!text.value.trim()) throw new Error("Write a message first.");
-    await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
+    // The exchange shows as it streams; the reload at the end draws it properly, Markdown and all.
+    const you = el("div");
+    you.append(el("h4", "You"), el("p", text.value));
+    const live = el("p", "");
+    live.className = "streaming";
+    const coach = el("div");
+    coach.append(el("h4", "Coach"), live);
+    section.insertBefore(you, composer);
+    section.insertBefore(coach, composer);
+    await postStream(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id, (words) => { live.textContent += words; });
     refresh();
   }, "The coach is thinking…", "primary");
   const clear = button("New conversation", status, async () => {
@@ -103,7 +113,7 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
     await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
     refresh();
   });
-  section.append(labelled("Message", text), actions(send, clear), status);
+  section.append(composer, actions(send, clear), status);
   return section;
 }
 

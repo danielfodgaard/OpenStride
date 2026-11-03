@@ -29,8 +29,9 @@ class FakeClient:
 
     def stream(self, **kwargs):
         self.prompts.append(kwargs["messages"][0]["content"])
-        final = SimpleNamespace(get_final_message=lambda: self.replies.pop(0))
-        return Stream(final)
+        reply = self.replies.pop(0)
+        text_stream = (block.text for block in reply.content if block.type == "text")
+        return Stream(SimpleNamespace(get_final_message=lambda: reply, text_stream=text_stream))
 
 
 class Stream:

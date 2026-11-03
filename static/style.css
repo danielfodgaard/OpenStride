@@ -93,6 +93,7 @@ a { color: var(--accent); }
 }
 .tabs a[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
 .theme-toggle { min-width: 64px; }
+.streaming { white-space: pre-wrap; }
 
 /* Page */
 main {
