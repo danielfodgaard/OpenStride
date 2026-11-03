@@ -81,7 +81,11 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   const section = el("section");
   const encoded = encodeURIComponent(planFile.meta.id);
   section.append(el("h2", "Your coach"));
-  for (const message of messages) section.append(chatMessage(message, proposals, planFile, bases, readOnly));
+  const render = (message) => chatMessage(message, proposals, planFile, bases, readOnly);
+  // Only the latest exchange stays open; the rest folds away so the page doesn't grow with the conversation.
+  const earlier = messages.slice(0, -2);
+  if (earlier.length) section.append(foldable(`Earlier in this conversation (${earlier.length})`, false, ...earlier.map(render)));
+  section.append(...messages.slice(-2).map(render));
   if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask about your training, or ask for a plan change. The coach sees your plan, every run and its own notes about you."));
   if (readOnly) return section;
 
@@ -94,8 +98,8 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
     await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
     refresh();
   }, "The coach is thinking…", "primary");
-  const clear = button("Clear chat", status, async () => {
-    if (!confirm("Clear the chat? The coach keeps its notes about you but loses this conversation.")) return;
+  const clear = button("New conversation", status, async () => {
+    if (!confirm("Start a new conversation? The coach keeps its notes about you; this conversation is archived, not shown again.")) return;
     await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
     refresh();
   });
