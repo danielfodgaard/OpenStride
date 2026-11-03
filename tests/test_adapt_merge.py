@@ -223,14 +223,12 @@ def test_endpoints_refuse_non_active_plans():
     other.meta.id, other.meta.status = "next", "draft"
     storage.save_plan(other)
 
-    assert client.post("/api/plans/next/proposals", json={"scope": "this_week"}).status_code == 409
     assert client.post("/api/plans/next/restore/1").status_code == 409
 
     lifecycle.accept("next")  # archives "plan"
     assert client.post(f"/api/proposals/{proposal.proposal_id}/accept").status_code == 409
     assert client.post(f"/api/proposals/{proposal.proposal_id}/reject").status_code == 409
     assert client.post("/api/plans/plan/restore/1").status_code == 409
-    assert client.post("/api/plans/nope/proposals", json={"scope": "this_week"}).status_code == 404
     assert client.post("/api/proposals/nope/accept").status_code == 404
 
 

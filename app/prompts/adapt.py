@@ -19,10 +19,11 @@ Rules:
 - Judgments that may be overridden when the athlete asks or the situation calls for it: keep the long run on long_run_day and avoid two hard runs (tempo, intervals, long) on consecutive days.
 - Strength sessions never go the day before a long run or race. Cross-training replaces easy volume, not quality sessions.
 - Every change gets one Change entry whose summary gives the change and the reason in one line.
-- rationale is 2-4 sentences: why change or why not. Paces may differ from the reference if the athlete context justifies it."""
+- rationale is 2-4 sentences: why change or why not. Paces may differ from the reference if the athlete context justifies it.
+- The coach's notes about the athlete are at the end of the context. An injury history, a pattern or an agreement there counts as much as the recent runs."""
 
 
-def build_user_prompt(plan_file: PlanFile, activities: list[dict], metrics: str, scope_weeks: list[int], today, user_context: str) -> str:
+def build_user_prompt(plan_file: PlanFile, activities: list[dict], metrics: str, scope_weeks: list[int], today, user_context: str, notes: str) -> str:
     return f"""Today: {today.isoformat()}
 Scope weeks: {json.dumps(scope_weeks)}
 
@@ -42,4 +43,6 @@ Every session so far, with its review, the athlete's notes and RPE:
 {json.dumps(activities, indent=2)}
 
 Training metrics (load, fitness, fatigue, form, weekly volume):
-{metrics}"""
+{metrics}
+
+{notes}"""

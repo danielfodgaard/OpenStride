@@ -100,7 +100,7 @@ export function rowLink(href, title, meta, chipNode) {
 }
 
 // Filled by the edit that just happened, for the page that renders next.
-export const editMemo = { warnings: [], adaptContext: "" };
+export const editMemo = { warnings: [], chatDraft: "" };
 
 export function toast(text, ...buttons) {
   const item = el("div", text);
@@ -284,6 +284,7 @@ const jsonRequest = (method, path, body, plan) => api(path, {
 });
 export const postJson = (path, body, plan) => jsonRequest("POST", path, body, plan);
 export const patchJson = (path, body) => jsonRequest("PATCH", path, body);
+export const putJson = (path, body) => jsonRequest("PUT", path, body);
 
 export function statusLine() {
   const p = el("p");

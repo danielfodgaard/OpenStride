@@ -296,27 +296,6 @@ class Proposal(BaseModel):
     warnings: list[str] = []  # trade-offs to show above the diff; they never block
 
 
-class ProgressSummary(BaseModel):
-    headline: str
-    on_track: Literal["ahead", "on_track", "at_risk", "off_track"]
-    observations: list[str]
-    suggestions: list[str]
-
-
-class ProgressFile(BaseModel):
-    plan_id: str
-    summary: ProgressSummary
-    meta: ReviewMeta
-
-
-class CoachReply(BaseModel):
-    reply: str
-    action: Literal["none", "propose_change"]
-    change_request: str
-    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
-    flags: list[str]
-
-
 class ChatMessage(BaseModel):
     id: str
     role: Literal["user", "coach"]
@@ -326,7 +305,8 @@ class ChatMessage(BaseModel):
     proposal_id: str = ""
     usage: Usage = Usage(input_tokens=0, output_tokens=0)
     model: str = ""
-    flags: list[str] = []
+    flags: list[str] = []  # older messages; the coach no longer returns them
+    memory_updated: bool = False  # the coach rewrote its notes in this reply
 
 
 class DayLoad(BaseModel):

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app import activities, adapt, edits, generator, lifecycle, main, metrics, progress, storage
 from app.garmin import delivery, provider
 from app.models import AdaptationResult, ManualActivity, Match, PlanFile, TrainingPlan
-from app.prompts import adapt as adapt_prompt, chat, progress as progress_prompt, review as review_prompt
+from app.prompts import adapt as adapt_prompt, chat, review as review_prompt
 
 SAMPLES = Path("examples/activities")
 RUN = "2026-11-03_tue_easy_easy-run.fit"  # Tue 3 Nov, about 8 km
@@ -418,21 +418,21 @@ def test_a_replaced_session_loads_as_what_was_done():
 
 
 def test_every_coaching_prompt_explains_the_edit_fields():
-    for module in (review_prompt, adapt_prompt, chat, progress_prompt):
+    for module in (review_prompt, adapt_prompt, chat):
         assert "edit_note" in module.SYSTEM_PROMPT and "skipped" in module.SYSTEM_PROMPT
 
 
 def test_the_review_is_told_what_replaced_what():
     run = add_run()
     edit("replace", TEMPO, activity_id=run.id)
-    prompt = review_prompt.build_user_prompt(storage.load_activity(run.id), storage.load_plan("plan"), [], [], "{}", TUE)
+    prompt = review_prompt.build_user_prompt(storage.load_activity(run.id), storage.load_plan("plan"), [], [], "{}", TUE, "")
     assert f"Planned {at(1, 0).title}, did the run below" in prompt and '"status": "replaced"' in prompt
 
 
 def test_the_plan_in_prompts_carries_the_edit_fields():
     edit("move", to_date=date(2026, 11, 4), note="work trip")
     plan_file = storage.load_plan("plan")
-    prompt = adapt_prompt.build_user_prompt(plan_file, [], "{}", [1], TODAY, "")
+    prompt = adapt_prompt.build_user_prompt(plan_file, [], "{}", [1], TODAY, "", "")
     assert '"moved_from": "2026-11-03"' in prompt and "work trip" in prompt
 
 

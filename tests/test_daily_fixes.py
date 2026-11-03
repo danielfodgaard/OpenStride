@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app import activities, config, lifecycle, main, metrics, progress, storage
 from app.models import PlanFile
-from app.prompts import adapt, chat, progress as progress_prompt, review as review_prompt
+from app.prompts import adapt, chat, review as review_prompt
 
 NOT_DUE = "Sessions dated after today are not due yet. Never count them as missed or behind."
 SAMPLES = Path("examples/activities")
@@ -67,13 +67,13 @@ def test_form_starts_at_zero(plan):
 
 
 def test_every_coaching_prompt_has_the_not_due_rule():
-    for module in (review_prompt, adapt, chat, progress_prompt):
+    for module in (review_prompt, adapt, chat):
         assert NOT_DUE in module.SYSTEM_PROMPT
 
 
 def test_the_review_prompt_has_today_and_the_rule(plan):
     run = add_run(plan)
-    prompt = review_prompt.build_user_prompt(run, plan, [], [], "{}", date(2026, 10, 31))
+    prompt = review_prompt.build_user_prompt(run, plan, [], [], "{}", date(2026, 10, 31), "")
     assert "Today: 2026-10-31" in prompt
 
 

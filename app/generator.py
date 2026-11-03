@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 import anthropic
 from pydantic import ValidationError
 
-from app import clock, storage
+from app import clock, memory, storage
 from app.models import (
     DAYS,
     DatedPlan,
@@ -41,15 +41,9 @@ def make_client() -> anthropic.Anthropic:
     return anthropic.Anthropic()
 
 
-def call_claude(client, model, system, user_prompt, output_model, usage, max_tokens=MAX_TOKENS, stream=True):
-    """One structured Claude call. Adds to `usage`; returns an `output_model` instance."""
-    request = dict(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user_prompt}],
-        output_config={"format": {"type": "json_schema", "schema": anthropic.transform_schema(output_model)}},
-    )
+def complete(client, model, system, messages, usage, max_tokens=MAX_TOKENS, stream=True, **extra):
+    """One Claude call with the app's error handling. Adds to `usage`; returns the message."""
+    request = dict(model=model, max_tokens=max_tokens, system=system, messages=messages, **extra)
     try:
         if stream:
             with client.messages.stream(**request) as response:
@@ -65,7 +59,15 @@ def call_claude(client, model, system, user_prompt, output_model, usage, max_tok
         raise GenerationError("The response was too long and got cut off. Please try again.")
     if message.stop_reason == "refusal":
         raise GenerationError("Claude declined this request. Try rewording it.")
+    return message
 
+
+def call_claude(client, model, system, user_prompt, output_model, usage, max_tokens=MAX_TOKENS, stream=True):
+    """One structured Claude call. Adds to `usage`; returns an `output_model` instance."""
+    message = complete(
+        client, model, system, [{"role": "user", "content": user_prompt}], usage, max_tokens, stream,
+        output_config={"format": {"type": "json_schema", "schema": anthropic.transform_schema(output_model)}},
+    )
     text = "".join(block.text for block in message.content if block.type == "text")
     try:
         return output_model.model_validate_json(text)
@@ -112,7 +114,7 @@ def build_plan(request, system, make_prompt, client, today, plan_id=None, output
         request.race_distance_km,
         request.goal_time,
     ))
-    user_prompt = make_prompt(build_user_prompt(request, paces, starts))
+    user_prompt = make_prompt(build_user_prompt(request, paces, starts, memory.for_prompt()))
     usage = Usage(input_tokens=0, output_tokens=0)
 
     settled = lambda plan: apply_schedule(request, plan) if output_model is RegeneratedPlan else request

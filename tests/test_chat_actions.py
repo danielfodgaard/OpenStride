@@ -1,24 +1,38 @@
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import adapt, chat, lifecycle, main, progress, storage
+from app import adapt, chat, lifecycle, main, memory, progress, storage
 from app.models import PlanFile
 from test_adapt_merge import change_result, soften_thursday
-from test_generator import FakeClient, reply as fake_message
+from test_generator import FakeClient
 
 TODAY = date(2026, 11, 11)
-ANSWER = {"reply": "Your easy pace is fine.", "action": "none", "change_request": "", "scope": "this_week", "flags": []}
-PROPOSE = {
-    "reply": "Let's ease off Thursday.",
-    "action": "propose_change",
-    "change_request": "Make Thursday of this week easy",
-    "scope": "this_week",
-    "flags": ["Watch the calf"],
-}
 NO_CHANGE = {"recommendation": "no_change", "rationale": "One run is not a trend.", "changes": [], "weeks": []}
+USAGE = SimpleNamespace(input_tokens=100, output_tokens=200)
+
+
+def reply_text(text, stop_reason="end_turn"):
+    return SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)], usage=USAGE)
+
+
+def reply_tool(name, call_id="call-1", text="", **args):
+    content = [SimpleNamespace(type="text", text=text)] if text else []
+    content.append(SimpleNamespace(type="tool_use", id=call_id, name=name, input=args))
+    return SimpleNamespace(stop_reason="tool_use", content=content, usage=USAGE)
+
+
+def propose(change_request="Make Thursday of this week easy", scope="this_week"):
+    return reply_tool("propose_plan_change", scope=scope, change_request=change_request)
+
+
+def structured(data):
+    """A proposal reply, as the inner adaptation call returns it."""
+    import json
+    return reply_text(json.dumps(data))
 
 
 @pytest.fixture(autouse=True)
@@ -30,112 +44,167 @@ def plan(tmp_path, monkeypatch):
     return lifecycle.accept("plan")
 
 
-def replies(*items):
-    return FakeClient(*[fake_message(item) for item in items])
-
-
 def send(text, fake):
     return chat.send("plan", text, fake, TODAY)
+
+
+def tool_results(fake, call_index=1):
+    """The tool_result blocks the fake received in its nth call."""
+    return fake.requests[call_index]["messages"][-1]["content"]
+
+
+class LoopClient(FakeClient):
+    """FakeClient that also keeps every request, since the loop sends more than one."""
+
+    def __init__(self, *replies):
+        super().__init__(*replies)
+        self.requests = []
+
+    def create(self, **kwargs):
+        self.requests.append(kwargs | {"messages": list(kwargs["messages"])})  # the loop mutates its list
+        return super().create(**kwargs)
+
+    def stream(self, **kwargs):
+        self.requests.append(kwargs)
+        return super().stream(**kwargs)
 
 
 def test_an_answer_adds_one_coach_message_and_no_proposal(monkeypatch):
     calls = []
     monkeypatch.setattr(adapt, "create_proposal", lambda *a, **k: calls.append(a))
-    result = send("Is my easy pace too fast?", replies(ANSWER))
+    result = send("Is my easy pace too fast?", LoopClient(reply_text("Your easy pace is fine.")))
 
     thread = storage.load_chat("plan")
     assert [m.role for m in thread] == ["user", "coach"]
-    assert thread[1].action == "none" and thread[1].proposal_id == ""
+    assert thread[1].text == "Your easy pace is fine."
+    assert thread[1].action == "none" and thread[1].proposal_id == "" and not thread[1].memory_updated
     assert calls == [] and result["proposal"] is None
     assert storage.list_proposals("plan") == []
 
 
-def test_propose_change_calls_the_adaptation_once(monkeypatch, plan):
-    calls = []
-    real = adapt.create_proposal
+def test_propose_change_calls_the_adaptation_once_and_the_coach_explains_it(plan):
+    fake = LoopClient(propose(), structured(change_result(plan, [2], soften_thursday)), reply_text("Thursday is now easy; accept it below."))
+    result = send("My calf hurts, can we ease off?", fake)
 
-    def spy(plan_id, scope, context, client, today, origin):
-        calls.append((plan_id, scope, context))
-        return real(plan_id, scope, context, FakeClient(fake_message(change_result(plan, [2], soften_thursday))), today, origin)
-
-    monkeypatch.setattr(adapt, "create_proposal", spy)
-    result = send("My calf hurts, can we ease off?", replies(PROPOSE))
-
-    assert len(calls) == 1
-    assert calls[0][:2] == ("plan", "this_week")
-    assert calls[0][2].startswith("Make Thursday of this week easy\n\nFrom chat:\n")
-    assert "My calf hurts" in calls[0][2]
+    adaptation = fake.prompts[1]
+    assert adaptation.startswith("Today:") and "Make Thursday of this week easy\n\nFrom chat:\nMy calf hurts" in adaptation
+    [tool_result] = tool_results(fake, 2)
+    assert tool_result["tool_use_id"] == "call-1" and tool_result["is_error"] is False
+    assert '"recommendation": "change"' in tool_result["content"] and "Week 2 Thu" in tool_result["content"]
     coach = storage.load_chat("plan")[1]
-    assert coach.action == "proposal_created"
+    assert coach.text == "Thursday is now easy; accept it below." and coach.action == "proposal_created"
     assert coach.proposal_id == storage.list_proposals("plan")[0].proposal_id
-    assert coach.flags == ["Watch the calf"]
     assert result["proposal"]["proposal_id"] == coach.proposal_id
+    assert coach.usage.input_tokens == 200  # the two coach calls; the proposal's own call is billed on the proposal
 
 
 def test_chat_never_changes_the_plan(plan):
-    fake = replies(PROPOSE, change_result(plan, [2], soften_thursday))
-    send("Ease off please", fake)
+    send("Ease off please", LoopClient(propose(), structured(change_result(plan, [2], soften_thursday)), reply_text("Done.")))
     assert storage.load_plan("plan") == plan
     proposal = storage.list_proposals("plan")[0]
-    assert proposal.status == "pending"
+    assert proposal.status == "pending" and proposal.origin == "chat"
     assert adapt.accept(proposal.proposal_id, TODAY).meta.version == 2
 
 
-def test_no_change_from_the_adaptation_is_said_in_chat(plan):
-    send("Change my plan", replies(PROPOSE, NO_CHANGE))
+def test_no_change_from_the_adaptation_is_told_to_the_coach_and_saved(plan):
+    fake = LoopClient(propose(), structured(NO_CHANGE), reply_text("I looked, and I don't recommend a change."))
+    send("Change my plan", fake)
+    [tool_result] = tool_results(fake, 2)
+    assert "One run is not a trend." in tool_result["content"] and tool_result["is_error"] is False
     coach = storage.load_chat("plan")[1]
     assert coach.action == "none" and coach.proposal_id == ""
-    assert "One run is not a trend." in coach.text
-    assert coach.text.startswith("Let's ease off Thursday.")
-
-
-def test_chat_proposals_are_marked_and_a_no_change_is_still_saved_and_billed(plan):
-    send("Change my plan", replies(PROPOSE, NO_CHANGE))
     saved = storage.list_proposals("plan")
-    assert [p.origin for p in saved] == ["chat"] and saved[0].result.recommendation == "no_change"
-    assert progress.usage_totals("plan")["input_tokens"] == 200
+    assert [p.result.recommendation for p in saved] == ["no_change"]
+    assert progress.usage_totals("plan")["input_tokens"] == 300
 
 
-def test_form_proposals_are_adapt_and_old_files_default_to_it(plan):
-    proposal = adapt.create_proposal("plan", "this_week", "", replies(NO_CHANGE), TODAY)
-    assert proposal.origin == "adapt"
-    data = proposal.model_dump(mode="json")
-    del data["origin"], data["warnings"]
-    old = type(proposal).model_validate(data)
-    assert old.origin == "adapt" and old.warnings == []
-
-
-def test_failed_adaptation_keeps_the_reply(plan):
-    send("Change my plan", replies(PROPOSE, {"not": "valid"}))
+def test_failed_adaptation_is_an_error_result_and_the_reply_stands(plan):
+    fake = LoopClient(propose(), structured({"not": "valid"}), reply_text("I couldn't prepare that; let's try again tomorrow."))
+    send("Change my plan", fake)
+    [tool_result] = tool_results(fake, 2)
+    assert tool_result["is_error"] is True and "could not be prepared" in tool_result["content"]
     coach = storage.load_chat("plan")[1]
-    assert coach.action == "none" and "couldn't prepare that change" in coach.text
+    assert coach.action == "none" and coach.text.startswith("I couldn't prepare")
 
 
-def test_empty_change_request_retries_once():
-    bad = PROPOSE | {"change_request": "  "}
-    fake = replies(bad, ANSWER)
-    send("hello", fake)
-    assert len(fake.prompts) == 2 and "Fix these problems" in fake.prompts[1]
-    assert storage.load_chat("plan")[1].text == ANSWER["reply"]
+def test_a_second_proposal_in_one_message_is_refused():
+    fake = LoopClient(
+        propose(), structured(NO_CHANGE),
+        reply_tool("propose_plan_change", call_id="call-2", scope="this_week", change_request="Try again"),
+        reply_text("ok"),
+    )
+    send("Change my plan", fake)
+    [second] = tool_results(fake, 3)
+    assert second["is_error"] is True and "already prepared" in second["content"]
+    assert len(storage.list_proposals("plan")) == 1
 
 
-def test_still_empty_after_the_retry_becomes_a_plain_answer():
-    bad = PROPOSE | {"change_request": ""}
-    send("hello", replies(bad, bad))
-    assert storage.load_chat("plan")[1].action == "none"
-    assert storage.list_proposals("plan") == []
+def test_empty_reply_with_a_proposal_gets_a_stand_in_text(plan):
+    fake = LoopClient(propose(), structured(change_result(plan, [2], soften_thursday)), reply_text(""))
+    send("Ease off", fake)
+    assert storage.load_chat("plan")[1].text == "I've prepared the change below."
+
+
+def test_a_loop_that_never_ends_is_an_error_and_leaves_the_thread_alone():
+    notes = [reply_tool("update_notes", call_id=f"n{i}", content=f"# About the athlete\nversion {i}") for i in range(chat.MAX_CALLS)]
+    with pytest.raises(chat.generator.GenerationError, match="did not finish"):
+        send("hello", LoopClient(*notes))
+    assert storage.load_chat("plan") == []
 
 
 def test_failed_call_leaves_the_thread_alone():
     with pytest.raises(chat.generator.GenerationError):
-        send("hello", replies(ANSWER | {"action": "bad"}))
+        send("hello", LoopClient(reply_text("", stop_reason="max_tokens")))
     assert storage.load_chat("plan") == []
 
 
-def test_context_has_the_snapshot_and_at_most_30_messages():
+def test_update_notes_writes_the_memory_file_and_marks_the_message():
+    fake = LoopClient(reply_tool("update_notes", content="# About the athlete\nPrefers morning runs.\n"), reply_text("Noted."))
+    send("I prefer running in the morning", fake)
+    assert memory.load() == "# About the athlete\nPrefers morning runs.\n"
+    assert memory.status()["updated_by"] == "coach"
+    coach = storage.load_chat("plan")[1]
+    assert coach.memory_updated and coach.text == "Noted."
+    [tool_result] = tool_results(fake, 1)
+    assert tool_result["content"] == "Notes saved." and tool_result["is_error"] is False
+
+
+def test_too_long_notes_are_refused_with_the_reason():
+    fake = LoopClient(reply_tool("update_notes", content="x" * (memory.MAX_CHARS + 1)), reply_text("Too long, I'll condense."))
+    send("hello", fake)
+    [tool_result] = tool_results(fake, 1)
+    assert tool_result["is_error"] is True and "Condense" in tool_result["content"]
+    assert memory.load() == "" and not storage.load_chat("plan")[1].memory_updated
+
+
+def test_unknown_tool_is_an_error_result():
+    fake = LoopClient(reply_tool("delete_plan"), reply_text("Sorry."))
+    send("hello", fake)
+    [tool_result] = tool_results(fake, 1)
+    assert tool_result["is_error"] is True
+
+
+def test_the_coach_sees_its_notes_the_tools_and_the_cache_setting():
+    memory.save("# About the athlete\nHas a history of calf trouble.", by="athlete")
+    fake = LoopClient(reply_text("ok"))
+    send("hello", fake)
+    request = fake.requests[0]
+    assert "Has a history of calf trouble." in request["system"]
+    assert [tool["name"] for tool in request["tools"]] == ["propose_plan_change", "update_notes"]
+    assert request["cache_control"] == {"type": "ephemeral"}
+    assert request["model"] == "claude-opus-5-5"
+
+
+def test_empty_notes_show_the_template_to_the_coach():
+    fake = LoopClient(reply_text("ok"))
+    send("hello", fake)
+    assert "Nothing written yet" in fake.requests[0]["system"] and "# Open questions" in fake.requests[0]["system"]
+
+
+def test_context_has_the_snapshot_history_and_at_most_30_messages():
     old = [chat.message("user" if i % 2 == 0 else "coach", f"message-{i:02d}") for i in range(40)]
     storage.save_chat("plan", old)
-    fake = replies(ANSWER)
+    fake = LoopClient(reply_text("ok"))
     send("latest question", fake)
     prompt = fake.prompts[0]
 
@@ -144,40 +213,43 @@ def test_context_has_the_snapshot_and_at_most_30_messages():
     assert "message-10" not in prompt and "message-39" in prompt
     assert "latest question" in prompt
     assert "Today: 2026-11-11" in prompt and "Race date: 2027-01-10" in prompt
+    assert "How the plan got to this version" in prompt
 
 
 def test_context_includes_logbook_and_proposals(plan, monkeypatch):
     monkeypatch.setenv("OPENSTRIDE_TODAY", "2026-11-11")
-    storage.save_proposal(adapt.create_proposal("plan", "this_week", "x", replies(NO_CHANGE), TODAY))
+    storage.save_proposal(adapt.create_proposal("plan", "this_week", "x", FakeClient(structured(NO_CHANGE)), TODAY))
     client = TestClient(main.app)
     client.post("/api/plans/plan/manual", json={"date": "2026-11-03", "modality": "strength", "duration_min": 30, "note": "squats felt heavy"})
-    fake = replies(ANSWER)
+    fake = LoopClient(reply_text("ok"))
     send("hello", fake)
     assert "squats felt heavy" in fake.prompts[0] and "Pending and recent proposals" in fake.prompts[0]
     assert "One run is not a trend." in fake.prompts[0]
 
 
 def test_usage_is_on_the_message_and_in_the_plan_total():
-    send("hello", replies(ANSWER))
+    send("hello", LoopClient(reply_text("ok")))
     coach = storage.load_chat("plan")[1]
-    assert coach.usage.input_tokens == 100 and coach.model == "claude-sonnet-5-5"
+    assert coach.usage.input_tokens == 100 and coach.model == "claude-opus-5-5"
     assert progress.usage_totals("plan")["input_tokens"] == 100
 
 
-def test_clear_archives_the_thread_and_keeps_its_cost():
-    send("hello", replies(ANSWER))
+def test_clear_archives_the_thread_and_keeps_its_cost_and_the_notes():
+    memory.save("# About the athlete\nkeep me", by="athlete")
+    send("hello", LoopClient(reply_text("ok")))
     client = TestClient(main.app)
     assert client.post("/api/plans/plan/chat/clear").status_code == 204
     assert client.get("/api/plans/plan/chat").json() == []
     assert len(list(storage.plan_dir("plan").glob("chat_*.json"))) == 1
-    fake = replies(ANSWER)
+    fake = LoopClient(reply_text("ok"))
     send("again", fake)
     assert "hello" not in fake.prompts[0].split("Conversation so far")[1]
+    assert "keep me" in fake.requests[0]["system"]
     assert progress.usage_totals("plan")["input_tokens"] == 200
 
 
 def test_routes_and_non_active_plans(monkeypatch):
-    fake = replies(ANSWER)
+    fake = LoopClient(reply_text("ok"))
     monkeypatch.setattr(chat.generator, "make_client", lambda: fake)
     monkeypatch.setenv("OPENSTRIDE_TODAY", "2026-11-11")
     client = TestClient(main.app)
@@ -193,3 +265,10 @@ def test_routes_and_non_active_plans(monkeypatch):
     assert client.post("/api/plans/plan/chat", json={"text": "hi"}).status_code == 409
     assert client.post("/api/plans/plan/chat/clear").status_code == 409
     assert len(client.get("/api/plans/plan/chat").json()) == 2  # archived: still readable
+
+
+def test_old_messages_with_flags_still_load():
+    data = chat.message("coach", "x").model_dump() | {"flags": ["watch the calf"]}
+    del data["memory_updated"]
+    loaded = type(chat.message("coach", "x")).model_validate(data)
+    assert loaded.flags == ["watch the calf"] and loaded.memory_updated is False

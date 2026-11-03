@@ -302,7 +302,7 @@ async function warmCache() {
     await new Promise((resolve) => { navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }); });
   }
   const active = await activePlan();
-  const paths = ["/api/activities", "/api/plans", "/api/today"];
+  const paths = ["/api/activities", "/api/plans", "/api/today", "/api/memory"];
   if (active) {
     const plan = `/api/plans/${encodeURIComponent(active.meta.id)}`;
     paths.push(`/api/activities?plan_id=${encodeURIComponent(active.meta.id)}`, plan);

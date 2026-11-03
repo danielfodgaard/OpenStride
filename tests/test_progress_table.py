@@ -4,12 +4,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import activities, lifecycle, main, progress, storage
+from app import activities, chat, lifecycle, main, progress, storage
 from app.models import PlanFile, ReviewFile, ReviewMeta, RunReview, Usage
-from test_generator import FakeClient, reply
+from test_chat_actions import reply_text
+from test_generator import FakeClient
 
 SAMPLES = Path("examples/activities")
-SUMMARY = {"headline": "Solid first week", "on_track": "on_track", "observations": ["3 of 4 sessions"], "suggestions": ["Sleep more"]}
 
 
 def add_run(name, completion=None, model="claude-haiku-5-5"):
@@ -79,34 +79,17 @@ def test_manually_matched_run_counts_in_the_planned_week(plan):
     assert weeks[0]["actual_km"] == 6.0 and weeks[1]["actual_km"] == 0
 
 
-def test_summary_is_saved_and_gets_full_context(plan):
-    add_run("2026-11-05_easy.gpx", "as_planned")
-    fake = FakeClient(reply(SUMMARY))
-    result = progress.summarise("plan", fake, date(2026, 11, 11))
-
-    assert result.summary.on_track == "on_track"
-    assert progress.latest_summary("plan").summary.headline == "Solid first week"
-    prompt = fake.prompts[0]
-    assert "Planned vs actual:" in prompt and "Today: 2026-11-11" in prompt and "2026-11-05_easy.gpx" in prompt
-
-
-def test_summary_never_changes_the_plan(plan):
-    before = storage.load_plan("plan")
-    progress.summarise("plan", FakeClient(reply(SUMMARY)), date(2026, 11, 11))
-    assert storage.load_plan("plan") == before
-
-
 def test_usage_adds_up_everything_for_the_plan(plan):
     add_run("2026-11-05_easy.gpx", "as_planned")
-    progress.summarise("plan", FakeClient(reply(SUMMARY)), date(2026, 11, 11))  # sonnet: 100 in, 200 out
+    chat.send("plan", "hello", FakeClient(reply_text("Hi")), date(2026, 11, 11))  # opus: 100 in, 200 out
     totals = progress.usage_totals("plan")
 
     assert totals["input_tokens"] == 10000 + 1000 + 100
     assert totals["output_tokens"] == 5000 + 100 + 200
-    # Sonnet 10,100 in + 5,200 out; Haiku 1,000 in + 100 out.
-    expected = (10100 * 2 + 5200 * 10 + 1000 * 0.10 + 100 * 0.50) / 1_000_000
+    # Sonnet 10,000 in + 5,000 out; Opus 100 in + 200 out; Haiku 1,000 in + 100 out.
+    expected = (10000 * 2 + 5000 * 10 + 100 * 4 + 200 * 20 + 1000 * 0.10 + 100 * 0.50) / 1_000_000
     assert totals["cost_usd"] == pytest.approx(expected, abs=0.0001)
-    assert totals["models"] == ["claude-haiku-5-5", "claude-sonnet-5-5"]
+    assert totals["models"] == ["claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]
 
 
 def test_unknown_model_is_reported_not_priced(plan):
@@ -121,8 +104,6 @@ def test_progress_is_for_the_active_plan_only(plan):
     other.meta.id, other.meta.status = "next", "draft"
     storage.save_plan(other)
     assert client.get("/api/plans/next/progress").status_code == 409
-    assert client.post("/api/plans/next/progress/summary").status_code == 409
     lifecycle.accept("next")
     assert client.get("/api/plans/plan/progress").status_code == 200  # archived: past figures stay visible
-    assert client.post("/api/plans/plan/progress/summary").status_code == 409
     assert client.get("/api/plans/plan/usage").status_code == 200

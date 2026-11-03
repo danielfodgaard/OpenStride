@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from app import activities, adapt, chat, clock, config, edits, lifecycle, logbook, logsafe, metrics, progress, review, storage
+from app import activities, adapt, chat, clock, config, edits, lifecycle, logbook, logsafe, memory, metrics, progress, review, storage
 from app.garmin import delivery
 from app.garmin import sync as garmin_sync
 from app.garmin.provider import GarminError
@@ -30,7 +30,6 @@ from app.models import (
     Modality,
     PlanFile,
     PlanRequest,
-    ProgressFile,
     Proposal,
     ReviewFile,
     Step,
@@ -224,9 +223,8 @@ class EditBody(BaseModel):
     changes: SessionChanges | None = None
 
 
-class ProposalRequest(BaseModel):
-    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
-    user_context: str = ""
+class NotesInput(BaseModel):
+    content: str
 
 
 @app.get("/login", include_in_schema=False)
@@ -380,12 +378,6 @@ def rerun_review(activity_id: str) -> ReviewFile:
     return review.review_activity(storage.load_activity(activity_id))
 
 
-@app.post("/api/plans/{plan_id}/proposals")
-def create_proposal(plan_id: str, body: ProposalRequest, if_match: str | None = Header(None)) -> Proposal:
-    check_etag(plan_id, if_match)
-    return adapt.create_proposal(plan_id, body.scope, body.user_context)
-
-
 @app.get("/api/plans/{plan_id}/proposals")
 def get_proposals(plan_id: str) -> list[Proposal]:
     return storage.list_proposals(plan_id)
@@ -453,12 +445,7 @@ def get_progress(plan_id: str) -> dict:
     plan_file = lifecycle.require_plan(plan_id)
     if plan_file.meta.status == "draft":
         raise lifecycle.Conflict("A draft has no progress yet.")
-    return progress.planned_vs_actual(plan_file) | {"latest_summary": progress.latest_summary(plan_id)}
-
-
-@app.post("/api/plans/{plan_id}/progress/summary")
-def create_progress_summary(plan_id: str) -> ProgressFile:
-    return progress.summarise(plan_id)
+    return progress.planned_vs_actual(plan_file)
 
 
 @app.post("/api/plans/{plan_id}/chat")
@@ -477,6 +464,24 @@ def get_chat(plan_id: str) -> list[ChatMessage]:
 def clear_chat(plan_id: str, if_match: str | None = Header(None)) -> None:
     with checked_plan(plan_id, if_match):
         chat.clear(plan_id)
+
+
+@app.get("/api/memory")
+def get_memory() -> dict:
+    return memory.status()
+
+
+@app.put("/api/memory")
+def put_memory(body: NotesInput) -> dict:
+    try:
+        return memory.save(body.content, by="athlete")
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+
+
+@app.post("/api/memory/restore/{stamp}")
+def restore_memory(stamp: str) -> dict:
+    return memory.restore(stamp)
 
 
 @app.get("/api/plans/{plan_id}/metrics")

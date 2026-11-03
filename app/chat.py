@@ -1,23 +1,19 @@
-"""Coach chat. It can only ask for a proposal; the plan changes through the v2 accept flow."""
+"""The coach: one conversation with two tools. It proposes plan changes and keeps its notes; the plan changes only through accept."""
+import json
 import os
 import uuid
 from datetime import datetime, timezone
 
-from app import adapt, clock, generator, lifecycle, logbook, metrics, storage
-from app.models import ChatMessage, CoachReply, Usage
-from app.prompts.chat import SYSTEM_PROMPT, build_user_prompt
+from app import adapt, clock, generator, lifecycle, logbook, memory, metrics, storage
+from app.models import ChatMessage, Usage
+from app.prompts.chat import SYSTEM_PROMPT, TOOLS, build_user_prompt
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
-MAX_TOKENS = 4000
+DEFAULT_MODEL = "claude-opus-5-5"
+MAX_TOKENS = 8000
 HISTORY_LIMIT = 30
 RECENT_PROPOSALS = 5
 USER_MESSAGES_FOR_ADAPTATION = 3
-
-
-def check_reply(reply: CoachReply) -> list[str]:
-    if reply.action == "propose_change" and not reply.change_request.strip():
-        return ["change_request must say exactly what to change when action is propose_change"]
-    return []
+MAX_CALLS = 5  # a reply, a proposal and a notes update, with room for one tool error
 
 
 def message(role: str, text: str, **fields) -> ChatMessage:
@@ -30,17 +26,51 @@ def message(role: str, text: str, **fields) -> ChatMessage:
     )
 
 
-def run_proposal(plan_id: str, reply: CoachReply, thread: list[ChatMessage], client, today):
-    """Returns the text to add to the reply and the proposal id, if a proposal came of it."""
-    said = [m.text for m in thread if m.role == "user"][-USER_MESSAGES_FOR_ADAPTATION:]
-    context = reply.change_request + "\n\nFrom chat:\n" + "\n".join(said)
-    try:
-        proposal = adapt.create_proposal(plan_id, reply.scope, context, client, today, origin="chat")
-    except (generator.GenerationError, lifecycle.Conflict) as error:
-        return f"I couldn't prepare that change: {error}", ""
-    if proposal.result.recommendation == "no_change":
-        return f"Working through the details, I don't recommend a change. {proposal.result.rationale}", ""
-    return "", proposal.proposal_id
+class Turn:
+    """The coach's tools during one message, and what they did, so the saved message can point at it."""
+
+    def __init__(self, plan_id: str, client, today, said: list[str]):
+        self.plan_id, self.client, self.today, self.said = plan_id, client, today, said
+        self.proposal_id = ""
+        self.proposed = False
+        self.memory_updated = False
+
+    def run(self, name: str, args: dict) -> tuple[str, bool]:
+        """The tool result text, and whether it is an error."""
+        if name == "propose_plan_change":
+            return self.propose(args["scope"], args["change_request"])
+        if name == "update_notes":
+            return self.remember(args["content"])
+        return f"There is no tool called {name}.", True
+
+    def propose(self, scope: str, change_request: str) -> tuple[str, bool]:
+        if self.proposed:
+            return "A proposal was already prepared for this message. Explain it instead.", True
+        if not change_request.strip():
+            return "change_request must say exactly what to change.", True
+        context = change_request + "\n\nFrom chat:\n" + "\n".join(self.said)
+        try:
+            proposal = adapt.create_proposal(self.plan_id, scope, context, self.client, self.today, origin="chat")
+        except (generator.GenerationError, lifecycle.Conflict) as error:
+            return f"The proposal could not be prepared: {error}", True
+        self.proposed = True
+        if proposal.result.recommendation != "no_change":
+            self.proposal_id = proposal.proposal_id
+        return json.dumps({
+            "recommendation": proposal.result.recommendation,
+            "rationale": proposal.result.rationale,
+            "changes": [f"Week {c.week_number} {c.day}: {c.summary}" for c in proposal.result.changes],
+            "acceptable": proposal.acceptable,
+            "trade_offs": proposal.warnings,
+        }), False
+
+    def remember(self, content: str) -> tuple[str, bool]:
+        try:
+            memory.save(content, by="coach")
+        except ValueError as error:
+            return str(error), True
+        self.memory_updated = True
+        return "Notes saved.", False
 
 
 def send(plan_id: str, text: str, client=None, today=None) -> dict:
@@ -49,45 +79,57 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
     today = today or clock.today()
     client = client or generator.make_client()
     model = os.environ.get("CHAT_MODEL") or DEFAULT_MODEL
-    thread = storage.load_chat(plan_id)
     user = message("user", text.strip())
+    history = [*storage.load_chat(plan_id), user][-HISTORY_LIMIT:]
     prompt = build_user_prompt(
         plan_file,
         logbook.all_items(plan_id),
         metrics.for_prompt(plan_file),
         storage.list_proposals(plan_id)[:RECENT_PROPOSALS],
-        [*thread, user][-HISTORY_LIMIT:],
+        history,
         today,
     )
+    system = f"{SYSTEM_PROMPT}\n\n{memory.for_prompt()}"
     usage = Usage(input_tokens=0, output_tokens=0)
-    call = lambda content: generator.call_claude(
-        client, model, SYSTEM_PROMPT, content, CoachReply, usage, max_tokens=MAX_TOKENS, stream=False
-    )
-    reply = call(prompt)
-    errors = check_reply(reply)
-    if errors:
-        reply = call(f"{prompt}\n\nFix these problems:\n" + "\n".join(f"- {e}" for e in errors))
-        if check_reply(reply):
-            reply.action = "none"
+    turn = Turn(plan_id, client, today, [m.text for m in history if m.role == "user"][-USER_MESSAGES_FOR_ADAPTATION:])
+    messages = [{"role": "user", "content": prompt}]
+    for _ in range(MAX_CALLS):
+        # The whole prefix is cached, so the calls after a tool use re-read it at a tenth of the price.
+        reply = generator.complete(
+            client, model, system, messages, usage, MAX_TOKENS, stream=False,
+            tools=TOOLS, cache_control={"type": "ephemeral"},
+        )
+        messages.append({"role": "assistant", "content": reply.content})
+        calls = [block for block in reply.content if block.type == "tool_use"]
+        if not calls:
+            break
+        results = []
+        for call in calls:
+            content, failed = turn.run(call.name, call.input)
+            results.append({"type": "tool_result", "tool_use_id": call.id, "content": content, "is_error": failed})
+        messages.append({"role": "user", "content": results})
+    else:
+        raise generator.GenerationError("The coach did not finish answering. Please try again.")
 
-    body, proposal_id = reply.reply, ""
-    if reply.action == "propose_change":
-        extra, proposal_id = run_proposal(plan_id, reply, [*thread, user], client, today)
-        body = f"{body}\n\n{extra}" if extra else body
+    body = "".join(block.text for block in reply.content if block.type == "text").strip()
+    if not body:
+        if not turn.proposal_id:
+            raise generator.GenerationError("The coach returned an empty reply. Please try again.")
+        body = "I've prepared the change below."
     coach = message(
         "coach",
         body,
-        action="proposal_created" if proposal_id else "none",
-        proposal_id=proposal_id,
+        action="proposal_created" if turn.proposal_id else "none",
+        proposal_id=turn.proposal_id,
         usage=usage,
         model=model,
-        flags=reply.flags,
+        memory_updated=turn.memory_updated,
     )
     with storage.plan_lock(plan_id):  # read again: the other device may have chatted during the call
         storage.save_chat(plan_id, [*storage.load_chat(plan_id), user, coach])
     return {
         "messages": [user.model_dump(), coach.model_dump()],
-        "proposal": storage.load_proposal(proposal_id).model_dump() if proposal_id else None,
+        "proposal": storage.load_proposal(turn.proposal_id).model_dump() if turn.proposal_id else None,
     }
 
 

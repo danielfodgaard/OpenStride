@@ -334,14 +334,12 @@ def test_current_if_match_and_no_header_both_pass(plan_client):
     ("post", "/api/plans/plan/restore/1"),
     ("post", "/api/plans/plan/chat"),
     ("post", "/api/plans/plan/chat/clear"),
-    ("post", "/api/plans/plan/proposals"),
     ("post", "/api/plans/plan/manual"),
 ])
 def test_every_mutating_plan_route_checks_if_match(plan_client, method, path):
     bodies = {
         "regenerate": {"feedback": "x"},
         "chat": {"text": "x"},
-        "proposals": {"scope": "this_week"},
         "manual": {"date": "2026-01-05", "modality": "strength", "duration_min": 30},
     }
     kwargs = {"json": bodies[path.rsplit("/", 1)[1]]} if path.rsplit("/", 1)[1] in bodies else {}

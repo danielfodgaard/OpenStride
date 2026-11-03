@@ -35,7 +35,7 @@ def test_full_offline_flow_without_a_key(demo):
     restored = demo.post(f"/api/plans/{plan_id}/restore/1").json()
     assert restored["meta"]["version"] == 3 and restored["plan"] == plan["plan"]
 
-    assert demo.get(f"/api/plans/{plan_id}/progress").json()["latest_summary"]
+    assert demo.get(f"/api/plans/{plan_id}/progress").json()["weeks"]
 
 
 def test_every_recorded_file_has_its_route_and_charts_offline(demo):
@@ -60,9 +60,8 @@ def test_charts_work_offline_and_the_cache_is_there(demo):
 
 def test_llm_actions_fail_clearly_and_the_run_is_kept(demo):
     plan_id = demo.get("/api/plans/active").json()["meta"]["id"]
-    response = demo.post(f"/api/plans/{plan_id}/proposals", json={"scope": "this_week"})
+    response = demo.post(f"/api/plans/{plan_id}/chat", json={"text": "hi"})
     assert response.status_code == 502 and "API key" in response.json()["detail"]
-    assert demo.post(f"/api/plans/{plan_id}/chat", json={"text": "hi"}).status_code == 502
 
     with open("examples/activities/cross/2026-11-12_pool_swim.fit", "rb") as file:
         result = demo.post("/api/activities", files=[("files", ("swim.fit", file.read()))]).json()[0]

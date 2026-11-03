@@ -1,7 +1,7 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, refresh, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
+  line, link, main, muted, notice, planPath, postJson, putJson, refresh, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -66,44 +66,12 @@ function recentEdits({ meta }) {
   return lines.length ? [bulletList(lines)] : [];
 }
 
-function adaptSection(planFile, proposals, bases) {
-  const status = statusLine();
-  const scope = el("select");
-  scope.add(new Option("This week", "this_week"));
-  scope.add(new Option("Next 2 weeks", "next_2_weeks"));
-  scope.add(new Option("Rest of plan", "rest_of_plan"));
-  const context = textarea(2);
-  const prefilled = editMemo.adaptContext;
-  editMemo.adaptContext = "";
-  context.value = prefilled;
-  const suggest = button("Suggest plan changes", status, async () => {
-    await postJson(`/api/plans/${encodeURIComponent(planFile.meta.id)}/proposals`, {
-      scope: scope.value,
-      user_context: context.value,
-    });
-    refresh();
-  }, "Thinking… this can take a minute");
-  const latest = proposals.find((p) => p.origin !== "chat");
-  const pending = proposals.some((p) => p.origin !== "chat" && p.status === "pending");
-  const section = foldable(
-    "Adapt plan",
-    pending || Boolean(prefilled),
-    versionLine(planFile),
-    ...recentEdits(planFile),
-    labelled("Scope", scope),
-    labelled("Context", context),
-    actions(suggest),
-    status,
-  );
-  if (latest) section.append(proposalView(latest, planFile, bases));
-  return section;
-}
-
 function chatMessage(message, proposals, planFile, bases, readOnly) {
   const box = el("div");
   box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
   for (const paragraph of message.text.split(/\n+/)) box.append(el("p", paragraph));
   if (message.flags.length) box.append(bulletList(message.flags));
+  if (message.memory_updated) box.append(muted("The coach updated its notes about you.", "p"));
   const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);
   if (proposal) box.append(proposalView(proposal, planFile, bases, readOnly));
   return box;
@@ -112,20 +80,22 @@ function chatMessage(message, proposals, planFile, bases, readOnly) {
 function chatSection(planFile, messages, proposals, bases, readOnly) {
   const section = el("section");
   const encoded = encodeURIComponent(planFile.meta.id);
-  section.append(el("h2", "Coach chat"));
+  section.append(el("h2", "Your coach"));
   for (const message of messages) section.append(chatMessage(message, proposals, planFile, bases, readOnly));
-  if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask your coach about the plan or your training."));
+  if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask about your training, or ask for a plan change. The coach sees your plan, every run and its own notes about you."));
   if (readOnly) return section;
 
   const status = statusLine();
   const text = textarea(3);
+  text.value = editMemo.chatDraft;
+  editMemo.chatDraft = "";
   const send = button("Send", status, async () => {
     if (!text.value.trim()) throw new Error("Write a message first.");
     await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
     refresh();
   }, "The coach is thinking…", "primary");
   const clear = button("Clear chat", status, async () => {
-    if (!confirm("Clear the chat? The coach loses this history.")) return;
+    if (!confirm("Clear the chat? The coach keeps its notes about you but loses this conversation.")) return;
     await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
     refresh();
   });
@@ -133,30 +103,37 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   return section;
 }
 
-function summaryView({ summary }) {
-  const box = el("div");
-  box.append(el("h3", summary.headline), el("p", `Status: ${summary.on_track}`), bulletList(summary.observations));
-  if (summary.suggestions.length) box.append(el("p", "Suggestions (never applied automatically):"), bulletList(summary.suggestions));
-  return box;
-}
-
-function progressSection(planFile, progress, readOnly) {
-  const status = statusLine();
+function progressSection(progress) {
   const headers = ["Week", "Planned km", "Actual km", "Sessions planned", "Sessions done", "Skipped", "Replaced", "As planned", "Partly", "Missed targets", "Unplanned"];
   const row = (label, r) => [label, r.planned_km, r.actual_km, r.sessions_planned, r.sessions_completed, r.sessions_skipped, r.sessions_replaced,
     r.as_planned, r.partly, r.missed_targets, r.unplanned];
-  const summary = el("div");
-  if (progress.latest_summary) summary.append(summaryView(progress.latest_summary));
-  const section = foldable("Progress summary", false);
-  if (!readOnly) {
-    const ask = button("Progress summary", status, async () => {
-      const result = await api(`/api/plans/${encodeURIComponent(planFile.meta.id)}/progress/summary`, { method: "POST" });
-      summary.replaceChildren(summaryView(result));
-    }, "Summarising…");
-    section.append(actions(ask), status);
+  return foldable("Planned vs actual", false, table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]));
+}
+
+// The coach's notes: the one thing that carries across plans. The coach writes them; you can correct them.
+function memorySection(notes) {
+  const status = statusLine();
+  const text = textarea(12);
+  text.value = notes.content || notes.template;
+  const save = button("Save notes", status, async () => {
+    await putJson("/api/memory", { content: text.value });
+    refresh();
+  }, "Saving…", "primary");
+  const children = [
+    el("p", notes.updated_at ? `Last updated ${notes.updated_at} by the ${notes.updated_by}.` : "Nothing written yet. The coach fills this in as you talk; you can also write it yourself."),
+    labelled("Notes", text),
+    actions(save),
+    status,
+  ];
+  if (notes.versions.length) {
+    const pick = el("select");
+    for (const stamp of notes.versions) pick.add(new Option(stamp, stamp));
+    children.push(labelled("Earlier version", pick), actions(button("Restore this version", status, async () => {
+      await api(`/api/memory/restore/${encodeURIComponent(pick.value)}`, { method: "POST" });
+      refresh();
+    })));
   }
-  section.append(summary, el("h3", "Planned vs actual"), table(headers, [...progress.weeks.map((r) => row(r.week_number, r)), row("Total", progress.totals)]));
-  return section;
+  return foldable("What your coach remembers", false, ...children);
 }
 
 function usageFooter(usage) {
@@ -294,6 +271,7 @@ export async function planOverview(id) {
   const proposals = isDraft ? [] : await api(`/api/plans/${encoded}/proposals`);
   const messages = isDraft ? [] : await api(`/api/plans/${encoded}/chat`);
   const progress = isDraft ? null : await api(`/api/plans/${encoded}/progress`);
+  const notes = isDraft ? null : await api("/api/memory");
   const bases = {};
   for (const version of new Set(proposals.map((p) => p.based_on_version))) {
     bases[version] = await api(`/api/plans/${encoded}/versions/${version}`).catch(() => null);
@@ -320,8 +298,9 @@ export async function planOverview(id) {
       volumeCard,
       weeksLink,
       chatSection(planFile, messages, proposals, bases, !isActive),
-      progressSection(planFile, progress, !isActive),
-      isActive ? adaptSection(planFile, proposals, bases) : versionLine(planFile),
+      memorySection(notes),
+      progressSection(progress),
+      foldable("Plan versions", false, versionLine(planFile), ...recentEdits(planFile)),
     );
   }
   nodes.push(actions(downloadButton(planFile, actionStatus)), usageFooter(usage));

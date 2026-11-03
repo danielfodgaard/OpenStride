@@ -1,13 +1,8 @@
-"""Planned-vs-actual arithmetic, an on-demand LLM summary, and what the plan has cost so far."""
-import os
-from datetime import date, datetime, timezone
+"""Planned-vs-actual arithmetic, and what the plan has cost so far."""
+from datetime import date
 
-from app import activities, clock, generator, lifecycle, logbook, metrics, storage
-from app.models import PlanFile, ProgressFile, ProgressSummary, Proposal, ReviewMeta, Usage
-from app.prompts.progress import SYSTEM_PROMPT, build_user_prompt
-
-DEFAULT_MODEL = "claude-sonnet-5-5"
-MAX_TOKENS = 8000
+from app import activities, clock, lifecycle, metrics, storage
+from app.models import PlanFile, Proposal
 COMPLETIONS = ("as_planned", "partly", "missed_targets", "unplanned")
 # Dollars per million input and output tokens.
 PRICES = {
@@ -102,45 +97,8 @@ def plan_status(plan_file: PlanFile, today: date | None = None) -> dict:
     }
 
 
-def summary_files(plan_id: str) -> list[ProgressFile]:
-    paths = sorted((storage.DATA_DIR / "progress").glob(f"{storage.safe_id(plan_id)}_*.json"))
-    return [ProgressFile.model_validate_json(path.read_text()) for path in paths]
-
-
-def latest_summary(plan_id: str) -> ProgressFile | None:
-    files = summary_files(plan_id)
-    return files[-1] if files else None
-
-
-def summarise(plan_id: str, client=None, today=None) -> ProgressFile:
-    plan_file = lifecycle.require_active(plan_id)
-    runs = logbook.all_items(plan_id)
-    model = os.environ.get("PROGRESS_MODEL") or DEFAULT_MODEL
-    usage = Usage(input_tokens=0, output_tokens=0)
-    prompt = build_user_prompt(plan_file, planned_vs_actual(plan_file), runs, metrics.for_prompt(plan_file), today or clock.today())
-    summary = generator.call_claude(
-        client or generator.make_client(),
-        model,
-        SYSTEM_PROMPT,
-        prompt,
-        ProgressSummary,
-        usage,
-        max_tokens=MAX_TOKENS,
-        stream=False,
-    )
-    now = datetime.now(timezone.utc)
-    progress_file = ProgressFile(
-        plan_id=plan_id,
-        summary=summary,
-        meta=ReviewMeta(model=model, created_at=now.isoformat(timespec="seconds"), usage=usage),
-    )
-    path = storage.DATA_DIR / "progress" / f"{storage.safe_id(plan_id)}_{now:%Y-%m-%dT%H-%M-%S}.json"
-    storage.write_json(path, progress_file.model_dump_json(indent=2))
-    return progress_file
-
-
 def usage_totals(plan_id: str) -> dict:
-    """Every saved usage for this plan: drafts, proposals, reviews, summaries and chat."""
+    """Every saved usage for this plan: drafts, proposals, reviews and chat."""
     plan_file = lifecycle.require_plan(plan_id)
     folder = storage.plan_dir(plan_id)
     metas = [plan_file.meta]
@@ -150,7 +108,6 @@ def usage_totals(plan_id: str) -> dict:
         review_file = storage.load_review(run.id)
         if review_file:
             metas.append(review_file.meta)
-    metas += [progress_file.meta for progress_file in summary_files(plan_id)]
     metas += [m for m in storage.all_chat_messages(plan_id) if m.role == "coach"]
 
     cost = 0.0

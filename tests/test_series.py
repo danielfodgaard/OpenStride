@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import activities, adapt, chat, lifecycle, main, progress, review, storage
+from app import activities, adapt, chat, lifecycle, main, review, storage
 from app.models import PlanFile
 from app.series import build_series
 
@@ -143,23 +143,21 @@ def test_backfill_builds_from_raw_files(client, active):
 
 
 def test_series_never_reaches_a_prompt(client, active):
+    from test_chat_actions import reply_text
     from test_generator import FakeClient, reply
 
     upload(client, ROOT / "2026-11-03_tempo.fit")
     activity = storage.list_activities("plan")[0]
     row = storage.load_series(activity.id)["points"][50]
     marker = json.dumps(row[:2])[1:-1]
-    answer = {"reply": "ok", "action": "none", "change_request": "", "scope": "this_week", "flags": []}
     no_change = {"recommendation": "no_change", "rationale": "ok", "changes": [], "weeks": []}
-    summary = {"headline": "x", "on_track": "on_track", "observations": [], "suggestions": []}
     verdict = {"completion": "as_planned", "headline": "x", "observations": [], "flags": [], "effort": "as_planned"}
-    fake = FakeClient(reply(answer), reply(no_change), reply(summary), reply(verdict))
+    fake = FakeClient(reply_text("ok"), reply(no_change), reply(verdict))
 
     chat.send("plan", "hello", fake)
     adapt.create_proposal("plan", "this_week", "", fake)
-    progress.summarise("plan", fake)
     review.review_activity(activity, fake)
 
-    assert len(fake.prompts) == 4
+    assert len(fake.prompts) == 3
     for prompt in fake.prompts:
         assert "step_s" not in prompt and '"points"' not in prompt and marker not in prompt

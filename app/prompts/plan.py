@@ -20,10 +20,11 @@ Rules:
 - Strength sessions go on hard run days or rest days per the athlete's note, never the day before a long run or race. They last 20-40 minutes with 4-8 exercises, each a Step with repeat = sets, reps, load (for example "bodyweight", "20 kg" or "RPE 7") and description = exercise name, using only the athlete's equipment. Their distance_km is 0 and their target_pace is "".
 - Cross-training replaces easy volume, not quality sessions. It uses the athlete's cross_training sport, is duration-based with distance_km 0, and its target_pace holds the target effort, for example "RPE 4".
 - For running steps, reps is 0 and load is "".
-- Keep descriptions short."""
+- Keep descriptions short.
+- Your notes about the athlete come from earlier plans and conversations. Let them shape the plan (injury history, what worked, agreements) and say so in the summary when they do. When the request conflicts with them (for example a volume that injured the athlete before), follow the request and add a warning."""
 
 
-def build_user_prompt(request: SavedRequest, paces: Paces, starts: list[date]) -> str:
+def build_user_prompt(request: SavedRequest, paces: Paces, starts: list[date], notes: str) -> str:
     return f"""Runner request:
 {request.model_dump_json(indent=2)}
 
@@ -32,4 +33,6 @@ Reference paces:
 
 Number of weeks: {len(starts)}
 Week start dates: {json.dumps([d.isoformat() for d in starts])}
-Race date: {request.race_date.isoformat()}, a {DAYS[request.race_date.weekday()]}"""
+Race date: {request.race_date.isoformat()}, a {DAYS[request.race_date.weekday()]}
+
+{notes}"""

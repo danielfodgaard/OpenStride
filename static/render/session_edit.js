@@ -24,7 +24,7 @@ async function sendEdit(id, body) {
   const result = await postJson(`/api/plans/${encodeURIComponent(id)}/edits`, body, id);
   const note = body.note?.trim();
   const ask = actionButton("Ask the coach to check this week", async () => {
-    editMemo.adaptContext = `${result.summary}.${note ? ` Reason: ${note}.` : ""} Check the rest of the week.`;
+    editMemo.chatDraft = `I changed the plan by hand: ${result.summary}.${note ? ` Reason: ${note}.` : ""} Can you check the rest of the week?`;
     if (location.hash === planPath(id)) refresh();
     else location.hash = planPath(id);
   });
