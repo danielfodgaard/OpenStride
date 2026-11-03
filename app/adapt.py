@@ -14,7 +14,7 @@ from app.models import (
 from app.prompts.adapt import SYSTEM_PROMPT, build_user_prompt
 from app.validate import merge_warnings, scope_errors, validate_merge
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MODEL = "claude-opus-5-5"
 
 
 def compute_scope_weeks(plan_file: PlanFile, scope: str, today) -> list[int]:

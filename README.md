@@ -57,7 +57,7 @@ Each edit is a new plan version with a note the coach can read, so a later revie
 ### Tracking
 
 - **Import .fit and .gpx files** from any watch. Each file is parsed into a compact summary (distance, time, laps, km splits, heart rate, cadence) and matched to the planned session on that date. The raw file never goes to the LLM; the model gets the summary, which keeps each call small and cheap.
-- **Every imported run gets an automatic review** from a small, cheap model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
+- **Every imported run gets an automatic review** from the model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
 - **Strength and cross-training** sessions can be logged by hand or imported (rides and swims match cross-training sessions).
 
 ### On your phone and your watch
@@ -118,7 +118,7 @@ OpenStride's software is free. The only running cost is your own Claude API usag
 | The proposal itself | Sonnet 5.5 | 52,011 | 4,056 | $0.145 |
 | The proposal, when validation forces a retry | Sonnet 5.5 | 104,300 | 11,019 | $0.319 |
 
-Plan generation was measured on Haiku. On the default Sonnet 5.5, the same token counts cost about $0.24 per plan and $0.16 per regeneration.
+Plan generation was measured on Haiku. On the default Opus 5.5, the same token counts cost about $0.47 per plan and $0.32 per regeneration.
 
 The chat rows were measured before the coach became a tool loop on Opus 5.5 (the default `CHAT_MODEL` now). A reply that proposes a change is now two coach calls around the proposal call, on the same cached prefix; at Opus prices ($4 / $20 per million) expect roughly twice the Sonnet figures above for a question and about three times for a proposal. Not yet re-measured.
 
@@ -153,7 +153,7 @@ Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSO
 
 **Phone access, Garmin, password and backups:** see [docs/SETUP.md](docs/SETUP.md).
 
-**Models:** set per task in `.env` (`PLAN_MODEL`, `ADAPT_MODEL`, `REVIEW_MODEL`, `CHAT_MODEL`) to trade quality for cost. The coach defaults to Opus 5.5, the rest to Sonnet 5.5 and reviews to Haiku 5.5.
+**Models:** set per task in `.env` (`PLAN_MODEL`, `ADAPT_MODEL`, `REVIEW_MODEL`, `CHAT_MODEL`) to trade quality for cost. Everything defaults to Opus 5.5; the table above shows what the cheaper models cost.
 
 ---
 

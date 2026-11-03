@@ -6,7 +6,7 @@ from app import clock, generator, lifecycle, memory, metrics, storage
 from app.models import ActivitySummary, ManualActivity, ReviewFile, ReviewMeta, RunReview, Usage
 from app.prompts.review import SYSTEM_PROMPT, build_user_prompt
 
-DEFAULT_MODEL = "claude-haiku-5-5"
+DEFAULT_MODEL = "claude-opus-5-5"
 MAX_TOKENS = 8000
 
 

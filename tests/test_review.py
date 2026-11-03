@@ -65,7 +65,7 @@ def test_import_triggers_a_review_with_full_context(client, fake):
     assert "Easy 9 km" in prompt and "legs heavy" in prompt
     assert "Athlete's reference paces" in prompt and "5:11-6:13/km" in prompt
     assert "2026-11-05_easy.gpx" in prompt.split("Previous 7 days")[1]
-    assert fake.calls[0]["model"] == "claude-haiku-5-5"
+    assert fake.calls[0]["model"] == "claude-opus-5-5"
 
     listed = client.get("/api/activities", params={"plan_id": "plan"}).json()
     assert listed[0]["review"]["review"]["headline"] == "Good controlled run"
