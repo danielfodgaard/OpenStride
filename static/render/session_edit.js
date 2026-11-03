@@ -1,5 +1,5 @@
 // Hand edits: the session menu, the activity buttons, and the toast with Undo. Code applies these, no coach.
-import { actions, api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, toast } from "./ui.js";
+import { actions, api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, textarea, toast } from "./ui.js";
 import { DAYS, addDays, dateText, dayMs } from "./format.js";
 
 const ASSIGN_DAYS = 6;
@@ -95,6 +95,38 @@ function swapChoices(planFile, week, index, today, status, send) {
   return box;
 }
 
+const RUN_TYPES = ["easy", "long", "tempo", "intervals", "recovery"];
+
+// Rewrite the session itself. Only what differs is sent; the server drops interval steps when the amount or pace changes.
+function changeForm(session, status, send) {
+  const box = el("details");
+  box.append(el("summary", "Change…"));
+  const fields = {
+    title: input("text", session.title),
+    distance_km: input("number", session.distance_km),
+    duration_min: input("number", session.duration_min),
+    target_pace: input("text", session.target_pace),
+    description: textarea(3),
+  };
+  fields.description.value = session.description;
+  fields.distance_km.step = fields.duration_min.step = "0.5";
+  fields.distance_km.min = fields.duration_min.min = "0";
+  if (session.modality === "run") {
+    fields.type = el("select");
+    fields.type.append(...RUN_TYPES.map((t) => new Option(t, t, false, t === session.type)));
+  }
+  const row = el("div");
+  row.className = "field-row";
+  const labels = { title: "Title", type: "Type", distance_km: "Distance (km)", duration_min: "Duration (min)", target_pace: "Target pace", description: "Description" };
+  row.append(...Object.entries(fields).map(([key, control]) => labelled(labels[key], control)));
+  if (session.steps.length) row.append(muted("Changing the distance, duration or pace turns the steps into one steady block.", "p"));
+  box.append(row, option("Save changes", status, () => send({
+    kind: "change",
+    changes: Object.fromEntries(Object.entries(fields).map(([key, control]) => [key, control.type === "number" ? Number(control.value) : control.value])),
+  })));
+  return box;
+}
+
 export function sessionMenu(planFile, week, index) {
   const session = week.sessions[index];
   const b = el("button", "⋯");
@@ -113,6 +145,7 @@ export function sessionMenu(planFile, week, index) {
       : [
         el("h4", "Move to…"), ...moveChoices(planFile, week, session, today, status, send),
         swapChoices(planFile, week, index, today, status, send),
+        ...(session.type === "race" || session.date < today ? [] : [changeForm(session, status, send)]),
         option("Skip", status, () => send({ kind: "skip" })),
       ];
     sheet(`${session.day}: ${session.title}`, ...nodes, labelled("Note (optional)", note), status);

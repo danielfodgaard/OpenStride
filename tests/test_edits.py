@@ -246,6 +246,37 @@ def test_replace_needs_a_session_on_that_day():
         edit("replace", THU_EASY, activity_id=run.id)
 
 
+def test_change_rewrites_distance_pace_and_type_and_the_week_total():
+    before = at(1, 0)
+    result = edit("change", changes={"distance_km": 12, "target_pace": "5:30/km", "type": "easy", "title": "Easy run"}, note="legs heavy")
+    changed = at(1, 0)
+    assert (changed.distance_km, changed.target_pace, changed.type, changed.title) == (12, "5:30/km", "easy", "Easy run")
+    assert changed.edit_note == f"Changed {before.distance_km:g} to 12 km, {before.target_pace} to 5:30/km, tempo to easy: legs heavy"
+    assert result["summary"].startswith("Changed Tue tempo")
+    assert storage.load_plan("plan").plan.weeks[0].planned_km == round(42 - before.distance_km + 12, 2)
+    edits.undo("plan")
+    assert at(1, 0) == before
+
+
+def test_change_drops_the_steps_when_the_amount_changes_but_not_for_wording():
+    assert at(1, 0).steps
+    edit("change", changes={"description": "Take the long way round"})
+    assert at(1, 0).steps and at(1, 0).edit_note == "Changed the wording"
+    edit("change", changes={"duration_min": 50})
+    assert at(1, 0).steps == []
+
+
+@pytest.mark.parametrize("session, changes, text", [
+    (TEMPO, {"distance_km": 8}, "Nothing changed"),
+    (TEMPO, {"type": "strength"}, "can't become"),
+    (STRENGTH, {"type": "easy"}, "can't become"),
+    ({"week": 1, "index": 0}, {"distance_km": 5}, "today or later"),
+])
+def test_changes_that_are_refused(session, changes, text):
+    with pytest.raises(lifecycle.Conflict, match=text):
+        edits.apply("plan", "change", session, changes=changes, today=date(2026, 11, 4) if text == "today or later" else TODAY)
+
+
 def test_undo_restores_exactly():
     run = add_run()
     original = storage.load_plan("plan")
@@ -457,6 +488,14 @@ def test_skipping_a_sent_session_removes_it(garmin):
 def test_an_unsent_session_touches_nothing(garmin):
     run_edit("move", THU_EASY, to_date=date(2026, 11, 6))
     assert garmin.pushed == [] and garmin.deleted == []
+
+
+def test_changing_a_sent_session_resends_it_and_undo_sends_the_old_one(garmin):
+    assert run_edit("change", changes={"distance_km": 12}) == []
+    assert garmin.pushed == [TUE] and garmin.deleted == ["new-1"]
+    result = edits.undo("plan")
+    delivery.follow_edit(result["plan"], **result["garmin"])
+    assert garmin.pushed == [TUE, TUE] and len(garmin.deleted) == 2
 
 
 def test_undo_moves_it_back_on_garmin(garmin):

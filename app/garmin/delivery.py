@@ -73,7 +73,7 @@ def send_session(provider, plan_file: PlanFile, week: int, index: int) -> dict:
 
 
 def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[str]:
-    """After a hand edit: the mapping follows the sessions, and Garmin's calendar follows the dates."""
+    """After a hand edit: the mapping follows the sessions, and Garmin follows their dates and content."""
     plan_id = plan_file.meta.id
     with storage.plan_lock(plan_id):
         sent = {moved.get(key, key): entry for key, entry in load_sent(plan_id).items()}
@@ -83,7 +83,7 @@ def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[st
     def session_of(key):
         return session_at(plan_file, *map(int, key.split("/")))
 
-    resend = [key for key in moved.values() if key in sent and session_of(key).date.isoformat() != sent[key]["scheduled_date"]]
+    resend = [key for key in moved.values() if key in sent and workout_fit.fingerprint(session_of(key)) != sent[key]["hash"]]
     gone = [key for key in removed if key in sent]
     if not resend and not gone:
         return []

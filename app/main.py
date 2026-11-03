@@ -203,13 +203,25 @@ class SessionRef(BaseModel):
     index: int
 
 
+class SessionChanges(BaseModel):
+    """Only the fields sent change; the modality stays, so the type must fit it."""
+
+    type: Literal["easy", "long", "tempo", "intervals", "recovery", "strength", "cross_training"] | None = None
+    title: str | None = Field(None, min_length=1, max_length=80)
+    distance_km: float | None = Field(None, ge=0, le=100)
+    duration_min: float | None = Field(None, ge=0, le=600)
+    target_pace: str | None = Field(None, max_length=40)
+    description: str | None = Field(None, max_length=2000)
+
+
 class EditBody(BaseModel):
-    kind: Literal["move", "swap", "skip", "unskip", "assign_activity", "replace"]
+    kind: Literal["move", "swap", "skip", "unskip", "assign_activity", "replace", "change"]
     session: SessionRef | None = None
     to_date: Date | None = None
     other: SessionRef | None = None
     activity_id: str = ""
     note: str = ""
+    changes: SessionChanges | None = None
 
 
 class ProposalRequest(BaseModel):

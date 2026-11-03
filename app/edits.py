@@ -10,7 +10,7 @@ from app.activities import plan_entries
 from app.adapt import revive
 from app.garmin.delivery import key_of, session_at
 from app.models import HistoryEntry, Match, PlanFile
-from app.validate import merge_warnings
+from app.validate import MODALITIES, merge_warnings
 
 ASSIGN_DAYS = 6
 NO_TWO_RUNS = "already has a run. Use Swap instead."
@@ -103,6 +103,35 @@ def skip(session, note, done, keys):
     return f"Skipped {label(session)}"
 
 
+def change(session, changes: dict, today, note, done, keys):
+    """The athlete rewrites what the session is. Steps go when the amount or pace changes: they no longer describe it."""
+    check_free(session, done, keys)
+    if session.date < today:
+        refuse("Only sessions dated today or later can be changed.")
+    changes = {k: v for k, v in changes.items() if v is not None and v != getattr(session, k)}
+    if not changes:
+        refuse("Nothing changed.")
+    if "type" in changes and MODALITIES[changes["type"]] != session.modality:
+        refuse(f"A {session.modality} session can't become a {changes['type']} session. Skip it and add the other kind instead.")
+    was = label(session)
+    diffs = []
+    if "distance_km" in changes:
+        diffs.append(f"{session.distance_km:g} to {changes['distance_km']:g} km")
+    if "duration_min" in changes:
+        diffs.append(f"{session.duration_min:g} to {changes['duration_min']:g} min")
+    if "target_pace" in changes:
+        diffs.append(f"{session.target_pace or 'no pace'} to {changes['target_pace'] or 'no pace'}")
+    if "type" in changes:
+        diffs.append(f"{session.type} to {changes['type']}")
+    if changes.keys() & {"distance_km", "duration_min", "target_pace"}:
+        session.steps = []
+    for key, value in changes.items():
+        setattr(session, key, value)
+    what = ", ".join(diffs) or "the wording"
+    session.edit_note = f"Changed {what}: {note}" if note else f"Changed {what}"
+    return f"Changed {was}: {what}"
+
+
 def unskip(plan_file, session):
     if session.status != "skipped":
         refuse("This session isn't skipped.")
@@ -193,7 +222,7 @@ def day_warnings(new: PlanFile, sessions: list) -> list[str]:
 
 
 def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | None = None, other: dict | None = None,
-          activity_id: str = "", note: str = "", today: date | None = None) -> dict:
+          activity_id: str = "", note: str = "", changes: dict | None = None, today: date | None = None) -> dict:
     today = today or clock.today()
     with storage.workout_lock(plan_id):
         plan_file = lifecycle.require_active(plan_id)
@@ -223,6 +252,12 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             summary = skip(chosen, note, done, keys)
         elif kind == "unskip":
             summary = unskip(new, chosen)
+        elif kind == "change":
+            before_km = chosen.distance_km
+            summary = change(chosen, changes or {}, today, note, done, keys)
+            if chosen.modality == "run":
+                week = new.week_of(chosen.date)
+                week.planned_km = round(week.planned_km - before_km + chosen.distance_km, 2)
         else:
             entry, save = load_entry(activity_id, plan_id)
             if kind == "assign_activity":
@@ -236,6 +271,8 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             week.sessions.sort(key=lambda s: s.date)
         after = locate(new)
         changes = {key_of(*keys[id(s)]): key_of(*after[id(s)]) for s in where.values() if keys[id(s)] != after[id(s)]}
+        if kind == "change":
+            changes[key_of(*after[id(chosen)])] = key_of(*after[id(chosen)])  # same key, so Garmin re-checks its content
 
         new.meta.version += 1
         undo_matches = rematch(new, where, moved, entries, target)
