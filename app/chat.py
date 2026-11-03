@@ -9,11 +9,13 @@ from app.models import ChatMessage, Usage
 from app.prompts.chat import SYSTEM_PROMPT, TOOLS, build_user_prompt
 
 DEFAULT_MODEL = "claude-opus-5-5"
-MAX_TOKENS = 8000
+MAX_TOKENS = 16000
 HISTORY_LIMIT = 30
 RECENT_PROPOSALS = 5
 USER_MESSAGES_FOR_ADAPTATION = 3
-MAX_CALLS = 5  # a reply, a proposal and a notes update, with room for one tool error
+MAX_CALLS = 6  # a notes update, a proposal and the reply, with room for a tool error and one correction
+LEAK_MARKS = ("<invoke", "</invoke>", "</parameter>")  # a tool call written out as text instead of made
+LEAK_NUDGE = "That reply wrote a tool call out as text, so nothing was saved and the athlete would see the tags. Make the call through the tool interface now, then give your whole reply again without any tool-call text."
 
 
 def message(role: str, text: str, **fields) -> ChatMessage:
@@ -93,16 +95,22 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
     usage = Usage(input_tokens=0, output_tokens=0)
     turn = Turn(plan_id, client, today, [m.text for m in history if m.role == "user"][-USER_MESSAGES_FOR_ADAPTATION:])
     messages = [{"role": "user", "content": prompt}]
+    texts, nudged = [], False
     for _ in range(MAX_CALLS):
         # The whole prefix is cached, so the calls after a tool use re-read it at a tenth of the price.
         reply = generator.complete(
             client, model, system, messages, usage, MAX_TOKENS, stream=False,
-            tools=TOOLS, cache_control={"type": "ephemeral"},
+            tools=TOOLS, cache_control={"type": "ephemeral"}, output_config={"effort": "high"},
         )
         messages.append({"role": "assistant", "content": reply.content})
+        texts += [block.text for block in reply.content if block.type == "text"]
         calls = [block for block in reply.content if block.type == "tool_use"]
         if not calls:
-            break
+            if nudged or not any(mark in text for mark in LEAK_MARKS for text in texts):
+                break
+            nudged, texts = True, []
+            messages.append({"role": "user", "content": LEAK_NUDGE})
+            continue
         results = []
         for call in calls:
             content, failed = turn.run(call.name, call.input)
@@ -111,7 +119,7 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
     else:
         raise generator.GenerationError("The coach did not finish answering. Please try again.")
 
-    body = "".join(block.text for block in reply.content if block.type == "text").strip()
+    body = "\n\n".join(text.strip() for text in texts if text.strip())
     if not body:
         if not turn.proposal_id:
             raise generator.GenerationError("The coach returned an empty reply. Please try again.")

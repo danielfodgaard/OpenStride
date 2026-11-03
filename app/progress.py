@@ -113,10 +113,14 @@ def usage_totals(plan_id: str) -> dict:
     cost = 0.0
     for meta in metas:
         input_price, output_price = PRICES.get(meta.model, (0, 0))
-        cost += (meta.usage.input_tokens * input_price + meta.usage.output_tokens * output_price) / 1_000_000
+        usage = meta.usage
+        # Cache reads cost a tenth of the input price, cache writes a quarter more.
+        tokens_in = usage.input_tokens + usage.cache_read_input_tokens * 0.1 + usage.cache_creation_input_tokens * 1.25
+        cost += (tokens_in * input_price + usage.output_tokens * output_price) / 1_000_000
     return {
         "models": sorted({meta.model for meta in metas}),
-        "input_tokens": sum(meta.usage.input_tokens for meta in metas),
+        "input_tokens": sum(m.usage.input_tokens + m.usage.cache_read_input_tokens + m.usage.cache_creation_input_tokens for m in metas),
+        "cached_tokens": sum(m.usage.cache_read_input_tokens for m in metas),
         "output_tokens": sum(meta.usage.output_tokens for meta in metas),
         "cost_usd": round(cost, 4),
         "unpriced_models": sorted({

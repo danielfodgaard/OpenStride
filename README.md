@@ -95,7 +95,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **739 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
+- **743 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
@@ -129,7 +129,7 @@ The chat rows were measured before the coach became a tool loop on Opus 5.5 (the
 | Light: plan + every run reviewed + a weekly check-in with the coach | **~$0.44**, plus ~$0.10 once for the plan |
 | Heavy: the above + 20 chat messages + 2 proposals, on Sonnet | **~$3.00** |
 
-The coach is most of the heavy-use cost, because every message sends the full plan and history, and that input grows as the plan goes on. The coach's calls now set a prompt-cache breakpoint, so the second and third call inside one reply re-read the prefix at a tenth of the price; whether the cache also survives between replies depends on how fast you type.
+The coach is most of the heavy-use cost, because every message sends the full plan and history, and that input grows as the plan goes on. The coach's calls set a prompt-cache breakpoint, so the second and third call inside one reply re-read the prefix at a tenth of the price; whether the cache also survives between replies depends on how fast you type. Cached tokens are counted and priced in the usage footer.
 
 ---
 

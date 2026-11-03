@@ -55,6 +55,8 @@ def complete(client, model, system, messages, usage, max_tokens=MAX_TOKENS, stre
 
     usage.input_tokens += message.usage.input_tokens
     usage.output_tokens += message.usage.output_tokens
+    usage.cache_read_input_tokens += getattr(message.usage, "cache_read_input_tokens", 0) or 0
+    usage.cache_creation_input_tokens += getattr(message.usage, "cache_creation_input_tokens", 0) or 0
     if message.stop_reason == "max_tokens":
         raise GenerationError("The response was too long and got cut off. Please try again.")
     if message.stop_reason == "refusal":

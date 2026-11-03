@@ -1,7 +1,7 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, putJson, refresh, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
+  line, link, main, muted, notice, planPath, postJson, putJson, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -69,7 +69,7 @@ function recentEdits({ meta }) {
 function chatMessage(message, proposals, planFile, bases, readOnly) {
   const box = el("div");
   box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
-  for (const paragraph of message.text.split(/\n+/)) box.append(el("p", paragraph));
+  box.append(...richText(message.text));
   if (message.flags.length) box.append(bulletList(message.flags));
   if (message.memory_updated) box.append(muted("The coach updated its notes about you.", "p"));
   const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);

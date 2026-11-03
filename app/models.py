@@ -153,8 +153,10 @@ class Match(BaseModel):
 
 
 class Usage(BaseModel):
-    input_tokens: int
+    input_tokens: int  # uncached
     output_tokens: int
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
 
 
 class HistoryEntry(BaseModel):

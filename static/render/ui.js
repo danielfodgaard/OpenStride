@@ -74,6 +74,36 @@ export function foldable(title, open, ...children) {
   return box;
 }
 
+const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const inline = (text) => escapeHtml(text)
+  .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+  .replace(/`([^`]+)`/g, "<code>$1</code>")
+  .replace(/(^|\s)\*(\S.*?\S|\S)\*(?=[\s.,;:!?]|$)/g, "$1<em>$2</em>");
+const LIST_LINE = /^\s*(?:[-*•]|\d+[.)])\s+/;
+
+// The coach's light Markdown: paragraphs, bullet and numbered lists, bold, code. Headings become bold lines.
+export function richText(text) {
+  const nodes = [];
+  let list = null;
+  for (const line of text.split("\n")) {
+    if (LIST_LINE.test(line)) {
+      const numbered = /^\s*\d/.test(line);
+      if (!list || list.tagName !== (numbered ? "OL" : "UL")) nodes.push(list = el(numbered ? "ol" : "ul"));
+      const item = el("li");
+      item.innerHTML = inline(line.replace(LIST_LINE, ""));
+      list.append(item);
+      continue;
+    }
+    list = null;
+    if (!line.trim()) continue;
+    const p = el("p");
+    const heading = line.match(/^#+\s+(.*)/);
+    p.innerHTML = heading ? `<strong>${inline(heading[1])}</strong>` : inline(line);
+    nodes.push(p);
+  }
+  return nodes;
+}
+
 export function notice(text, kind = "") {
   const p = el("p", text);
   p.className = `notice ${kind}`.trim();

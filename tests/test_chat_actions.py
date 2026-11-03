@@ -191,7 +191,7 @@ def test_the_coach_sees_its_notes_the_tools_and_the_cache_setting():
     request = fake.requests[0]
     assert "Has a history of calf trouble." in request["system"]
     assert [tool["name"] for tool in request["tools"]] == ["propose_plan_change", "update_notes"]
-    assert request["cache_control"] == {"type": "ephemeral"}
+    assert request["cache_control"] == {"type": "ephemeral"} and request["output_config"] == {"effort": "high"}
     assert request["model"] == "claude-opus-5-5"
 
 
@@ -272,3 +272,40 @@ def test_old_messages_with_flags_still_load():
     del data["memory_updated"]
     loaded = type(chat.message("coach", "x")).model_validate(data)
     assert loaded.flags == ["watch the calf"] and loaded.memory_updated is False
+
+
+def test_text_from_every_call_in_the_loop_is_kept(plan):
+    first = propose()
+    first.content.insert(0, SimpleNamespace(type="text", text="Here is what I'd change."))
+    fake = LoopClient(first, structured(change_result(plan, [2], soften_thursday)), reply_text("Accept it below."))
+    send("Ease off", fake)
+    assert storage.load_chat("plan")[1].text == "Here is what I'd change.\n\nAccept it below."
+
+
+def test_a_tool_call_written_as_text_gets_one_correction_turn():
+    leaked = reply_text('Noted.\n\n```\n<invoke name="update_notes">\n<parameter name="content"># Profile</parameter>\n</invoke>\n```')
+    fake = LoopClient(leaked, reply_tool("update_notes", content="# Profile\nage 34"), reply_text("Noted, properly this time."))
+    send("I'm 34", fake)
+    assert fake.requests[1]["messages"][-1] == {"role": "user", "content": chat.LEAK_NUDGE}
+    assert memory.load() == "# Profile\nage 34\n"
+    coach = storage.load_chat("plan")[1]
+    assert coach.text == "Noted, properly this time." and coach.memory_updated
+
+
+def test_a_second_leak_is_not_corrected_again():
+    leaked = reply_text("<invoke>still text</invoke>")
+    fake = LoopClient(leaked, leaked)
+    send("hello", fake)
+    assert len(fake.requests) == 2 and storage.load_chat("plan")[1].text == "<invoke>still text</invoke>"
+
+
+def test_cached_tokens_are_counted_and_priced():
+    cached = reply_text("ok")
+    cached.usage = SimpleNamespace(input_tokens=4, output_tokens=200, cache_read_input_tokens=50000, cache_creation_input_tokens=1000)
+    send("hello", LoopClient(cached))
+    coach = storage.load_chat("plan")[1]
+    assert (coach.usage.input_tokens, coach.usage.cache_read_input_tokens, coach.usage.cache_creation_input_tokens) == (4, 50000, 1000)
+    totals = progress.usage_totals("plan")
+    assert totals["input_tokens"] == 51004 and totals["cached_tokens"] == 50000
+    expected = ((4 + 50000 * 0.1 + 1000 * 1.25) * 4 + 200 * 20) / 1_000_000
+    assert totals["cost_usd"] == pytest.approx(expected, abs=0.0001)

@@ -69,7 +69,7 @@ def test_import_triggers_a_review_with_full_context(client, fake):
 
     listed = client.get("/api/activities", params={"plan_id": "plan"}).json()
     assert listed[0]["review"]["review"]["headline"] == "Good controlled run"
-    assert listed[0]["review"]["meta"]["usage"] == {"input_tokens": 50, "output_tokens": 20}
+    assert listed[0]["review"]["meta"]["usage"] == {"input_tokens": 50, "output_tokens": 20, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
 
 
 def test_unplanned_run_says_so(client, fake):
