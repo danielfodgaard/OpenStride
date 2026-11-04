@@ -1,8 +1,8 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, recall, refresh, remember, richText, rowLink, stale, statStrip, statusLine, table, textarea,
-  viewToken,
+  line, link, main, muted, notice, planPath, postJson, postStream, recall, refresh, remember, richText, rowLink, stale, statStrip, statusLine,
+  table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -84,8 +84,12 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   const encoded = encodeURIComponent(planFile.meta.id);
   const key = `chat:${planFile.meta.id}`;
   const section = foldable("Your coach", Boolean(editMemo.chatDraft) || recall(key) !== false);
-  section.addEventListener("toggle", () => remember(key, section.open));
-  for (const message of messages) section.append(chatMessage(message, proposals, planFile, bases, readOnly));
+  section.addEventListener("toggle", (event) => { if (event.target === section) remember(key, section.open); });
+  const render = (message) => chatMessage(message, proposals, planFile, bases, readOnly);
+  // Only the latest exchange stays open; the rest folds away so the page doesn't grow with the conversation.
+  const earlier = messages.slice(0, -2);
+  if (earlier.length) section.append(foldable(`Earlier in this conversation (${earlier.length})`, false, ...earlier.map(render)));
+  section.append(...messages.slice(-2).map(render));
   if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask about your training, or ask for a plan change. The coach sees your plan, every run and its own notes about you."));
   if (readOnly) return section;
 
@@ -93,17 +97,27 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
   const text = textarea(3);
   text.value = editMemo.chatDraft;
   editMemo.chatDraft = "";
+  const composer = labelled("Message", text);
   const send = button("Send", status, async () => {
     if (!text.value.trim()) throw new Error("Write a message first.");
-    await postJson(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id);
+    // The exchange shows as it streams; the reload at the end draws it properly, Markdown and all.
+    const you = el("div");
+    you.append(el("h4", "You"), el("p", text.value));
+    const live = el("p", "");
+    live.className = "streaming";
+    const coach = el("div");
+    coach.append(el("h4", "Coach"), live);
+    section.insertBefore(you, composer);
+    section.insertBefore(coach, composer);
+    await postStream(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id, (words) => { live.textContent += words; });
     refresh();
   }, "The coach is thinking…", "primary");
-  const clear = button("Clear chat", status, async () => {
-    if (!confirm("Clear the chat? The coach keeps its notes about you but loses this conversation.")) return;
+  const clear = button("New conversation", status, async () => {
+    if (!confirm("Start a new conversation? The coach keeps its notes about you; this conversation is archived, not shown again.")) return;
     await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
     refresh();
   });
-  section.append(labelled("Message", text), actions(send, clear), status);
+  section.append(composer, actions(send, clear), status);
   return section;
 }
 

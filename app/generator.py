@@ -41,6 +41,19 @@ def make_client() -> anthropic.Anthropic:
     return anthropic.Anthropic()
 
 
+def finish(message, usage):
+    """The checks every call shares. Adds to `usage`; returns the message."""
+    usage.input_tokens += message.usage.input_tokens
+    usage.output_tokens += message.usage.output_tokens
+    usage.cache_read_input_tokens += getattr(message.usage, "cache_read_input_tokens", 0) or 0
+    usage.cache_creation_input_tokens += getattr(message.usage, "cache_creation_input_tokens", 0) or 0
+    if message.stop_reason == "max_tokens":
+        raise GenerationError("The response was too long and got cut off. Please try again.")
+    if message.stop_reason == "refusal":
+        raise GenerationError("Claude declined this request. Try rewording it.")
+    return message
+
+
 def complete(client, model, system, messages, usage, max_tokens=MAX_TOKENS, stream=True, **extra):
     """One Claude call with the app's error handling. Adds to `usage`; returns the message."""
     request = dict(model=model, max_tokens=max_tokens, system=system, messages=messages, **extra)
@@ -52,16 +65,19 @@ def complete(client, model, system, messages, usage, max_tokens=MAX_TOKENS, stre
             message = client.messages.create(**request)
     except anthropic.APIError as error:
         raise GenerationError(f"The Claude API call failed: {error}") from error
+    return finish(message, usage)
 
-    usage.input_tokens += message.usage.input_tokens
-    usage.output_tokens += message.usage.output_tokens
-    usage.cache_read_input_tokens += getattr(message.usage, "cache_read_input_tokens", 0) or 0
-    usage.cache_creation_input_tokens += getattr(message.usage, "cache_creation_input_tokens", 0) or 0
-    if message.stop_reason == "max_tokens":
-        raise GenerationError("The response was too long and got cut off. Please try again.")
-    if message.stop_reason == "refusal":
-        raise GenerationError("Claude declined this request. Try rewording it.")
-    return message
+
+def stream_text(client, model, system, messages, usage, max_tokens=MAX_TOKENS, **extra):
+    """Like `complete`, but yields the reply's text as it arrives. The finished message is the return value: `reply = yield from stream_text(...)`."""
+    request = dict(model=model, max_tokens=max_tokens, system=system, messages=messages, **extra)
+    try:
+        with client.messages.stream(**request) as response:
+            yield from response.text_stream
+            message = response.get_final_message()
+    except anthropic.APIError as error:
+        raise GenerationError(f"The Claude API call failed: {error}") from error
+    return finish(message, usage)
 
 
 def call_claude(client, model, system, user_prompt, output_model, usage, max_tokens=MAX_TOKENS, stream=True):

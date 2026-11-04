@@ -75,8 +75,11 @@ class Turn:
         return "Notes saved.", False
 
 
-def send(plan_id: str, text: str, client=None, today=None) -> dict:
-    """Both messages are saved together after the reply, so a failed call leaves the thread as it was."""
+def stream(plan_id: str, text: str, client=None, today=None):
+    """Yields the coach's words as they arrive; the return value is what `send` returns.
+
+    Both messages are saved together after the reply, so a failed call leaves the thread as it was.
+    """
     plan_file = lifecycle.require_active(plan_id)
     today = today or clock.today()
     client = client or generator.make_client()
@@ -97,9 +100,11 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
     messages = [{"role": "user", "content": prompt}]
     texts, nudged = [], False
     for _ in range(MAX_CALLS):
+        if texts:
+            yield "\n\n"
         # The whole prefix is cached, so the calls after a tool use re-read it at a tenth of the price.
-        reply = generator.complete(
-            client, model, system, messages, usage, MAX_TOKENS, stream=False,
+        reply = yield from generator.stream_text(
+            client, model, system, messages, usage, MAX_TOKENS,
             tools=TOOLS, cache_control={"type": "ephemeral"}, output_config={"effort": "high"},
         )
         messages.append({"role": "assistant", "content": reply.content})
@@ -139,6 +144,16 @@ def send(plan_id: str, text: str, client=None, today=None) -> dict:
         "messages": [user.model_dump(), coach.model_dump()],
         "proposal": storage.load_proposal(turn.proposal_id).model_dump() if turn.proposal_id else None,
     }
+
+
+def send(plan_id: str, text: str, client=None, today=None) -> dict:
+    """The reply in one piece: the stream, drained."""
+    words = stream(plan_id, text, client, today)
+    while True:
+        try:
+            next(words)
+        except StopIteration as done:
+            return done.value
 
 
 def clear(plan_id: str) -> None:

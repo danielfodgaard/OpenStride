@@ -95,7 +95,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **759 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
+- **761 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
