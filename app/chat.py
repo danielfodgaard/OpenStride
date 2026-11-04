@@ -1,10 +1,10 @@
-"""The coach: one conversation with two tools. It proposes plan changes and keeps its notes; the plan changes only through accept."""
+"""The coach: one conversation with three tools. It proposes plan changes, reads a run in full and keeps its notes; the plan changes only through accept."""
 import json
 import os
 import uuid
 from datetime import datetime, timezone
 
-from app import adapt, clock, generator, lifecycle, logbook, memory, metrics, storage
+from app import activities, adapt, clock, generator, lifecycle, logbook, memory, metrics, series, storage
 from app.models import ChatMessage, Usage
 from app.prompts.chat import SYSTEM_PROMPT, TOOLS, build_user_prompt
 
@@ -13,7 +13,8 @@ MAX_TOKENS = 16000
 HISTORY_LIMIT = 30
 RECENT_PROPOSALS = 5
 USER_MESSAGES_FOR_ADAPTATION = 3
-MAX_CALLS = 6  # a notes update, a proposal and the reply, with room for a tool error and one correction
+MAX_CALLS = 8  # a notes update, a proposal, a run or two in detail and the reply, with room for a tool error and one correction
+MAX_DETAILS = 4  # runs read in full per message; the context already has every run's summary
 LEAK_MARKS = ("<invoke", "</invoke>", "</parameter>")  # a tool call written out as text instead of made
 LEAK_NUDGE = "That reply wrote a tool call out as text, so nothing was saved and the athlete would see the tags. Make the call through the tool interface now, then give your whole reply again without any tool-call text."
 
@@ -36,6 +37,7 @@ class Turn:
         self.proposal_id = ""
         self.proposed = False
         self.memory_updated = False
+        self.detailed = 0
 
     def run(self, name: str, args: dict) -> tuple[str, bool]:
         """The tool result text, and whether it is an error."""
@@ -43,7 +45,29 @@ class Turn:
             return self.propose(args["scope"], args["change_request"])
         if name == "update_notes":
             return self.remember(args["content"])
+        if name == "workout_details":
+            return self.details(args["activity_id"])
         return f"There is no tool called {name}.", True
+
+    def details(self, activity_id: str) -> tuple[str, bool]:
+        if self.detailed >= MAX_DETAILS:
+            return f"At most {MAX_DETAILS} runs in full per message. Answer from the summaries in the context.", True
+        try:
+            activity = storage.load_activity(activity_id)
+        except storage.NotFound:
+            return f"There is no recorded workout with id {activity_id}. Hand-logged sessions have no file.", True
+        if activity.plan_id != self.plan_id:
+            return "That workout belongs to another plan.", True
+        self.detailed += 1
+        try:
+            recorded = series.track(storage.load_series(activity_id))
+        except storage.NotFound:
+            recorded = None
+        return json.dumps({
+            "workout": activities.with_review(activity),
+            "units": "FIT profile units: speed m/s, step_length and vertical_oscillation mm, stance_time ms, time_in_hr_zone seconds per zone from zone 1.",
+            "recording": recorded or "no records in the file",
+        }), False
 
     def propose(self, scope: str, change_request: str) -> tuple[str, bool]:
         if self.proposed:

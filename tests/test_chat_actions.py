@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -190,7 +191,7 @@ def test_the_coach_sees_its_notes_the_tools_and_the_cache_setting():
     send("hello", fake)
     request = fake.requests[0]
     assert "Has a history of calf trouble." in request["system"]
-    assert [tool["name"] for tool in request["tools"]] == ["propose_plan_change", "update_notes"]
+    assert [tool["name"] for tool in request["tools"]] == ["propose_plan_change", "workout_details", "update_notes"]
     assert request["cache_control"] == {"type": "ephemeral"} and request["output_config"] == {"effort": "high"}
     assert request["model"] == "claude-opus-5-5"
 
@@ -338,3 +339,58 @@ def test_cached_tokens_are_counted_and_priced():
     assert totals["input_tokens"] == 51004 and totals["cached_tokens"] == 50000
     expected = ((4 + 50000 * 0.1 + 1000 * 1.25) * 4 + 200 * 20) / 1_000_000
     assert totals["cost_usd"] == pytest.approx(expected, abs=0.0001)
+
+
+def add_run(run_id="run1", plan_id="plan"):
+    from app import activities
+    path = Path("examples/activities/edge_cases/cycling_garmin-fenix-5.fit")
+    parsed = activities.parse_bytes(path.name, path.read_bytes())
+    activity = activities.summarise(parsed, path.name, plan_id, "", 0)
+    activity.id = run_id
+    storage.save_activity(activity)
+    activities.store_series(activity, parsed)
+    return activity
+
+
+def test_workout_details_returns_the_whole_file_and_the_recording():
+    add_run()
+    fake = LoopClient(reply_tool("workout_details", activity_id="run1"), reply_text("Your cadence held."))
+    send("How did my cadence hold up?", fake)
+    result = tool_results(fake)[0]
+    assert not result["is_error"]
+    body = json.loads(result["content"])
+    assert body["workout"]["extra"]["total_calories"] == 7 and body["workout"]["laps"][0]["extra"]["lap_trigger"] == "session_end"
+    assert body["recording"]["columns"][0] == "km" and body["recording"]["rows"]
+    assert "m/s" in body["units"]
+    assert storage.load_chat("plan")[-1].text == "Your cadence held."
+
+
+def test_the_context_lists_every_run_with_its_extras_but_without_lap_extras():
+    add_run()
+    fake = LoopClient(reply_text("ok"))
+    send("hello", fake)
+    prompt = fake.prompts[0]
+    assert '"total_calories": 7' in prompt and '"lap_trigger"' not in prompt
+
+
+def test_workout_details_refusals():
+    add_run("other", plan_id="elsewhere")
+    fake = LoopClient(
+        reply_tool("workout_details", call_id="c1", activity_id="nope"),
+        reply_tool("workout_details", call_id="c2", activity_id="other"),
+        reply_text("ok"),
+    )
+    send("hello", fake)
+    first, second = tool_results(fake, 1)[0], tool_results(fake, 2)[0]
+    assert first["is_error"] and "no recorded workout" in first["content"]
+    assert second["is_error"] and "another plan" in second["content"]
+
+
+def test_at_most_four_runs_in_full_per_message():
+    for i in range(5):
+        add_run(f"run{i}")
+    fake = LoopClient(*[reply_tool("workout_details", call_id=f"c{i}", activity_id=f"run{i}") for i in range(5)], reply_text("ok"))
+    send("compare them all", fake)
+    assert not tool_results(fake, 4)[0]["is_error"]
+    fifth = tool_results(fake, 5)[0]
+    assert fifth["is_error"] and "At most 4" in fifth["content"]

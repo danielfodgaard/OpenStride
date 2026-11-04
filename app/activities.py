@@ -1,5 +1,6 @@
 """Turns .fit/.gpx files into ActivitySummary facts and matches them to planned sessions."""
 import io
+import logging
 import math
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -22,7 +23,32 @@ MAX_RECORD_GAP = timedelta(days=2)
 MAX_STRIDES_PER_MIN = 120  # above this a device is already reporting steps per minute
 DUPLICATE_WINDOW = timedelta(seconds=60)  # the same run exported as .fit and .gpx starts a little apart
 FUTURE_WARNING = "This run is dated after today. Check the watch clock or time zone."
+log = logging.getLogger(__name__)
 STRAVA_TYPES = {"1": "cycling", "4": "hiking", "9": "running", "10": "walking", "16": "swimming"}
+
+
+EXTRA_VERSION = 1  # bump when `extra` gains fields, so stored files are read again at startup
+
+# What the summary, laps and points already carry, plus bookkeeping and positions. Every other named field a session
+# or lap message holds goes to `extra`, named and in the units the FIT profile gives it.
+EXTRA_SKIP = {
+    "timestamp", "start_time", "message_index", "event", "event_type", "event_group", "trigger", "first_lap_index",
+    "num_laps", "sport", "total_distance", "total_timer_time", "total_elapsed_time", "avg_heart_rate", "max_heart_rate",
+    "avg_running_cadence", "avg_cadence", "total_ascent", "avg_speed", "max_speed", "altitude", "avg_altitude",
+    "max_altitude", "min_altitude", "speed", "wkt_step_index", "first_length_index", "start_position_lat",
+    "start_position_long", "end_position_lat", "end_position_long", "nec_lat", "nec_long", "swc_lat", "swc_long",
+}
+# Record fields the points already hold, or that encode nothing a coach reads.
+RECORD_SKIP = {
+    "timestamp", "distance", "speed", "enhanced_speed", "heart_rate", "cadence", "fractional_cadence", "altitude",
+    "enhanced_altitude", "position_lat", "position_long", "activity_type", "cadence256", "compressed_speed_distance",
+    "time128", "device_index", "zone",
+}
+ZONE_FIELDS = (
+    "time_in_hr_zone", "hr_zone_high_boundary", "time_in_speed_zone", "speed_zone_high_boundary", "time_in_cadence_zone",
+    "cadence_zone_high_bondary", "time_in_power_zone", "power_zone_high_boundary", "max_heart_rate", "resting_heart_rate",
+    "threshold_heart_rate", "functional_threshold_power",
+)
 
 
 @dataclass
@@ -34,6 +60,7 @@ class Point:
     altitude: float | None = None
     lat: float | None = None
     lon: float | None = None
+    more: dict = field(default_factory=dict)  # the record's other numbers: running dynamics, temperature, power
 
 
 @dataclass
@@ -52,6 +79,40 @@ class Parsed:
     max_hr: int | None = None
     avg_cadence: int | None = None
     elevation_gain_m: float | None = None
+    extra: dict = field(default_factory=dict)
+
+
+def plain(value):
+    """A FIT value as JSON: a number, text, or a tuple of numbers. Dates, bytes and the like are left out."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        return None if math.isnan(value) else round(value, 3)
+    if isinstance(value, (int, str)):
+        return value
+    if isinstance(value, tuple) and value and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return [round(v, 3) if isinstance(v, float) else v for v in value]
+    return None
+
+
+def fit_extra(values: dict, skip: set) -> dict:
+    """Every named field with a value, beyond `skip`. Garmin's unnamed fields have no known meaning, so they stay out."""
+    out = {}
+    for name, value in values.items():
+        if name in skip or name.startswith("unknown_"):
+            continue
+        kept = plain(value)
+        if kept is not None and kept != "":
+            out[name] = kept
+    return out
+
+
+def with_pace(extra: dict, sport: str) -> dict:
+    """A runner reads speed as pace: the fastest speed becomes a best pace, next to the m/s the file gives."""
+    speed = extra.get("enhanced_max_speed")
+    if sport == "running" and isinstance(speed, (int, float)) and speed > 0:
+        extra["max_pace"] = format_pace(1000 / speed, 1)
+    return extra
 
 
 def format_pace(seconds: float, km: float) -> str:
@@ -73,10 +134,10 @@ def fit_sport(session: dict) -> str:
     return "running" if sport == "generic" else sport
 
 
-def read_fit_frames(content: bytes) -> tuple[list[dict], list[dict], list[dict], dict, dict]:
-    records, laps, sessions = [], [], []
+def read_fit_frames(content: bytes) -> tuple[list[dict], list[dict], list[dict], dict, dict, list[dict]]:
+    records, laps, sessions, zones = [], [], [], []
     activity, file_id = {}, {}
-    collect = {"record": records, "lap": laps, "session": sessions}
+    collect = {"record": records, "lap": laps, "session": sessions, "time_in_zone": zones}
     try:
         # Watches do write files with bad checksums, so don't refuse them for that.
         with fitdecode.FitReader(io.BytesIO(content), check_crc=fitdecode.CrcCheck.DISABLED) as reader:
@@ -93,7 +154,17 @@ def read_fit_frames(content: bytes) -> tuple[list[dict], list[dict], list[dict],
     except fitdecode.FitError:
         if not records and not sessions:  # a watch that died mid-run still left the run
             raise
-    return records, laps, sessions, activity, file_id
+    return records, laps, sessions, activity, file_id, zones
+
+
+def session_zones(zones: list[dict]) -> dict:
+    """The time-in-zone message about the whole session: seconds per zone, the zone boundaries, and the heart-rate
+    settings the zones were built from, prefixed so they don't read as the run's own maximum."""
+    whole = next((z for z in zones if str(z.get("reference_mesg")) == "session"), zones[-1] if zones else {})
+    return {
+        f"zones_{name}" if name.endswith("heart_rate") else name: plain(whole[name])
+        for name in ZONE_FIELDS if plain(whole.get(name)) is not None
+    }
 
 
 def fit_points(records: list[dict]) -> list[Point]:
@@ -119,15 +190,19 @@ def fit_points(records: list[dict]) -> list[Point]:
             altitude=record.get("enhanced_altitude", record.get("altitude")),
             lat=round(here[0], 6) if here else None,
             lon=round(here[1], 6) if here else None,
+            more={k: v for k, v in fit_extra(record, RECORD_SKIP).items() if isinstance(v, (int, float))},
         ))
     return points
 
 
 def parse_fit(content: bytes) -> Parsed:
-    records, lap_values, sessions, activity, file_id = read_fit_frames(content)
+    records, lap_values, sessions, activity, file_id, zones = read_fit_frames(content)
     if file_id.get("type") not in (None, "activity"):
         raise ValueError(f"this is a {file_id['type']} file, not an activity")
 
+    # shortcut: a multisport file counts as one activity of its longest sport; upgrade by splitting it. TODO(v3.1)
+    main = max(sessions, key=lambda s: s.get("total_timer_time") or 0, default={})
+    sport = fit_sport(main)
     laps = []
     for values in lap_values:
         km = (values.get("total_distance") or 0) / 1000
@@ -138,6 +213,7 @@ def parse_fit(content: bytes) -> Parsed:
             time_s=round(seconds),
             pace=format_pace(seconds, km),
             avg_hr=values.get("avg_heart_rate") or 0,
+            extra=with_pace(fit_extra(values, EXTRA_SKIP | {"sub_sport"}), sport),
         ))
 
     offset = None
@@ -147,8 +223,6 @@ def parse_fit(content: bytes) -> Parsed:
         if abs(offset) > MAX_UTC_OFFSET:  # some devices write a counter here, not a time
             offset = None
 
-    # shortcut: a multisport file counts as one activity of its longest sport; upgrade by splitting it. TODO(v3.1)
-    main = max(sessions, key=lambda s: s.get("total_timer_time") or 0, default={})
     total = lambda key: sum(s.get(key) or 0 for s in sessions) or None
     distance = total("total_distance")
     start = main.get("start_time") if isinstance(main.get("start_time"), datetime) else None
@@ -159,7 +233,7 @@ def parse_fit(content: bytes) -> Parsed:
         points=points,
         laps=laps,
         utc_offset=offset,
-        sport=fit_sport(main),
+        sport=sport,
         start_time=start,
         distance_km=distance / 1000 if distance else None,
         moving_time_s=total("total_timer_time"),
@@ -168,6 +242,7 @@ def parse_fit(content: bytes) -> Parsed:
         max_hr=main.get("max_heart_rate"),
         avg_cadence=main.get("avg_running_cadence") or main.get("avg_cadence"),
         elevation_gain_m=total("total_ascent"),
+        extra=with_pace(fit_extra(main, EXTRA_SKIP) | session_zones(zones), sport),
     )
 
 
@@ -176,6 +251,22 @@ def number(text: str | None) -> int:
         return round(float(text or 0))
     except ValueError:
         return 0
+
+
+GPX_KNOWN = {"hr", "heartrate", "cad", "cadence", "trackpointextension", "trackpointextensionv1", "trackpointextensionv2"}
+
+
+def gpx_more(extensions: dict) -> dict:
+    """The other numeric extensions a point carries (atemp, power, ...), named as the file names them."""
+    out = {}
+    for name, text in extensions.items():
+        if name in GPX_KNOWN or text is None:
+            continue
+        try:
+            out[name] = float(text.strip())
+        except ValueError:
+            continue
+    return out
 
 
 def gpx_sport(gpx) -> str:
@@ -217,6 +308,7 @@ def parse_gpx(content: bytes) -> Parsed:
                     altitude=point.elevation,
                     lat=point.latitude,
                     lon=point.longitude,
+                    more=gpx_more(extensions),
                 ))
     return Parsed(points=points, sport=gpx_sport(gpx))
 
@@ -247,22 +339,46 @@ def moving_seconds(points: list[Point], timer_s: float | None = None) -> list[fl
     return totals
 
 
-def km_splits(points: list[Point], moving: list[float]) -> list[Lap]:
+def points_extra(points: list[Point], run: bool) -> dict:
+    """What a stretch of records says beyond pace and average heart rate: its maximum, cadence, climb, and the
+    average of every other number the records carry (running dynamics, temperature, power)."""
+    out = {}
+    hrs = [p.hr for p in points if p.hr]
+    if hrs:
+        out["max_hr"] = max(hrs)
+    cadences = [p.cadence for p in points if p.cadence]
+    if cadences:
+        mean = round(sum(cadences) / len(cadences))
+        out["avg_cadence_spm" if run else "avg_cadence"] = steps_per_minute(mean) if run else mean
+    altitudes = [p.altitude for p in points if p.altitude is not None]
+    if len(altitudes) > 1:
+        out["ascent_m"] = climbed(points)
+        out["descent_m"] = climbed([replace(p, altitude=-p.altitude) for p in points if p.altitude is not None])
+    names = {name for p in points for name in p.more}
+    for name in sorted(names):
+        values = [p.more[name] for p in points if name in p.more]
+        out[f"avg_{name}"] = round(sum(values) / len(values), 3)
+    return out
+
+
+def km_splits(points: list[Point], moving: list[float], run: bool = True) -> list[Lap]:
     splits = []
     split_start_km = split_start_s = 0.0
-    hrs = []
+    split_points = []
 
     def close(km: float, seconds: float) -> None:
-        nonlocal split_start_km, split_start_s, hrs
+        nonlocal split_start_km, split_start_s, split_points
         distance = km - split_start_km
+        hrs = [p.hr for p in split_points if p.hr]
         splits.append(Lap(
             index=len(splits) + 1,
             distance_km=round(distance, 3),
             time_s=round(seconds - split_start_s),
             pace=format_pace(seconds - split_start_s, distance),
             avg_hr=round(sum(hrs) / len(hrs)) if hrs else 0,
+            extra=points_extra(split_points, run),
         ))
-        split_start_km, split_start_s, hrs = km, seconds, []
+        split_start_km, split_start_s, split_points = km, seconds, []
 
     for i in range(1, len(points)):
         before, after = points[i - 1], points[i]
@@ -271,8 +387,7 @@ def km_splits(points: list[Point], moving: list[float]) -> list[Lap]:
             # Interpolate the moment the km boundary was crossed.
             share = (target - before.distance_km) / (after.distance_km - before.distance_km)
             close(target, moving[i - 1] + share * (moving[i] - moving[i - 1]))
-        if after.hr:
-            hrs.append(after.hr)
+        split_points.append(after)
     if points[-1].distance_km - split_start_km >= 0.05:  # drop GPS crumbs at the end
         close(points[-1].distance_km, moving[-1])
     return splits
@@ -364,13 +479,15 @@ def summarise(parsed: Parsed, source_file: str, plan_id: str, user_note: str, rp
         avg_cadence_spm=steps_per_minute(cadence) if modality == "run" else cadence,  # bike rpm isn't strides
         elevation_gain_m=parsed.elevation_gain_m if parsed.elevation_gain_m is not None else climbed(points),
         laps=parsed.laps,
-        km_splits=km_splits(points, moving) if covered else [],
+        km_splits=km_splits(points, moving, modality == "run") if covered else [],
         user_note=user_note,
         rpe=rpe,
         match=Match(),
         modality=modality,
         sport=parsed.sport,
         start_utc=utc_start(parsed),
+        extra=parsed.extra,
+        extra_version=EXTRA_VERSION,
     )
 
 
@@ -389,7 +506,7 @@ def parse_file(name: str, content: bytes, plan_id: str, user_note: str = "", rpe
 
 def store_series(activity: ActivitySummary, parsed: Parsed) -> None:
     """The series, and the UTC start time that older imports didn't record."""
-    series = build_series(activity.id, rebased(parsed.points))
+    series = build_series(activity.id, rebased(parsed.points), run=activity.modality == "run")
     if series:
         storage.save_series(series)
     if not activity.start_utc:
@@ -524,12 +641,39 @@ def rematch(plan_file: PlanFile) -> None:
                 save(entry)
 
 
-def with_review(activity: ActivitySummary) -> dict:
+def with_review(activity: ActivitySummary, full: bool = True) -> dict:
+    """`full` is the API's view. A prompt that lists every run on a plan gets the laps and splits without their
+    per-lap extras; the coach's workout_details tool has the whole file for one run."""
     review_file = storage.load_review(activity.id)
-    return activity.model_dump(mode="json") | {
+    exclude = None if full else {"laps": {"__all__": {"extra"}}, "km_splits": {"__all__": {"extra"}}}
+    return activity.model_dump(mode="json", exclude=exclude) | {
         "review": review_file.model_dump(mode="json") if review_file else None,
         "warnings": date_warnings(activity),
     }
+
+
+def refresh_extras() -> int:
+    """Reads the stored file of every activity imported before `extra` existed, or before it last grew.
+
+    Runs at startup; nothing here reaches the LLM. A file that fails to parse is left as it was and not retried.
+    """
+    count = 0
+    for activity in storage.list_all_activities():
+        if activity.extra_version >= EXTRA_VERSION:
+            continue
+        raw = storage.find_raw(activity.id)
+        try:
+            if raw is not None:
+                parsed = parse_bytes(raw.name, raw.read_bytes())
+                fresh = summarise(parsed, activity.source_file, activity.plan_id, activity.user_note, activity.rpe)
+                activity.laps, activity.km_splits, activity.extra = fresh.laps, fresh.km_splits, fresh.extra
+                store_series(activity, parsed)  # the series gained columns too
+                count += 1
+        except Exception as error:  # a file that parsed once may still trip on a field; the run stays as it was
+            log.warning("Could not re-read %s for its extra fields: %s", activity.id, error)
+        activity.extra_version = EXTRA_VERSION
+        storage.save_activity(activity)
+    return count
 
 
 def plan_for_edit(plan_id: str) -> PlanFile | None:

@@ -1,13 +1,19 @@
-"""The per-5-second series behind a workout's route and charts. It never goes to the LLM."""
+"""The per-5-second series behind a workout's route and charts. Only `track` goes to the LLM, thinned to half a minute."""
 from bisect import bisect_right
 
 STEP_S = 5
 PACE_WINDOW_S = 30
 STOPPED_M_PER_S = 0.5
+TRACK_STEP_S = 30
+COLUMNS = ["km", "seconds", "pace_s_per_km", "hr", "lat", "lon", "altitude_m", "cadence"]
+MAX_STRIDES_PER_MIN = 120
 
 
-def build_series(activity_id: str, points: list) -> dict | None:
-    """`points` are the parser's records, distance from zero. None when there's nothing to chart."""
+def build_series(activity_id: str, points: list, run: bool = True) -> dict | None:
+    """`points` are the parser's records, distance from zero. None when there's nothing to chart.
+
+    Each row is COLUMNS in order; cadence is steps per minute for a run, as recorded for anything else.
+    """
     timed = sorted(points, key=lambda point: point.time)
     if len(timed) < 2:
         return None
@@ -36,6 +42,9 @@ def build_series(activity_id: str, points: list) -> dict | None:
         first, last = max(t - half, 0), min(t + half, span)
         speed = (km_at(last) - km_at(first)) * 1000 / (last - first)
         point = timed[bisect_right(seconds, t) - 1]
+        cadence = point.cadence or None
+        if cadence and run and cadence <= MAX_STRIDES_PER_MIN:
+            cadence *= 2
         rows.append([
             round(km_at(t), 3),
             t,
@@ -43,5 +52,17 @@ def build_series(activity_id: str, points: list) -> dict | None:
             point.hr or None,
             point.lat,
             point.lon,
+            round(point.altitude, 1) if point.altitude is not None else None,
+            cadence,
         ])
     return {"activity_id": activity_id, "step_s": STEP_S, "points": rows}
+
+
+def track(series: dict | None, every_s: int = TRACK_STEP_S) -> dict | None:
+    """The series without positions, one row per `every_s`, for a prompt. None when there is no series."""
+    if not series:
+        return None
+    stride = max(every_s // series.get("step_s", STEP_S), 1)
+    columns = ["km", "seconds", "pace_s_per_km", "hr", "altitude_m", "cadence"]
+    rows = [[*row[:4], *row[6:8]] for row in series["points"][::stride]]
+    return {"columns": columns, "rows": rows}

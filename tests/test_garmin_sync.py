@@ -333,7 +333,7 @@ def test_a_partial_summary_is_not_imported_twice():
 def test_a_file_with_only_totals_is_marked_partial(monkeypatch):
     add_active()
     session = {"sport": "running", "total_distance": 8000.0, "total_timer_time": 2700.0, "start_time": datetime(2026, 11, 3, 7, tzinfo=timezone.utc)}
-    monkeypatch.setattr(activities, "read_fit_frames", lambda content: ([], [], [session], {}, {}))
+    monkeypatch.setattr(activities, "read_fit_frames", lambda content: ([], [], [session], {}, {}, []))
     fake = FakeProvider([], [summary_only()])
     fake.files["55"] = b"totals"
     sync.sync(fake)

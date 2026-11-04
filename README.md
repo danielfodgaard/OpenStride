@@ -56,7 +56,7 @@ Each edit is a new plan version with a note the coach can read, so a later revie
 
 ### Tracking
 
-- **Import .fit and .gpx files** from any watch. Each file is parsed into a compact summary (distance, time, laps, km splits, heart rate, cadence) and matched to the planned session on that date. The raw file never goes to the LLM; the model gets the summary, which keeps each call small and cheap.
+- **Import .fit and .gpx files** from any watch. Each file is parsed into a summary (distance, time, laps, km splits, heart rate, cadence) and matched to the planned session on that date. Every other named field the file holds goes with it as `extra`, for the run, each lap and each km split: calories, training effect, running dynamics, temperature, power, time in heart-rate zones, whatever the watch wrote. The raw file never goes to the LLM; the review gets the summary plus the recording thinned to one row every 30 seconds. Files imported before this were read again once at the next start.
 - **Every imported run gets an automatic review** from the model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
 - **Strength and cross-training** sessions can be logged by hand or imported (rides and swims match cross-training sessions).
 
@@ -71,9 +71,10 @@ Each edit is a new plan version with a note the coach can read, so a later revie
 
 There is one coach and one conversation. On every message it sees your plan, every run with its review, your hand edits and notes, your training-load numbers, and its own notes about you. Ask "is my easy pace too fast?" and you get an answer that cites your actual runs. Tell it "my calf has been tight since Tuesday" and it may ask a follow-up question, write that down, and propose a change.
 
-The coach runs as a small agent loop with two tools, and nothing else:
+The coach runs as a small agent loop with three tools, and nothing else:
 
 - **Propose a plan change.** The coach writes a precise change request; a separate call applies it within a scope (this week / next 2 weeks / rest of plan), the validator checks it, and you get a rationale, a one-line reason per change and a diff of the affected weeks under the coach's reply. The coach is told to be conservative: a single bad session is not a reason to change anything, and **"no change recommended" is a valid, good answer.** Accepting creates a new plan version; you can always restore an older one. The coach can never edit your plan directly.
+- **Read one run in full.** Every run in its context carries the file's extra fields for the whole run. When a question turns on how a particular run unfolded, the coach can ask for that run's laps and km splits with their extras and its 30-second recording, at most four runs per message.
 - **Update its notes.** See below.
 
 After a hand edit, the toast offers "Ask the coach to check this week", which opens the conversation with your edit already written in.
@@ -95,7 +96,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **761 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
+- **774 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.

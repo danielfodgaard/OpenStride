@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -220,6 +220,7 @@ class Lap(BaseModel):
     time_s: int
     pace: str
     avg_hr: int
+    extra: dict[str, Any] = {}  # every other field the file holds for this lap or split, in FIT units
 
 
 class ActivitySummary(BaseModel):
@@ -246,6 +247,8 @@ class ActivitySummary(BaseModel):
     start_utc: str = ""  # as stored in the file; "" for activities imported before v3.1
     external_id: str = ""  # "garmin:<id>" for a synced activity
     partial: bool = False  # built from a service's summary: no route, charts or laps
+    extra: dict[str, Any] = {}  # every other field the file's session holds, in FIT units, for the coach
+    extra_version: int = 0  # EXTRA_VERSION once the file has been read for `extra`; older imports are re-read at startup
 
 
 class RunReview(BaseModel):

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app import activities, adapt, chat, lifecycle, main, review, storage
 from app.models import PlanFile
-from app.series import build_series
+from app.series import build_series, track
 
 sys.path.insert(0, "scripts")
 import backfill_series  # noqa: E402
@@ -41,9 +41,20 @@ def test_a_90_minute_run_is_about_1000_points():
 def test_point_shape():
     _, series = make_series(ROOT / "2026-11-03_tue_easy_easy-run.fit")
     assert series["step_s"] == 5
-    km, elapsed, pace, hr, lat, lon = series["points"][100]
+    km, elapsed, pace, hr, lat, lon, altitude, cadence = series["points"][100]
     assert elapsed == 500 and km == pytest.approx(1.49, abs=0.05) and 280 < pace < 420 and 100 < hr < 200
     assert -90 < lat < 90 and -180 < lon < 180
+    assert isinstance(altitude, float) and 150 <= cadence <= 200  # steps per minute, doubled from the file's strides
+
+
+def test_track_thins_the_series_to_half_minutes_without_positions():
+    _, series = make_series(ROOT / "2026-11-03_tue_easy_easy-run.fit")
+    recorded = track(series)
+    assert recorded["columns"] == ["km", "seconds", "pace_s_per_km", "hr", "altitude_m", "cadence"]
+    assert [row[1] for row in recorded["rows"][:3]] == [0, 30, 60]
+    assert len(recorded["rows"]) == (len(series["points"]) + 5) // 6
+    assert all(len(row) == 6 for row in recorded["rows"])
+    assert track(None) is None
 
 
 def test_pace_is_null_only_while_stopped():

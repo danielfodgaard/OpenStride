@@ -2,7 +2,7 @@
 import os
 from datetime import timedelta
 
-from app import clock, generator, lifecycle, memory, metrics, storage
+from app import clock, generator, lifecycle, memory, metrics, series, storage
 from app.models import ActivitySummary, ManualActivity, ReviewFile, ReviewMeta, RunReview, Usage
 from app.prompts.review import SYSTEM_PROMPT, build_user_prompt
 
@@ -20,6 +20,13 @@ def recent_manual(activity: ActivitySummary) -> list[ManualActivity]:
     return [m for m in storage.list_manual(activity.plan_id) if start <= m.date <= activity.date]
 
 
+def recorded_track(activity: ActivitySummary) -> dict | None:
+    try:
+        return series.track(storage.load_series(activity.id))
+    except storage.NotFound:
+        return None
+
+
 def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
     plan_file = lifecycle.require_active(activity.plan_id) if activity.plan_id else None
     model = os.environ.get("REVIEW_MODEL") or DEFAULT_MODEL
@@ -28,7 +35,10 @@ def review_activity(activity: ActivitySummary, client=None) -> ReviewFile:
         client or generator.make_client(),
         model,
         SYSTEM_PROMPT,
-        build_user_prompt(activity, plan_file, recent_activities(activity), recent_manual(activity), metrics.for_prompt(plan_file) if plan_file else "", clock.today(), memory.for_prompt()),
+        build_user_prompt(
+            activity, plan_file, recent_activities(activity), recent_manual(activity),
+            metrics.for_prompt(plan_file) if plan_file else "", clock.today(), memory.for_prompt(), recorded_track(activity),
+        ),
         RunReview,
         usage,
         max_tokens=MAX_TOKENS,

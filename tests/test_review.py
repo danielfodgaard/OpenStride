@@ -124,3 +124,12 @@ def test_review_schema_is_compatible():
 
     schema = anthropic.transform_schema(RunReview)
     assert schema["additionalProperties"] is False and set(schema["required"]) == set(schema["properties"])
+
+
+def test_the_review_gets_the_recording_and_the_units_note(client, fake):
+    upload(client, "2026-11-05_easy.gpx")
+    prompt = fake.calls[0]["messages"][0]["content"]
+    recording = prompt.split("The recording, one row every 30 seconds")[1].split("Athlete's reference paces")[0]
+    assert '"columns": ["km", "seconds", "pace_s_per_km", "hr", "altitude_m", "cadence"]' in recording
+    assert "[0.0, 0," in recording and "FIT profile" in prompt and '"extra"' in prompt
+    assert "lat" not in recording

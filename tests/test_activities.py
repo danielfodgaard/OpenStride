@@ -321,7 +321,7 @@ def test_garbage_timestamps_are_dropped_and_partial_records_give_no_splits():
     frames.append({"timestamp": datetime(2085, 1, 1, tzinfo=timezone.utc), "distance": 400.0})
     session = {"start_time": t0, "total_elapsed_time": 3000, "total_timer_time": 3000, "total_distance": 11000}
     original = activities.read_fit_frames
-    activities.read_fit_frames = lambda content: (frames, [], [session], {}, {"type": "activity"})
+    activities.read_fit_frames = lambda content: (frames, [], [session], {}, {"type": "activity"}, [])
     try:
         parsed = activities.parse_fit(b"")
     finally:
@@ -383,3 +383,83 @@ def test_a_run_can_be_imported_again_under_a_new_plan(client, active):
     assert result["status"] == "imported"
     assert [len(storage.list_activities(p)) for p in ("plan", "next")] == [1, 1]
     assert storage.list_activities("plan")[0].id != storage.list_activities("next")[0].id
+
+
+# Everything else the file holds goes to `extra`, for the coach.
+
+FENIX = SAMPLES / "edge_cases" / "cycling_garmin-fenix-5.fit"
+
+
+def test_a_garmin_file_keeps_its_other_session_fields():
+    activity = activities.parse_file("ride.fit", FENIX.read_bytes(), "")
+    extra = activity.extra
+    assert extra["total_calories"] == 7 and extra["total_descent"] == 4 and extra["sport_profile_name"] == "Bike"
+    assert extra["total_training_effect"] == 0.0 and extra["enhanced_max_speed"] == 8.65
+    assert len(extra["time_in_hr_zone"]) == 7 and extra["hr_zone_high_boundary"] == [107, 131, 146, 156, 164, 182]
+    assert (extra["zones_max_heart_rate"], extra["zones_resting_heart_rate"]) == (183, 48)
+    assert not any(k.startswith("unknown_") for k in extra) and "start_position_lat" not in extra and "timestamp" not in extra
+    assert activity.extra_version == activities.EXTRA_VERSION
+
+
+def test_laps_and_splits_carry_their_own_extras():
+    ride = activities.parse_file("ride.fit", FENIX.read_bytes(), "")
+    assert ride.laps[0].extra["lap_trigger"] == "session_end" and ride.laps[0].extra["total_calories"] == 7
+    assert ride.km_splits[0].extra["avg_temperature"] == 19.0 and ride.km_splits[0].extra["max_hr"] == 114
+    run = activities.parse_file("tempo.fit", read("2026-11-03_tempo.fit"), "")
+    first = run.km_splits[0].extra
+    assert first["max_hr"] >= run.km_splits[0].avg_hr and 150 < first["avg_cadence_spm"] < 200
+    assert first["ascent_m"] >= 0 and "descent_m" in first and "avg_cadence" not in first
+
+
+def test_a_running_session_gets_a_best_pace_from_its_max_speed():
+    session = {"sport": "running", "start_time": datetime(2026, 11, 3, 12, tzinfo=timezone.utc), "total_distance": 5000,
+               "total_timer_time": 1500, "enhanced_max_speed": 4.0, "avg_step_length": 1210.5, "unknown_90": 5}
+    original = activities.read_fit_frames
+    activities.read_fit_frames = lambda content: ([], [], [session], {}, {"type": "activity"}, [])
+    try:
+        activity = activities.parse_file("run.fit", b"x", "")
+    finally:
+        activities.read_fit_frames = original
+    assert activity.extra["max_pace"] == "4:10/km" and activity.extra["avg_step_length"] == 1210.5
+    assert "unknown_90" not in activity.extra
+
+
+def test_gpx_points_keep_their_other_numeric_extensions():
+    assert activities.gpx_more({"hr": "150", "cad": "88", "atemp": "17.5", "power": "250", "speed": "x"}) == {"atemp": 17.5, "power": 250.0}
+    track = activities.parse_file("long.gpx", read("2026-11-08_long.gpx"), "")
+    assert track.extra == {} and {"max_hr", "avg_cadence_spm", "ascent_m", "descent_m"} <= set(track.km_splits[0].extra)
+
+
+def test_the_trimmed_view_drops_lap_extras_but_keeps_the_run_extras():
+    activity = activities.parse_file("ride.fit", FENIX.read_bytes(), "")
+    storage.save_activity(activity)
+    full, short = activities.with_review(activity), activities.with_review(activity, full=False)
+    assert full["laps"][0]["extra"] and "extra" not in short["laps"][0] and "extra" not in short["km_splits"][0]
+    assert short["extra"]["total_calories"] == 7
+
+
+def test_startup_re_reads_older_files_once():
+    activity = activities.parse_file("ride.fit", FENIX.read_bytes(), "")
+    storage.save_activity(activity)
+    storage.save_raw(activity.id, "ride.fit", FENIX.read_bytes())
+    stale = activity.model_copy(update={"extra": {}, "extra_version": 0, "laps": [l.model_copy(update={"extra": {}}) for l in activity.laps]})
+    storage.save_activity(stale)
+    gone = activity.model_copy(update={"id": "no-file", "extra_version": 0, "extra": {}})
+    storage.save_activity(gone)
+    assert activities.refresh_extras() == 1
+    fresh = storage.load_activity(activity.id)
+    assert fresh.extra["total_calories"] == 7 and fresh.laps[0].extra["lap_trigger"] == "session_end"
+    assert fresh.extra_version == activities.EXTRA_VERSION
+    assert len(storage.load_series(activity.id)["points"][0]) == 8
+    assert storage.load_activity("no-file").extra_version == activities.EXTRA_VERSION  # nothing to read, not retried
+    assert activities.refresh_extras() == 0
+
+
+def test_a_file_that_no_longer_parses_is_left_alone_and_not_retried():
+    activity = activities.parse_file("ride.fit", FENIX.read_bytes(), "")
+    activity.extra_version, activity.extra = 0, {}
+    storage.save_activity(activity)
+    storage.save_raw(activity.id, "ride.fit", b"not a fit file")
+    assert activities.refresh_extras() == 0
+    saved = storage.load_activity(activity.id)
+    assert saved.extra == {} and saved.extra_version == activities.EXTRA_VERSION

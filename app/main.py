@@ -64,6 +64,9 @@ async def lifespan(app: FastAPI):
         return
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.")
+    refreshed = activities.refresh_extras()
+    if refreshed:
+        logging.getLogger(__name__).info("Re-read %d stored workout files for their extra fields", refreshed)
     garmin_sync.start()
     yield
     garmin_sync.stop()

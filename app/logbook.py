@@ -21,8 +21,8 @@ def as_item(entry: ManualActivity) -> dict:
 
 
 def all_items(plan_id: str) -> list[dict]:
-    """Everything done on a plan, oldest first, for LLM context."""
-    files = [activities.with_review(a) for a in storage.list_activities(plan_id)]
+    """Everything done on a plan, oldest first, for LLM context. Per-lap extras stay out; workout_details has them."""
+    files = [activities.with_review(a, full=False) for a in storage.list_activities(plan_id)]
     return sorted([*files, *(as_item(m) for m in storage.list_manual(plan_id))], key=lambda item: item["date"])
 
 

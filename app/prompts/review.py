@@ -16,13 +16,17 @@ Sessions dated after today are not due yet. Never count them as missed or behind
 Sessions can carry the athlete's own edits: status "skipped" was their choice and is never missed, status "replaced" means they did the matched activity instead, and moved_from and edit_note say what moved and why."""
 
 
-def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str, today, notes: str) -> str:
+EXTRA_NOTE = """Field names and units are the FIT profile's: `extra` on the run, its laps and its km splits holds every other number the watch wrote (running dynamics, temperature, power, calories, training effect, time in zones). Speeds are m/s, step_length and vertical_oscillation mm, stance_time ms, time_in_hr_zone seconds per zone from zone 1. A run from a service summary or a GPX file has few or none of these."""
+
+
+def build_user_prompt(activity: ActivitySummary, plan_file: PlanFile | None, recent: list[ActivitySummary], manual: list[ManualActivity], metrics: str, today, notes: str, track: dict | None = None) -> str:
     session = plan_file.session_at(activity.match.week_number, activity.match.session_index) if plan_file else None
     planned = session.model_dump_json(indent=2) if session else "Unplanned run"
     if session and session.status == "replaced":
         planned = f"The athlete did something else instead. Planned {session.title}, did the run below. Judge the run on what it was, not against this plan:\n{planned}"
     paces = plan_file.paces.model_dump_json(indent=2) if plan_file else "None: there is no active plan"
-    history = json.dumps([a.model_dump(mode="json", exclude={"km_splits"}) for a in recent], indent=2)
+    history = json.dumps([a.model_dump(mode="json", exclude={"km_splits": True, "laps": {"__all__": {"extra"}}}) for a in recent], indent=2)
+    recorded = json.dumps(track) if track else "None: no records in the file"
     logged = json.dumps([m.model_dump(mode="json") for m in manual], indent=2)
     return f"""Today: {today.isoformat()}
 
@@ -31,6 +35,11 @@ Planned session:
 
 The run:
 {activity.model_dump_json(indent=2)}
+
+{EXTRA_NOTE}
+
+The recording, one row every 30 seconds (columns, then rows):
+{recorded}
 
 Athlete's reference paces:
 {paces}
