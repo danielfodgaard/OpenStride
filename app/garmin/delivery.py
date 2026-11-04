@@ -73,19 +73,24 @@ def send_session(provider, plan_file: PlanFile, week: int, index: int) -> dict:
 
 
 def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[str]:
-    """After a hand edit: the mapping follows the sessions, and Garmin follows their dates and content."""
+    """After a hand edit: the mapping follows the sessions, and Garmin follows their dates and content.
+
+    `moved` and `removed` are keyed as the mapping was before the edit. A removed session leaves the mapping
+    first, so a session that moved up into its index is never taken for it.
+    """
     plan_id = plan_file.meta.id
     with storage.plan_lock(plan_id):
-        sent = {moved.get(key, key): entry for key, entry in load_sent(plan_id).items()}
-        if sent:
+        before = load_sent(plan_id)
+        doomed = {key: before[key] for key in removed if key in before}
+        sent = {moved.get(key, key): entry for key, entry in before.items() if key not in doomed}
+        if before:
             storage.write_json(sent_path(plan_id), sent)
 
     def session_of(key):
         return session_at(plan_file, *map(int, key.split("/")))
 
     resend = [key for key in moved.values() if key in sent and workout_fit.fingerprint(session_of(key)) != sent[key]["hash"]]
-    gone = [key for key in removed if key in sent]
-    if not resend and not gone:
+    if not resend and not doomed:
         return []
     if not garmin.status()["can_push_workouts"]:
         return ["Garmin still has the old copy. Delete it there, and download the workout .fit again if you need it."]
@@ -96,10 +101,9 @@ def follow_edit(plan_file: PlanFile, moved: dict, removed: list[str]) -> list[st
             send_session(provider, plan_file, *map(int, key.split("/")))
         except garmin.GarminError as error:
             problems.append(f"Couldn't move it on Garmin: {error}")
-    for key in gone:
+    for entry in doomed.values():
         try:
-            provider.delete_workout(sent[key]["workout_id"])
-            forget(plan_id, key)
+            provider.delete_workout(entry["workout_id"])
         except garmin.GarminError as error:
             problems.append(f"Couldn't remove it from Garmin: {error}")
     return problems

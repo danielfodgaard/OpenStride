@@ -135,6 +135,18 @@ def change(session, changes: dict, today, note, done, keys):
     return f"Changed {was}: {what}"
 
 
+def delete(plan_file, session, today, note, done, keys):
+    """A planned session goes for good. The week's volume follows; the sessions after it move up one index."""
+    check_free(session, done, keys)
+    if session.date < today:
+        refuse("Only sessions dated today or later can be deleted. A past session can be skipped.")
+    week = plan_file.week_of(session.date)
+    week.sessions = [s for s in week.sessions if s is not session]
+    if session.modality == "run":
+        week.planned_km = round(week.planned_km - session.distance_km, 2)
+    return f"Deleted {label(session)}"
+
+
 def unskip(plan_file, session):
     if session.status != "skipped":
         refuse("This session isn't skipped.")
@@ -331,6 +343,8 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             summary = skip(chosen, note, done, keys)
         elif kind == "unskip":
             summary = unskip(new, chosen)
+        elif kind == "delete":
+            summary = delete(new, chosen, today, note, done, keys)
         elif kind == "unreplace":
             summary = unreplace(chosen)
         elif kind == "change":
@@ -351,11 +365,14 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
         for week in new.plan.weeks:
             week.sessions.sort(key=lambda s: s.date)
         after = locate(new)
-        changes = {key_of(*keys[id(s)]): key_of(*after[id(s)]) for s in where.values() if keys[id(s)] != after[id(s)]}
+        changes = {key_of(*keys[id(s)]): key_of(*after[id(s)]) for s in where.values() if id(s) in after and keys[id(s)] != after[id(s)]}
+        removed = [key_of(*keys[id(chosen)])] if kind in ("skip", "delete") else []  # keyed as the mapping has it now
         if kind == "change":
             changes[key_of(*after[id(chosen)])] = key_of(*after[id(chosen)])  # same key, so Garmin re-checks its content
 
         new.meta.version += 1
+        if kind == "delete":
+            where = {key: s for key, s in where.items() if s is not chosen}
         undo_matches = rematch(new, where, moved, entries, target)
         new.meta.history.append(HistoryEntry(
             version=new.meta.version,
@@ -376,7 +393,7 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             "version": new.meta.version,
             "summary": summary,
             "warnings": warnings,
-            "garmin": {"moved": changes, "removed": [key_of(*after[id(chosen)])] if kind == "skip" else []},
+            "garmin": {"moved": changes, "removed": removed},
         }
 
 

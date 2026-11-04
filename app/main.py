@@ -218,7 +218,7 @@ class SessionChanges(BaseModel):
 
 
 class EditBody(BaseModel):
-    kind: Literal["move", "swap", "skip", "unskip", "assign_activity", "replace", "unreplace", "change", "match_activity"]
+    kind: Literal["move", "swap", "skip", "unskip", "delete", "assign_activity", "replace", "unreplace", "change", "match_activity"]
     session: SessionRef | None = None
     to_date: Date | None = None
     other: SessionRef | None = None

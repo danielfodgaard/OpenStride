@@ -46,11 +46,11 @@ function sheet(title, ...children) {
 }
 
 // A sheet row: like `button`, and it closes the sheet it sits in once the action went through.
-function option(text, status, action) {
+function option(text, status, action, kind = "") {
   const b = button(text, status, async () => {
     await action();
     b.closest("dialog")?.close();
-  }, "Working…", "sheet-row");
+  }, "Working…", `sheet-row ${kind}`.trim());
   return b;
 }
 
@@ -144,6 +144,7 @@ export function sessionMenu(planFile, week, index) {
         swapChoices(planFile, week, index, today, status, send),
         ...(session.type === "race" || session.date < today ? [] : [changeForm(session, status, send)]),
         option("Skip", status, () => send({ kind: "skip" })),
+        ...(session.type === "race" || session.date < today ? [] : [option("Delete from the plan", status, () => send({ kind: "delete" }), "danger")]),
       ];
     sheet(`${session.day}: ${session.title}`, ...nodes, labelled("Note (optional)", note), status);
   });

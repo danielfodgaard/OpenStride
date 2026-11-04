@@ -658,3 +658,70 @@ def test_the_api_matches_to_a_session_and_to_a_day(client):
     second = client.post("/api/plans/plan/edits", json=body, headers={"If-Match": etag})
     assert second.status_code == 200 and second.json()["summary"] == "Added Tue run to the plan on Wed"
     assert client.get(f"/api/activities/{run.id}").json()["match"]["planned_date"] == "2026-11-04"
+
+
+# Deleting a planned session outright.
+
+
+def test_delete_removes_a_future_session_and_its_volume():
+    before = storage.load_plan("plan").plan.weeks[0]
+    count, km, tempo = len(before.sessions), before.planned_km, before.sessions[0]
+    result = edit("delete", TEMPO, note="race week elsewhere")
+    week = storage.load_plan("plan").plan.weeks[0]
+    assert len(week.sessions) == count - 1 and tempo.title not in [s.title for s in week.sessions if s.date == TUE]
+    assert week.planned_km == round(km - tempo.distance_km, 2)
+    assert result["summary"] == "Deleted Tue tempo 4 km" and result["version"] == 2
+    assert storage.load_plan("plan").meta.history[-1].rationale == "Deleted Tue tempo 4 km: race week elsewhere"
+    assert result["garmin"] == {"moved": {"1/1": "1/0", "1/2": "1/1", "1/3": "1/2", "1/4": "1/3", "1/5": "1/4", "1/6": "1/5"}, "removed": ["1/0"]}
+
+
+def test_matches_follow_the_sessions_that_move_up_after_a_delete():
+    run = add_run(Match(planned_date="2026-11-05", week_number=1, session_index=3))  # Thu easy
+    edit("delete", TEMPO)
+    assert matched_session(run).type == "easy" and storage.load_activity(run.id).match.session_index == 2
+
+
+@pytest.mark.parametrize("session, today, text", [
+    (TEMPO, date(2026, 11, 4), "today or later"),
+    ({"week": 1, "index": 6}, TODAY, "done"),
+])
+def test_delete_refusals(session, today, text):
+    if text == "done":
+        add_run(Match(planned_date="2026-11-08", week_number=1, session_index=6))
+    with pytest.raises(lifecycle.Conflict, match=text):
+        edits.apply("plan", "delete", session, today=today)
+
+
+def test_the_race_cannot_be_deleted():
+    plan_file = storage.load_plan("plan")
+    week, index = next((w.week_number, i) for w in plan_file.plan.weeks for i, s in enumerate(w.sessions) if s.type == "race")
+    with pytest.raises(lifecycle.Conflict, match="race"):
+        edit("delete", {"week": week, "index": index})
+
+
+def test_undo_brings_a_deleted_session_back():
+    original = storage.load_plan("plan")
+    edit("delete", TEMPO)
+    restored = edits.undo("plan")["plan"]
+    assert restored.plan == original.plan
+
+
+def test_deleting_a_sent_session_removes_it_from_garmin(garmin):
+    assert run_edit("delete") == []
+    assert garmin.deleted == ["new-1"] and delivery.load_sent("plan") == {}
+
+
+def test_deleting_the_session_before_a_sent_one_rekeys_it_and_keeps_it(garmin):
+    delivery.send_session(garmin, storage.load_plan("plan"), 1, 3)  # Thu easy, now "1/3"
+    garmin.pushed.clear()
+    assert run_edit("delete") == []  # the sent tempo at 1/0 goes; the easy moves up to 1/2
+    sent = delivery.load_sent("plan")
+    assert garmin.deleted == ["new-1"] and garmin.pushed == [] and list(sent) == ["1/2"]
+    from app import workout_fit
+    assert sent["1/2"]["hash"] == workout_fit.fingerprint(at(1, 2)) and at(1, 2).type == "easy"
+
+
+def test_the_api_deletes(client):
+    etag = client.get("/api/plans/plan").headers["ETag"]
+    response = client.post("/api/plans/plan/edits", json={"kind": "delete", "session": TEMPO}, headers={"If-Match": etag})
+    assert response.status_code == 200 and response.json()["summary"] == "Deleted Tue tempo 4 km"
