@@ -4,10 +4,10 @@ import {
   link, main, muted, notice, patchJson, planPath, refresh, rpeSelect, stale, statStrip, statusLine, table, toast, viewToken,
 } from "./ui.js";
 import {
-  amountText, clockText, dateText, expandSteps, paceText, shortDate, stepText, targetBand, timeText, utcText,
+  DAYS, addDays, amountText, clockText, dateText, expandSteps, paceText, shortDate, stepText, targetBand, timeText, utcText,
 } from "./format.js";
 import { drawDistanceCharts, drawRoute, legend, svgEl } from "../charts.js";
-import { activityButtons, sessionMenu, sessionTitle } from "./session_edit.js";
+import { sendEdit, sessionMenu, sessionTitle } from "./session_edit.js";
 
 const OFF_TARGET_S = 5;
 
@@ -167,25 +167,67 @@ function lapsSection(activity, session) {
   return section;
 }
 
-function matchControl(workout, plan, status) {
+const KINDS = { run: "run", strength: "strength session", cross: "cross-training session" };
+
+// Every day of the plan: a day with a session of this kind lists it, any other day takes the workout as a new session.
+function dayPicker(workout, plan) {
   const select = el("select");
-  select.add(new Option("Unplanned", "0:-1"));
+  select.add(new Option("Not in the plan", "none"));
   for (const week of plan.plan.weeks) {
-    week.sessions.forEach((session, index) => {
-      if ((session.modality ?? "run") !== workout.modality) return;
-      select.add(new Option(`${session.date} ${session.title}`, `${week.week_number}:${index}`));
+    const group = el("optgroup");
+    group.label = `Week ${week.week_number} · ${week.phase}`;
+    DAYS.forEach((_, i) => {
+      const date = addDays(week.start_date, i);
+      const fitting = week.sessions
+        .map((session, index) => ({ session, index }))
+        .filter(({ session }) => session.date === date && (session.modality ?? "run") === workout.modality);
+      for (const { session, index } of fitting) {
+        const state = session.status === "planned" ? "" : ` (${session.status})`;
+        group.append(new Option(`${dateText(date)}: ${session.title}${state}`, `s:${week.week_number}:${index}`));
+      }
+      if (!fitting.length) group.append(new Option(`${dateText(date)}: no ${KINDS[workout.modality]} planned`, `d:${date}`));
     });
+    select.append(group);
   }
-  select.value = `${workout.match.week_number}:${workout.match.session_index}`;
-  const path = workout.manual ? `/api/manual/${encodeURIComponent(workout.id)}` : `/api/activities/${encodeURIComponent(workout.id)}`;
-  const box = el("div");
-  box.className = "field";
-  box.append(labelled("Change match", select), actions(button("Save match", status, async () => {
-    const [week_number, session_index] = select.value.split(":").map(Number);
-    await patchJson(path, { match: { week_number, session_index } });
-    refresh();
-  })));
-  return box;
+  const { week_number, session_index } = workout.match;
+  const current = session_index >= 0 ? `s:${week_number}:${session_index}` : null;
+  const sameDay = [...select.options].find((o) => o.value.startsWith("s:") && o.text.startsWith(dateText(workout.date)))
+    ?? [...select.options].find((o) => o.value === `d:${workout.date}`);
+  select.value = current ?? sameDay?.value ?? "none";
+  return select;
+}
+
+// Where this workout sits in the plan, and one control to put it on any day: that day then shows this workout.
+function planSection(workout, plan, canEdit) {
+  const section = el("section");
+  section.append(el("h2", "In your plan"));
+  const { week_number, session_index } = workout.match;
+  const session = session_index >= 0 ? plan.plan.weeks.find((w) => w.week_number === week_number)?.sessions[session_index] : null;
+  if (session) {
+    const replaced = session.status === "replaced" ? " · the planned session is marked replaced by what you did" : "";
+    section.append(line(`Counts as ${dateText(session.date)}: `, link(session.title, `${planPath(plan.meta.id)}/sessions/${week_number}/${session_index}`), replaced));
+  } else {
+    section.append(el("p", "Not in the plan. Pick the day it belongs to, and that day in the plan becomes this workout."));
+  }
+  if (!canEdit) return section;
+  const status = statusLine();
+  const picker = dayPicker(workout, plan);
+  const match = button("Match", status, async () => {
+    const [tag, ...rest] = picker.value.split(":");
+    const body = { kind: "match_activity", activity_id: workout.id };
+    if (tag === "s") body.session = { week: Number(rest[0]), index: Number(rest[1]) };
+    if (tag === "d") body.to_date = rest.join(":");
+    await sendEdit(plan.meta.id, body);
+  }, "Working…", "primary");
+  const buttons = actions(match);
+  if (session && session.type !== "race") {
+    const ref = { session: { week: week_number, index: session_index } };
+    buttons.append(session.status === "replaced"
+      ? button("Count it as the planned session", status, () => sendEdit(plan.meta.id, { kind: "unreplace", ...ref }))
+      : button("I did something else than planned", status, () => sendEdit(plan.meta.id, { kind: "replace", activity_id: workout.id, ...ref })));
+  }
+  section.append(labelled("Plan day", picker), buttons, status);
+  return section;
 }
 
 function deleteControl(workout, status) {
@@ -260,7 +302,7 @@ function watchSection(plan, place, session, garmin) {
 }
 
 // `plan` may be null, as may `session` or `activity`, but not both of those.
-function renderWorkout({ plan, session, activity, series, place, matchPlan, also = [], garmin, workouts = [] }) {
+function renderWorkout({ plan, session, activity, series, place, matchPlan, also = [], garmin }) {
   const nodes = [];
   const date = session?.date ?? activity.date;
   const title = session?.title ?? activity.title;
@@ -276,7 +318,7 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
   const editable = activity && (!activity.plan_id || plan?.meta.status === "active");
 
   const canEdit = matchPlan?.meta.status === "active";
-  const editButtons = () => (canEdit ? activityButtons(matchPlan, activity, workouts) : []);
+  const inPlan = () => (matchPlan ? [planSection(activity, matchPlan, canEdit)] : []);
   if (!activity) {
     const week = plan.plan.weeks.find((w) => w.week_number === place.week);
     const menu = plan.meta.status === "active" && session.type !== "race" ? sessionMenu(plan, week, place.index) : null;
@@ -292,7 +334,7 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
     nodes.push(...manualSummary(activity, session));
     if (session) nodes.push(plannedSection(session));
     if (editable) nodes.push(manualEdit(activity));
-    if (activity.plan_id) nodes.push(...editButtons());
+    nodes.push(...inPlan());
   } else {
     const band = session && !session.steps.length ? targetBand(session.target_pace) : null;
     nodes.push(...chartsSections(activity, series, band));
@@ -300,7 +342,7 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
     if (laps) nodes.push(laps);
     nodes.push(summarySection(activity, band));
     if (session) nodes.push(plannedSection(session));
-    nodes.push(reviewSection(activity, editable), ...editButtons());
+    nodes.push(reviewSection(activity, editable), ...inPlan());
   }
   for (const other of also) nodes.push(line("Also on this session: ", link(other.title, `#/workouts/${encodeURIComponent(other.id)}`)));
 
@@ -308,9 +350,7 @@ function renderWorkout({ plan, session, activity, series, place, matchPlan, also
   if (place) nodes.push(actions(buttonLink("Back to week", `${planPath(plan.meta.id)}/weeks/${place.week}`)));
   if (activity) {
     const section = el("section");
-    section.append(el("h2", "Actions"));
-    if (editable && matchPlan) section.append(matchControl(activity, matchPlan, status));
-    section.append(deleteControl(activity, status), status);
+    section.append(el("h2", "Actions"), deleteControl(activity, status), status);
     nodes.push(section);
   }
   return nodes;
@@ -327,13 +367,12 @@ export async function workoutView(id) {
   const [plan, series] = await Promise.all([planFor(activity.plan_id), seriesFor(activity)]);
   const active = plan ? null : await activePlan();
   const matchPlan = plan ?? await planFor(active?.meta.id);  // by id, so its ETag is on hand for an edit
-  const workouts = matchPlan?.meta.status === "active" ? await api(`/api/activities?plan_id=${encodeURIComponent(matchPlan.meta.id)}`) : [];
   if (stale(token)) return;
   const { week_number: week, session_index: index } = activity.match;
   const session = index >= 0 ? plan?.plan.weeks.find((w) => w.week_number === week)?.sessions[index] : null;
   main.replaceChildren(
     breadcrumb(["Workouts", "#/workouts"], [activity.title]),
-    ...renderWorkout({ plan, session, activity, series, place: session ? { week } : null, matchPlan, workouts }),
+    ...renderWorkout({ plan, session, activity, series, place: session ? { week } : null, matchPlan }),
   );
 }
 

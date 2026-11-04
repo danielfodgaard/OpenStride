@@ -132,6 +132,23 @@ export function rowLink(href, title, meta, chipNode) {
 // Filled by the edit that just happened, for the page that renders next.
 export const editMemo = { warnings: [], chatDraft: "" };
 
+// Per-device memory for folds and the like. Blocked storage only costs what was remembered.
+export function recall(key) {
+  try {
+    return JSON.parse(localStorage.getItem(`openstride:${key}`));
+  } catch {
+    return null;
+  }
+}
+
+export function remember(key, value) {
+  try {
+    localStorage.setItem(`openstride:${key}`, JSON.stringify(value));
+  } catch {
+    // nothing to do
+  }
+}
+
 export function toast(text, ...buttons) {
   const item = el("div", text);
   item.className = "toast";

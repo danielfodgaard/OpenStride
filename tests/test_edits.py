@@ -54,9 +54,10 @@ def find(day):
     ]
 
 
-def add_run(match=None):
+def add_run(match=None, run_id=""):
     run = activities.parse_file(RUN, (SAMPLES / RUN).read_bytes(), "plan")
     run.match = match or Match()
+    run.id = run_id or run.id
     storage.save_activity(run)
     return run
 
@@ -239,11 +240,6 @@ def test_replace_marks_the_session_and_matches_the_run():
     assert at(1, 0).status == "replaced" and matched_session(run).type == "tempo"
     assert at(1, 0).edit_note == "Replaced: legs tired"
 
-
-def test_replace_needs_a_session_on_that_day():
-    run = add_run()
-    with pytest.raises(lifecycle.Conflict, match="day of this workout"):
-        edit("replace", THU_EASY, activity_id=run.id)
 
 
 def test_change_rewrites_distance_pace_and_type_and_the_week_total():
@@ -519,3 +515,146 @@ def test_with_push_off_the_athlete_is_told(garmin, monkeypatch):
     problems = run_edit("move", to_date=date(2026, 11, 4))
     assert ".fit" in problems[0] and garmin.pushed == []
     assert next(iter(delivery.load_sent("plan"))) in {"1/0", "1/1", "1/2"}  # the mapping still follows
+
+
+# Matching a workout to a plan day: one edit, any day of the plan.
+
+
+def test_count_puts_a_run_on_a_session_dated_another_day():
+    run = add_run()  # Tue
+    result = edit("match_activity", THU_EASY, activity_id=run.id)
+    assert matched_session(run).type == "easy" and matched_session(run).date == THU  # the session stays put
+    assert result["summary"] == "Counted Tue run as Thu easy 9 km"
+    assert storage.load_activity(run.id).plan_id == "plan"
+
+
+def test_count_takes_a_skipped_session_back():
+    run = add_run()
+    edit("skip", THU_EASY)
+    edit("match_activity", THU_EASY, activity_id=run.id)
+    assert at(1, 3).status == "planned" and at(1, 3).edit_note == ""
+
+
+def test_count_warns_when_another_workout_already_counts():
+    first = add_run(Match(planned_date="2026-11-03", week_number=1, session_index=0))
+    second = add_run(run_id="second")
+    result = edit("match_activity", TEMPO, activity_id=second.id)
+    assert any("also counts" in w for w in result["warnings"])
+    assert matched_session(first).type == matched_session(second).type == "tempo"
+
+
+def test_count_the_same_session_twice_is_refused():
+    run = add_run(Match(planned_date="2026-11-03", week_number=1, session_index=0))
+    with pytest.raises(lifecycle.Conflict, match="already counts"):
+        edit("match_activity", TEMPO, activity_id=run.id)
+
+
+def test_count_refuses_another_kind():
+    run = add_run()
+    with pytest.raises(lifecycle.Conflict, match="planned run"):
+        edit("match_activity", STRENGTH, activity_id=run.id)
+
+
+def test_recounting_elsewhere_releases_a_replaced_session():
+    run = add_run()
+    edit("replace", TEMPO, activity_id=run.id)
+    assert at(1, 0).status == "replaced"
+    edit("match_activity", THU_EASY, activity_id=run.id)
+    assert at(1, 0).status == "planned" and at(1, 0).edit_note == ""
+    assert matched_session(run).type == "easy"
+
+
+def test_a_replaced_session_stays_replaced_while_another_workout_counts_as_it():
+    first = add_run()
+    second = add_run(run_id="second")
+    edit("replace", TEMPO, activity_id=first.id)
+    edit("match_activity", TEMPO, activity_id=second.id)
+    edit("match_activity", THU_EASY, activity_id=first.id)
+    assert at(1, 0).status == "replaced"
+
+
+def test_a_rest_day_takes_the_run_as_a_new_session():
+    run = add_run()  # 8 km on Tue
+    fri = date(2026, 11, 6)
+    result = edit("match_activity", None, to_date=fri, activity_id=run.id)
+    (key, added), = [(k, s) for k, s in find(fri) if s.modality == "run"]
+    assert (added.type, added.title, added.day, added.status) == ("easy", "Run", "Fri", "planned")
+    assert added.distance_km == round(run.distance_km, 2) and added.duration_min == round(run.moving_time_s / 60)
+    assert added.edit_note == "Added from a run" and added.steps == []
+    assert storage.load_activity(run.id).match == Match(planned_date="2026-11-06", week_number=key[0], session_index=key[1])
+    assert storage.load_plan("plan").plan.weeks[0].planned_km == round(42 + added.distance_km, 2)
+    assert result["summary"] == "Added Tue run to the plan on Fri"
+    assert any("usual training days" in w for w in result["warnings"])
+
+
+def test_a_logged_session_added_to_a_day_keeps_its_title():
+    entry = ManualActivity(id="log1", plan_id="plan", date=TUE, modality="strength", title="Gym", duration_min=40,
+                           distance_km=0, rpe=6, note="", details=[], match=Match())
+    storage.save_manual(entry)
+    edit("match_activity", None, to_date=date(2026, 11, 6), activity_id="log1")
+    added = next(s for _, s in find(date(2026, 11, 6)) if s.modality == "strength")
+    assert (added.title, added.type, added.duration_min, added.distance_km) == ("Gym", "strength", 40, 0)
+    assert storage.load_manual("log1").match.session_index >= 0
+
+
+def test_a_day_outside_the_plan_is_refused():
+    run = add_run()
+    with pytest.raises(lifecycle.Conflict, match="isn't in this plan"):
+        edit("match_activity", None, to_date=date(2027, 6, 1), activity_id=run.id)
+
+
+def test_taking_a_run_out_of_the_plan():
+    run = add_run()
+    edit("replace", TEMPO, activity_id=run.id)
+    result = edit("match_activity", None, activity_id=run.id)
+    assert storage.load_activity(run.id).match == Match()
+    assert at(1, 0).status == "planned"
+    assert result["summary"] == "Took Tue run out of the plan"
+    with pytest.raises(lifecycle.Conflict, match="isn't in the plan"):
+        edit("match_activity", None, activity_id=run.id)
+
+
+def test_undo_puts_a_count_back():
+    run = add_run()
+    edit("replace", TEMPO, activity_id=run.id)
+    edit("match_activity", THU_EASY, activity_id=run.id)
+    edits.undo("plan")
+    assert at(1, 0).status == "replaced" and matched_session(run).type == "tempo"
+
+
+def test_undo_removes_an_added_session():
+    run = add_run()
+    edit("match_activity", None, to_date=date(2026, 11, 4), activity_id=run.id)
+    edits.undo("plan")
+    assert not [s for _, s in find(date(2026, 11, 4)) if s.modality == "run"]
+    assert storage.load_activity(run.id).match == Match()
+
+
+def test_replace_no_longer_needs_the_same_day():
+    run = add_run()  # Tue
+    edit("replace", THU_EASY, activity_id=run.id, note="did it early")
+    assert at(1, 3).status == "replaced" and matched_session(run).type == "easy"
+
+
+def test_unreplace_counts_the_session_as_planned_again():
+    run = add_run()
+    edit("replace", TEMPO, activity_id=run.id)
+    result = edit("unreplace", TEMPO)
+    assert at(1, 0).status == "planned" and at(1, 0).edit_note == ""
+    assert result["summary"] == "Tue tempo 4 km counts as planned again"
+    assert matched_session(run).type == "tempo"  # the run still counts as it
+    with pytest.raises(lifecycle.Conflict, match="wasn't replaced"):
+        edit("unreplace", TEMPO)
+
+
+def test_the_api_matches_to_a_session_and_to_a_day(client):
+    run = add_run()
+    etag = client.get("/api/plans/plan").headers["ETag"]
+    body = {"kind": "match_activity", "session": {"week": 1, "index": 3}, "activity_id": run.id}
+    first = client.post("/api/plans/plan/edits", json=body, headers={"If-Match": etag})
+    assert first.status_code == 200 and first.json()["summary"] == "Counted Tue run as Thu easy 9 km"
+    etag = client.get("/api/plans/plan").headers["ETag"]
+    body = {"kind": "match_activity", "to_date": "2026-11-04", "activity_id": run.id}
+    second = client.post("/api/plans/plan/edits", json=body, headers={"If-Match": etag})
+    assert second.status_code == 200 and second.json()["summary"] == "Added Tue run to the plan on Wed"
+    assert client.get(f"/api/activities/{run.id}").json()["match"]["planned_date"] == "2026-11-04"

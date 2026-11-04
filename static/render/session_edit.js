@@ -1,9 +1,6 @@
-// Hand edits: the session menu, the activity buttons, and the toast with Undo. Code applies these, no coach.
-import { actions, api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, textarea, toast } from "./ui.js";
-import { DAYS, addDays, dateText, dayMs } from "./format.js";
-
-const ASSIGN_DAYS = 6;
-const daysApart = (a, b) => Math.abs(dayMs(a) - dayMs(b)) / 86400000;
+// Hand edits: the session menu, the toast with Undo, and the request the workout page's plan controls share. Code applies these, no coach.
+import { api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, textarea, toast } from "./ui.js";
+import { DAYS, addDays, dateText } from "./format.js";
 
 async function undo(id) {
   document.querySelector("[data-undoable]")?.remove();
@@ -20,7 +17,7 @@ function actionButton(text, action) {
   return b;
 }
 
-async function sendEdit(id, body) {
+export async function sendEdit(id, body) {
   const result = await postJson(`/api/plans/${encodeURIComponent(id)}/edits`, body, id);
   const note = body.note?.trim();
   const ask = actionButton("Ask the coach to check this week", async () => {
@@ -151,46 +148,6 @@ export function sessionMenu(planFile, week, index) {
     sheet(`${session.day}: ${session.title}`, ...nodes, labelled("Note (optional)", note), status);
   });
   return b;
-}
-
-function sessionList(title, planFile, activity, kind, sessions) {
-  const status = statusLine();
-  const rows = sessions.map(({ week, index, session }) => option(`${dateText(session.date)}: ${session.title}`, status, () => sendEdit(
-    planFile.meta.id, { kind, session: { week: week.week_number, index }, activity_id: activity.id },
-  )));
-  sheet(title, ...(rows.length ? rows : [el("p", "No planned sessions fit.")]), status);
-}
-
-const candidates = (planFile, activity, test) => planFile.plan.weeks.flatMap((week) => week.sessions
-  .map((session, index) => ({ week, index, session }))
-  .filter(({ session }) => session.modality === activity.modality && session.type !== "race" && test(session)));
-
-function open(planFile, activity, workouts, kind, title, test) {
-  const taken = (week, index) => workouts.some((w) => w.match.week_number === week.week_number && w.match.session_index === index);
-  const sessions = candidates(planFile, activity, test)
-    .filter(({ week, index }) => !taken(week, index))
-    .sort((a, b) => daysApart(a.session.date, activity.date) - daysApart(b.session.date, activity.date));
-  sessionList(title, planFile, activity, kind, sessions);
-}
-
-// Under an activity's review: tell the plan what this workout really was.
-export function activityButtons(planFile, activity, workouts) {
-  const status = statusLine();
-  if (activity.match.session_index >= 0) {
-    const week = planFile.plan.weeks.find((w) => w.week_number === activity.match.week_number);
-    const session = week?.sessions[activity.match.session_index];
-    if (!session || session.status === "replaced" || session.type === "race") return [];
-    return [actions(option("I did something else", status, () => sendEdit(planFile.meta.id, {
-      kind: "replace", session: { week: week.week_number, index: activity.match.session_index }, activity_id: activity.id,
-    }))), status];
-  }
-  const was = option("This was my …", status, async () => open(
-    planFile, activity, workouts, "assign_activity", "This was my …", (s) => daysApart(s.date, activity.date) <= ASSIGN_DAYS,
-  ));
-  const instead = option("I did this instead of …", status, async () => open(
-    planFile, activity, workouts, "replace", "I did this instead of …", (s) => s.date === activity.date,
-  ));
-  return [actions(was, instead), status];
 }
 
 export function sessionTitle(session, content) {

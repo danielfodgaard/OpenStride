@@ -50,7 +50,7 @@ Some changes are yours to make, not the coach's. The "⋯" menu on every session
 - **Move** a session to another day, or **swap** two sessions in the same or adjacent weeks. On a laptop you can drag a session onto a day or another session.
 - **Change** what a session is: distance, duration, target pace, type, title and description. The week's planned volume follows, and an interval session becomes one steady block when its amount or pace changes.
 - **Skip** a session, and unskip it later. A skipped session is your choice and is never counted as missed.
-- **Tell the plan what a run really was.** Under a workout: "This was my …" counts it as a planned session on a nearby day, and "I did this instead of …" marks the planned session as replaced.
+- **Put a workout on any plan day.** Under a workout, "In your plan" lists every day of the plan: pick a session and the workout counts as it, pick a day with nothing of that kind planned and the day gets a session that is the workout. "I did something else than planned" marks the planned session as replaced, and can be taken back. A synced Garmin run that matched the wrong session is fixed the same way.
 
 Each edit is a new plan version with a note the coach can read, so a later review or adaptation knows what moved and why. Workouts already on your Garmin follow the edit: a moved or changed session is re-sent, a skipped one is removed. Edits only warn about coaching judgments ("Wed isn't one of your usual training days", "hard runs on consecutive days"); facts, like two runs on one day or moving a session into the past, are refused.
 
@@ -95,7 +95,7 @@ Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister
 
 ## How I know it works
 
-- **743 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
+- **759 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
 - **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
 - **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
 - **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.

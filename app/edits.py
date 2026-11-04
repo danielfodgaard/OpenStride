@@ -9,11 +9,14 @@ from app import clock, lifecycle, metrics, storage
 from app.activities import plan_entries
 from app.adapt import revive
 from app.garmin.delivery import key_of, session_at
-from app.models import HistoryEntry, Match, PlanFile
+from app.models import DatedSession, HistoryEntry, Match, PlanFile
 from app.validate import MODALITIES, merge_warnings
 
 ASSIGN_DAYS = 6
 NO_TWO_RUNS = "already has a run. Use Swap instead."
+KINDS = {"run": "run", "strength": "strength session", "cross": "cross-training session"}
+ADDED_TYPE = {"run": "easy", "strength": "strength", "cross": "cross_training"}
+ADDED_TITLE = {"run": "Run", "strength": "Strength", "cross": "Cross-training"}
 
 
 def refuse(text: str) -> None:
@@ -176,8 +179,6 @@ def replace(session, entry, note, done, keys):
     # shortcut: same modality only, so a ride can't replace a run; lift it with a modality-free match.
     if session.type == "race":
         refuse("The race can't be changed by hand.")
-    if session.date != entry.date:
-        refuse("Pick a session planned on the day of this workout.")
     if session.modality != entry.modality:
         refuse(f"A {entry.modality} workout can only replace a planned {entry.modality} session.")
     if keys[id(session)] in done and keys[id(session)] != (entry.match.week_number, entry.match.session_index):
@@ -187,14 +188,75 @@ def replace(session, entry, note, done, keys):
     return f"Replaced {label(session)} with what you did"
 
 
+def unreplace(session):
+    if session.status != "replaced":
+        refuse("This session wasn't replaced.")
+    session.status = "planned"
+    session.edit_note = ""
+    return f"{label(session).capitalize()} counts as planned again"
+
+
+def what(entry) -> str:
+    """The workout, as the summary names it: a logged session by its title, a file by its kind."""
+    title = getattr(entry, "title", "").strip()
+    return title.lower() if title else KINDS[entry.modality]
+
+
+def release(entry, where: dict, entries: list) -> None:
+    """The session this workout counted as goes back to planned, unless another workout still counts as it."""
+    key = (entry.match.week_number, entry.match.session_index)
+    old = where.get(key)
+    others = any(e.id != entry.id and (e.match.week_number, e.match.session_index) == key for e, _ in entries)
+    if old is not None and old.status == "replaced" and not others:
+        old.status = "planned"
+        old.edit_note = ""
+
+
+def count(session, entry, done, keys, warnings):
+    """The workout counts as this session, whatever the two are dated: the plan day shows what the athlete did."""
+    if session.modality != entry.modality:
+        refuse(f"A {KINDS[entry.modality]} can only count as a planned {KINDS[entry.modality]}.")
+    if keys[id(session)] == (entry.match.week_number, entry.match.session_index):
+        refuse("This workout already counts as that session.")
+    if keys[id(session)] in done:
+        warnings.append(f"Another workout also counts as {label(session)}.")
+    if session.status == "skipped":
+        session.status = "planned"
+        session.edit_note = ""
+    return f"Counted {entry.date:%a} {what(entry)} as {label(session)}"
+
+
+def add(plan_file: PlanFile, entry, day: date) -> DatedSession:
+    """A day with nothing of this kind planned gets a session that is the workout itself."""
+    week = plan_file.week_of(day)
+    if week is None:
+        refuse("That date isn't in this plan.")
+    minutes = entry.duration_min if hasattr(entry, "duration_min") else round(entry.moving_time_s / 60)
+    distance = round(entry.distance_km, 2) if entry.modality == "run" else 0
+    title = getattr(entry, "title", "").strip() or ADDED_TITLE[entry.modality]
+    session = DatedSession(
+        day=day.strftime("%a"), type=ADDED_TYPE[entry.modality], modality=entry.modality, title=title,
+        distance_km=distance, duration_min=minutes, target_pace="", steps=[], date=day,
+        description=f"Added from your {KINDS[entry.modality]} on {entry.date:%a %-d %b}.",
+        edit_note=f"Added from a {KINDS[entry.modality]}",
+    )
+    week.sessions.append(session)
+    if session.modality == "run":
+        week.planned_km = round(week.planned_km + distance, 2)
+    return session
+
+
 def rematch(new: PlanFile, where: dict, moved_sessions: list, entries: list, target=None) -> dict:
     """Matches follow their session; a moved session picks up a free workout on its new day."""
     after = locate(new)
     before = {}
 
     def set_match(entry, save, session):
-        week, index = after[id(session)]
-        match = Match(planned_date=session.date.isoformat(), week_number=week, session_index=index)
+        if session is None:  # the workout leaves the plan's sessions
+            match = Match()
+        else:
+            week, index = after[id(session)]
+            match = Match(planned_date=session.date.isoformat(), week_number=week, session_index=index)
         if match != entry.match:
             before[entry.id] = entry.match
             entry.match = match
@@ -237,10 +299,27 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
         target = None
         note = note.strip()
         moved = []
+        added = []
 
-        if chosen is None:
+        if chosen is None and kind != "match_activity":
             refuse("Pick a session.")
-        if kind == "move":
+        if kind == "match_activity":
+            entry, save = load_entry(activity_id, plan_id)
+            release(entry, where, entries)
+            if chosen is not None:
+                summary = count(chosen, entry, done, keys, warnings)
+            elif to_date is not None:
+                chosen = add(new, entry, to_date)
+                added = [chosen]
+                summary = f"Added {entry.date:%a} {what(entry)} to the plan on {to_date:%a}"
+            elif entry.match.session_index < 0:
+                refuse("This workout isn't in the plan.")
+            else:
+                summary = f"Took {entry.date:%a} {what(entry)} out of the plan"
+            if chosen is not None:
+                entry.plan_id = plan_id  # an unattached workout joins the plan it matches
+            target = (entry, save, chosen)
+        elif kind == "move":
             summary = move(new, chosen, to_date, today, new.request.race_date, note, done, keys)
             moved = [chosen]
         elif kind == "swap":
@@ -252,6 +331,8 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
             summary = skip(chosen, note, done, keys)
         elif kind == "unskip":
             summary = unskip(new, chosen)
+        elif kind == "unreplace":
+            summary = unreplace(chosen)
         elif kind == "change":
             before_km = chosen.distance_km
             summary = change(chosen, changes or {}, today, note, done, keys)
@@ -289,7 +370,7 @@ def apply(plan_id: str, kind: str, session: dict | None = None, to_date: date | 
         lifecycle.write_version(new)
         storage.save_plan(new)
         metrics.refresh(new)
-        warnings += merge_warnings(plan_file, new) + day_warnings(new, moved)
+        warnings += merge_warnings(plan_file, new) + day_warnings(new, [*moved, *added])
         return {
             "plan": new,
             "version": new.meta.version,

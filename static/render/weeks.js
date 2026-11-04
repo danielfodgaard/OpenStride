@@ -1,30 +1,16 @@
 // The weeks page: one foldable block per week, and a linked row per session.
 import {
   USB_HELP, actions, api, breadcrumb, button, chip, el, fitButton, garminStatus, line, link, main, muted,
-  planPath, refresh, rowLinks, stale, statusLine, table, toast, viewToken,
+  planPath, recall, refresh, remember, rowLinks, stale, statusLine, table, toast, viewToken,
 } from "./ui.js";
 import { DAYS, actualText, addDays, amountText, dateText, roundKm } from "./format.js";
 import { planBasics } from "./plan_overview.js";
 import { notStarted } from "../charts.js";
 import { dragSource, dropTarget, editWarnings, sessionMenu, sessionTitle } from "./session_edit.js";
 
-const storageKey = (id) => `openstride:weeks:${id}`;
-
 function remembered(id) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey(id)));
-    return Array.isArray(saved) ? saved : null;
-  } catch {
-    return null;
-  }
-}
-
-function remember(id, numbers) {
-  try {
-    localStorage.setItem(storageKey(id), JSON.stringify(numbers));
-  } catch {
-    // Blocked storage only costs the remembered folds.
-  }
+  const saved = recall(`weeks:${id}`);
+  return Array.isArray(saved) ? saved : null;
 }
 
 function completionChips(workouts) {
@@ -146,7 +132,7 @@ export async function weeksView(id, openWeek) {
   const current = planFile.plan.weeks.find((w) => w.start_date <= today && today <= addDays(w.start_date, 6));
   const open = new Set(openWeek ? [Number(openWeek)] : remembered(id) ?? (current ? [current.week_number] : []));
   const blocks = [];
-  const saveFolds = () => remember(id, blocks.filter((b) => b.open).map((b) => Number(b.dataset.week)));
+  const saveFolds = () => remember(`weeks:${id}`, blocks.filter((b) => b.open).map((b) => Number(b.dataset.week)));
   planFile.plan.weeks.forEach((week, i) => {
     const volume = metrics.weeks.find((v) => v.week_number === week.week_number);
     const watch = active ? watchBlock(id, week, workouts, today, garmin, changes[i]?.changed ?? 0) : null;

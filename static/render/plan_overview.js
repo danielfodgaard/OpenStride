@@ -1,7 +1,8 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
   actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, refresh, richText, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
+  line, link, main, muted, notice, planPath, postJson, recall, refresh, remember, richText, rowLink, stale, statStrip, statusLine, table, textarea,
+  viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
@@ -77,10 +78,13 @@ function chatMessage(message, proposals, planFile, bases, readOnly) {
   return box;
 }
 
+// The chat folds like the week blocks, and the fold is remembered per plan on this device. A draft from
+// "Ask the coach" opens it.
 function chatSection(planFile, messages, proposals, bases, readOnly) {
-  const section = el("section");
   const encoded = encodeURIComponent(planFile.meta.id);
-  section.append(el("h2", "Your coach"));
+  const key = `chat:${planFile.meta.id}`;
+  const section = foldable("Your coach", Boolean(editMemo.chatDraft) || recall(key) !== false);
+  section.addEventListener("toggle", () => remember(key, section.open));
   for (const message of messages) section.append(chatMessage(message, proposals, planFile, bases, readOnly));
   if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask about your training, or ask for a plan change. The coach sees your plan, every run and its own notes about you."));
   if (readOnly) return section;
