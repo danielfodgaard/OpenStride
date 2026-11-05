@@ -332,7 +332,8 @@ const jsonRequest = (method, path, body, plan) => api(path, {
 export const postJson = (path, body, plan) => jsonRequest("POST", path, body, plan);
 
 // A POST whose reply is server-sent events: `onText` gets each delta; resolves with the `done` data, rejects on `error`.
-export async function postStream(path, body, plan, onText) {
+// `onStatus` hears what the server is doing before and between the words.
+export async function postStream(path, body, plan, onText, onStatus = () => {}) {
   const response = await send(path, { method: "POST", plan, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -347,6 +348,7 @@ export async function postStream(path, body, plan, onText) {
       const [event, data] = chunk.split("\n", 2);
       const payload = JSON.parse(data.replace(/^data: /, ""));
       if (event === "event: delta") onText(payload);
+      else if (event === "event: status") onStatus(payload);
       else if (event === "event: done") return payload;
       else throw new Error(payload);
     }

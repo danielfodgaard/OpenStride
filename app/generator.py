@@ -69,11 +69,21 @@ def complete(client, model, system, messages, usage, max_tokens=MAX_TOKENS, stre
 
 
 def stream_text(client, model, system, messages, usage, max_tokens=MAX_TOKENS, **extra):
-    """Like `complete`, but yields the reply's text as it arrives. The finished message is the return value: `reply = yield from stream_text(...)`."""
+    """Like `complete`, but yields the reply as it happens: ("delta", text) for each piece of the reply's text,
+    ("thinking", "") when the model starts thinking, and ("tool", name) when it starts a tool call, so a page can
+    say what the wait is for. The finished message is the return value: `reply = yield from stream_text(...)`.
+    """
     request = dict(model=model, max_tokens=max_tokens, system=system, messages=messages, **extra)
     try:
         with client.messages.stream(**request) as response:
-            yield from response.text_stream
+            for event in response:
+                kind = getattr(event, "type", "")
+                if kind == "text":
+                    yield ("delta", event.text)
+                elif kind == "message_start":
+                    yield ("thinking", "")
+                elif kind == "content_block_start" and event.content_block.type == "tool_use":
+                    yield ("tool", event.content_block.name)
             message = response.get_final_message()
     except anthropic.APIError as error:
         raise GenerationError(f"The Claude API call failed: {error}") from error

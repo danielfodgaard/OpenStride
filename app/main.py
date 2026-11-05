@@ -456,31 +456,35 @@ def sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def chat_events(first: str | None, words):
-    """Text deltas as they come, then `done` with the saved messages, or `error` with the reason."""
+def chat_events(first: tuple, events):
+    """`status` and `delta` events as they come, then `done` with the saved messages, or `error` with the reason."""
     try:
-        if first is not None:
-            yield sse("delta", first)
+        yield sse(*first)
         while True:
             try:
-                yield sse("delta", next(words))
+                kind, text = next(events)
             except StopIteration as done:
                 yield sse("done", done.value)
                 return
+            yield sse(kind, text)
     except (GenerationError, lifecycle.Conflict, lifecycle.PlanChanged, storage.FileLockTimeout) as error:
         yield sse("error", str(error))
 
 
 @app.post("/api/plans/{plan_id}/chat")
 def send_chat(plan_id: str, body: ChatInput, if_match: str | None = Header(None)) -> StreamingResponse:
-    """Streams the reply as server-sent events. The checks run before the first byte, so a refused plan is still a 409."""
+    """Streams the reply as server-sent events, from the first moment: what the coach is doing, then its words.
+
+    The checks run before the first byte, so a refused plan is still a 409.
+    """
     check_etag(plan_id, if_match)
-    words = chat.stream(plan_id, body.text)
+    events = chat.stream(plan_id, body.text)
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # a proxy must not hold the events back
     try:
-        first = next(words)
-    except StopIteration as done:  # nothing to stream, but a result all the same
-        return StreamingResponse(iter([sse("done", done.value)]), media_type="text/event-stream")
-    return StreamingResponse(chat_events(first, words), media_type="text/event-stream")
+        first = next(events)  # the plan and API-key checks run here; a refusal is still a plain error response
+    except StopIteration as done:
+        return StreamingResponse(iter([sse("done", done.value)]), media_type="text/event-stream", headers=headers)
+    return StreamingResponse(chat_events(first, events), media_type="text/event-stream", headers=headers)
 
 
 @app.get("/api/plans/{plan_id}/chat")

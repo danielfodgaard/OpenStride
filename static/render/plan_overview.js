@@ -105,11 +105,27 @@ function chatSection(planFile, messages, proposals, bases, readOnly) {
     you.append(el("h4", "You"), el("p", text.value));
     const live = el("p", "");
     live.className = "streaming";
+    const progress = muted("Sending…", "p");  // what the coach is doing, and for how long, until its words arrive
     const coach = el("div");
-    coach.append(el("h4", "Coach"), live);
+    coach.append(el("h4", "Coach"), progress, live);
     section.insertBefore(you, composer);
     section.insertBefore(coach, composer);
-    await postStream(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id, (words) => { live.textContent += words; });
+    const started = Date.now();
+    let stage = "Sending…";
+    const show = () => { progress.textContent = `${stage} ${Math.round((Date.now() - started) / 1000)} s`; };
+    const ticker = setInterval(show, 1000);
+    try {
+      await postStream(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id, (words) => {
+        live.textContent += words;
+        progress.hidden = true;
+      }, (what) => {
+        stage = what;
+        progress.hidden = false;
+        show();
+      });
+    } finally {
+      clearInterval(ticker);
+    }
     refresh();
   }, "The coach is thinking…", "primary");
   const clear = button("New conversation", status, async () => {

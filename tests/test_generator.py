@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app import storage
+from app import generator, storage
 from app.generator import GenerationError, generate_plan
-from app.models import SavedRequest
+from app.models import SavedRequest, Usage
 from app.clock import week_starts
 
 SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())
@@ -29,20 +29,32 @@ class FakeClient:
 
     def stream(self, **kwargs):
         self.prompts.append(kwargs["messages"][0]["content"])
-        reply = self.replies.pop(0)
-        text_stream = (block.text for block in reply.content if block.type == "text")
-        return Stream(SimpleNamespace(get_final_message=lambda: reply, text_stream=text_stream))
+        return Stream(self.replies.pop(0))
 
 
 class Stream:
-    def __init__(self, final):
-        self.final = final
+    """What client.messages.stream() returns: a context manager that iterates the SDK's events."""
+
+    def __init__(self, reply):
+        self.reply = reply
 
     def __enter__(self):
-        return self.final
+        return self
 
     def __exit__(self, *exc):
         return False
+
+    def __iter__(self):
+        yield SimpleNamespace(type="message_start")
+        for block in self.reply.content:
+            yield SimpleNamespace(type="content_block_start", content_block=block)
+            if block.type == "text" and block.text:
+                yield SimpleNamespace(type="text", text=block.text)
+            yield SimpleNamespace(type="content_block_stop")
+        yield SimpleNamespace(type="message_stop")
+
+    def get_final_message(self):
+        return self.reply
 
 
 def reply(plan, stop_reason="end_turn"):
@@ -130,3 +142,18 @@ def test_stop_reasons_are_clear_errors(stop_reason, message):
 def test_unparseable_output_is_a_clear_error():
     with pytest.raises(GenerationError, match="unexpected format"):
         generate_plan(REQUEST, FakeClient(reply({"summary": "no weeks"})), TODAY)
+
+
+def test_stream_text_reports_thinking_and_tool_calls_around_the_words():
+    tool = SimpleNamespace(type="tool_use", id="c1", name="update_notes", input={})
+    reply = SimpleNamespace(stop_reason="tool_use", content=[SimpleNamespace(type="text", text="Hi"), tool], usage=SimpleNamespace(input_tokens=1, output_tokens=1))
+    usage = Usage(input_tokens=0, output_tokens=0)
+    events = generator.stream_text(FakeClient(reply), "m", "s", [{"role": "user", "content": "x"}], usage)
+    seen = []
+    while True:
+        try:
+            seen.append(next(events))
+        except StopIteration as done:
+            assert done.value is reply
+            break
+    assert seen == [("thinking", ""), ("delta", "Hi"), ("tool", "update_notes")]

@@ -266,7 +266,11 @@ def test_the_route_streams_the_words_then_the_saved_messages(plan, monkeypatch):
     response = client.post("/api/plans/plan/chat", json={"text": "I'm 34"})
     assert response.headers["content-type"].startswith("text/event-stream")
     got = events(response)
-    assert got[:-1] == [("delta", "Noting that."), ("delta", "\n\n"), ("delta", "Done.")]
+    assert got[:-1] == [
+        ("status", "Reading your plan and runs…"),
+        ("status", "Thinking…"), ("delta", "Noting that."), ("status", "Updating the notes about you…"),
+        ("delta", "\n\n"), ("status", "Thinking…"), ("delta", "Done."),
+    ]
     assert got[-1][0] == "done" and [m["role"] for m in got[-1][1]["messages"]] == ["user", "coach"]
     assert storage.load_chat("plan")[1].text == "Noting that.\n\nDone."
 
@@ -394,3 +398,20 @@ def test_at_most_four_runs_in_full_per_message():
     assert not tool_results(fake, 4)[0]["is_error"]
     fifth = tool_results(fake, 5)[0]
     assert fifth["is_error"] and "At most 4" in fifth["content"]
+
+
+def test_the_first_byte_waits_for_nothing_but_the_checks(plan, monkeypatch):
+    """A refused message is a plain error, not an error event; everything after that streams."""
+    monkeypatch.setattr(chat.generator, "make_client", lambda: (_ for _ in ()).throw(chat.generator.GenerationError("This needs an API key, and none is set.")))
+    response = TestClient(main.app).post("/api/plans/plan/chat", json={"text": "hi"})
+    assert response.status_code == 502 and "API key" in response.json()["detail"]
+
+
+def test_a_detail_call_is_announced_between_the_words():
+    add_run()
+    fake = LoopClient(reply_tool("workout_details", text="Let me look.", activity_id="run1"), reply_text("Steady."))
+    got = [event for event in chat.stream("plan", "how was it?", fake, TODAY)]
+    assert got == [
+        ("status", "Reading your plan and runs…"), ("status", "Thinking…"), ("delta", "Let me look."),
+        ("status", "Reading a run in full…"), ("delta", "\n\n"), ("status", "Thinking…"), ("delta", "Steady."),
+    ]
