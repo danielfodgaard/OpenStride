@@ -76,7 +76,7 @@ The coach runs as a small agent loop with three tools, and nothing else:
 
 - **Propose a plan change.** The coach writes a precise change request; a separate call applies it within a scope (this week / next 2 weeks / rest of plan), the validator checks it, and you get a rationale, a one-line reason per change and a diff of the affected weeks under the coach's reply. The coach is told to be conservative: a single bad session is not a reason to change anything, and **"no change recommended" is a valid, good answer.** Accepting creates a new plan version; you can always restore an older one. The coach can never edit your plan directly.
 - **Read one run in full.** Every run in its context carries the file's extra fields for the whole run. When a question turns on how a particular run unfolded, the coach can ask for that run's laps and km splits with their extras and its 30-second recording, at most four runs per message.
-- **Update its notes.** See below.
+- **Update its notes.** See below. The reply comes first and the notes are written after it, so you read the answer while that happens; the page shows what the coach is doing, and for how long, from the moment you send.
 
 After a hand edit, the toast offers "Ask the coach to check this week", which opens the conversation with your edit already written in.
 
