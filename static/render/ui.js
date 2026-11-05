@@ -350,7 +350,8 @@ export async function postStream(path, body, plan, onText, onStatus = () => {}) 
       if (event === "event: delta") onText(payload);
       else if (event === "event: status") onStatus(payload);
       else if (event === "event: done") return payload;
-      else throw new Error(payload);
+      else if (event === "event: error") throw new Error(payload);
+      // anything else is a newer server's event this page doesn't know: fine to skip
     }
   }
 }

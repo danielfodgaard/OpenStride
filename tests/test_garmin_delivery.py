@@ -343,4 +343,5 @@ def test_tokens_stay_in_secrets_and_out_of_everything_else(client, plan, monkeyp
 def test_review_prompts_never_read_the_secrets_folder():
     source = "".join(path.read_text() for path in Path("app/prompts").glob("*.py"))
     source += Path("app/review.py").read_text() + Path("app/chat.py").read_text()
-    assert "secrets" not in source and "garmin" not in source.lower()
+    # The coach's guide to the app may name the Garmin buttons; the code must never touch the Garmin modules or the token.
+    assert "secrets" not in source and "app.garmin" not in source and "import garmin" not in source and "garminconnect" not in source

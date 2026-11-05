@@ -321,4 +321,10 @@ renderFooter();
 markTab();
 route();
 // Not there on plain http: the app still works, it just can't be installed.
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then(warmCache).catch(() => null);
+if ("serviceWorker" in navigator) {
+  // After a deploy the first load still runs the cached modules while the new worker installs. Once it takes over,
+  // reload, so the page never mixes a new module with an old one from the cache.
+  const updating = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (updating) location.reload(); });
+  navigator.serviceWorker.register("/sw.js").then(warmCache).catch(() => null);
+}

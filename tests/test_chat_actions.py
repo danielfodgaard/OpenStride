@@ -415,3 +415,12 @@ def test_a_detail_call_is_announced_between_the_words():
         ("status", "Reading your plan and runs…"), ("status", "Thinking…"), ("delta", "Let me look."),
         ("status", "Reading a run in full…"), ("delta", "\n\n"), ("status", "Thinking…"), ("delta", "Steady."),
     ]
+
+
+def test_the_coach_is_told_what_the_app_shows_and_how_the_chart_is_computed():
+    fake = LoopClient(reply_text("ok"))
+    send("what does the fitness chart mean?", fake)
+    system = fake.requests[0]["system"]
+    assert "Fitness & fatigue" in system and "42 days" in system and "7 days" in system and "Banister TRIMP" in system
+    assert "Delete from the plan" in system and "In your plan" in system and "Coach data" in system
+    assert "easy 0.75" in system and "190 and 55" in system
