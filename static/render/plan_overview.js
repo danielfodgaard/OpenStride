@@ -1,62 +1,11 @@
 // A plan's overview page, and the draft actions it shares with the generator.
 import {
-  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, editMemo, el, foldable, labelled,
-  line, link, main, muted, notice, planPath, postJson, postStream, recall, refresh, remember, richText, rowLink, stale, statStrip, statusLine,
-  table, textarea, viewToken,
+  actions, activePlan, api, breadcrumb, bulletList, button, chip, downloadButton, el, foldable, labelled, line, link, main, notice,
+  planPath, postJson, refresh, rowLink, stale, statStrip, statusLine, table, textarea, viewToken,
 } from "./ui.js";
 import { DAYS, amountText, dateText, roundKm, shortDate } from "./format.js";
 import { drawProgressCharts } from "../charts.js";
-
-function sessionText(session) {
-  if (!session) return "Rest";
-  return `${session.type}: ${session.title}, ${amountText(session)}${session.target_pace ? ` @ ${session.target_pace}` : ""}`;
-}
-
-// Old vs. new session per day for the affected weeks; changed rows get a *.
-function diffTable(planFile, proposal) {
-  const onDay = (week, day) => week.sessions.filter((s) => s.day === day).map(sessionText).join("; ") || "Rest";
-  const rows = proposal.result.weeks.flatMap((newWeek) => {
-    const oldWeek = planFile.plan.weeks.find((w) => w.week_number === newWeek.week_number);
-    return DAYS.map((day) => {
-      const before = onDay(oldWeek, day);
-      const after = onDay(newWeek, day);
-      return [before === after ? "" : "*", newWeek.week_number, day, before, after];
-    });
-  });
-  return table(["", "Week", "Day", "Old", "New"], rows);
-}
-
-// `bases` maps a version to its plan: a proposal's diff is against the version it was made from.
-function proposalView(proposal, planFile, bases, readOnly = false) {
-  const box = el("div");
-  const status = statusLine();
-  box.className = "field";
-  const { recommendation, rationale, changes } = proposal.result;
-  box.append(el("h3", recommendation === "no_change" ? "No change recommended" : "Suggested changes"));
-  box.append(el("p", `Weeks ${proposal.scope_weeks.join(", ")} — ${proposal.status}`), el("p", rationale));
-  if (recommendation === "change") {
-    box.append(bulletList(changes.map((c) => `Week ${c.week_number} ${c.day}: ${c.summary}`)));
-    if (proposal.warnings.length) box.append(el("p", "Worth knowing before you accept:"), bulletList(proposal.warnings));
-    box.append(diffTable(bases[proposal.based_on_version] ?? planFile, proposal));
-    if (!proposal.acceptable) box.append(el("p", "This proposal can't be accepted."));
-    if (proposal.acceptable && proposal.status === "pending" && !readOnly) {
-      const path = `/api/proposals/${encodeURIComponent(proposal.proposal_id)}`;
-      const plan = planFile.meta.id;
-      box.append(actions(
-        button("Accept", status, async () => {
-          await api(`${path}/accept`, { method: "POST", plan });
-          refresh();
-        }, "Working…", "primary"),
-        button("Reject", status, async () => {
-          await api(`${path}/reject`, { method: "POST", plan });
-          refresh();
-        }),
-      ));
-    }
-  }
-  box.append(status);
-  return box;
-}
+import { chatSection } from "./chat.js";
 
 function versionLine({ meta }) {
   return line(`${meta.status} · version ${meta.version} · `, link("All versions", `${planPath(meta.id)}/versions`));
@@ -65,76 +14,6 @@ function versionLine({ meta }) {
 function recentEdits({ meta }) {
   const lines = meta.history.slice(-5).reverse().map((h) => `v${h.version} · ${h.summary || (h.proposal_id ? "Coach proposal" : h.rationale)}`);
   return lines.length ? [bulletList(lines)] : [];
-}
-
-function chatMessage(message, proposals, planFile, bases, readOnly) {
-  const box = el("div");
-  box.append(el("h4", `${message.role === "user" ? "You" : "Coach"} — ${message.created_at}`));
-  box.append(...richText(message.text));
-  if (message.flags.length) box.append(bulletList(message.flags));
-  if (message.memory_updated) box.append(line(muted("The coach updated "), link("its notes about you", "#/coach"), muted(".")));
-  const proposal = proposals.find((p) => p.proposal_id === message.proposal_id);
-  if (proposal) box.append(proposalView(proposal, planFile, bases, readOnly));
-  return box;
-}
-
-// The chat folds like the week blocks, and the fold is remembered per plan on this device. A draft from
-// "Ask the coach" opens it.
-function chatSection(planFile, messages, proposals, bases, readOnly) {
-  const encoded = encodeURIComponent(planFile.meta.id);
-  const key = `chat:${planFile.meta.id}`;
-  const section = foldable("Your coach", Boolean(editMemo.chatDraft) || recall(key) !== false);
-  section.addEventListener("toggle", (event) => { if (event.target === section) remember(key, section.open); });
-  const render = (message) => chatMessage(message, proposals, planFile, bases, readOnly);
-  // Only the latest exchange stays open; the rest folds away so the page doesn't grow with the conversation.
-  const earlier = messages.slice(0, -2);
-  if (earlier.length) section.append(foldable(`Earlier in this conversation (${earlier.length})`, false, ...earlier.map(render)));
-  section.append(...messages.slice(-2).map(render));
-  if (!messages.length) section.append(el("p", readOnly ? "No chat on this plan." : "Ask about your training, or ask for a plan change. The coach sees your plan, every run and its own notes about you."));
-  if (readOnly) return section;
-
-  const status = statusLine();
-  const text = textarea(3);
-  text.value = editMemo.chatDraft;
-  editMemo.chatDraft = "";
-  const composer = labelled("Message", text);
-  const send = button("Send", status, async () => {
-    if (!text.value.trim()) throw new Error("Write a message first.");
-    // The exchange shows as it streams; the reload at the end draws it properly, Markdown and all.
-    const you = el("div");
-    you.append(el("h4", "You"), el("p", text.value));
-    const live = el("p", "");
-    live.className = "streaming";
-    const progress = muted("Sending…", "p");  // what the coach is doing, and for how long, until its words arrive
-    const coach = el("div");
-    coach.append(el("h4", "Coach"), progress, live);
-    section.insertBefore(you, composer);
-    section.insertBefore(coach, composer);
-    const started = Date.now();
-    let stage = "Sending…";
-    const show = () => { progress.textContent = `${stage} ${Math.round((Date.now() - started) / 1000)} s`; };
-    const ticker = setInterval(show, 1000);
-    try {
-      await postStream(`/api/plans/${encoded}/chat`, { text: text.value }, planFile.meta.id, (words) => {
-        live.textContent += words;
-        progress.hidden = true;
-      }, (what) => {
-        stage = what;
-        progress.hidden = false;
-        show();
-      });
-    } finally {
-      clearInterval(ticker);
-    }
-    refresh();
-  }, "The coach is thinking…", "primary");
-  const clear = button("New conversation", status, async () => {
-    if (!confirm("Start a new conversation? The coach keeps its notes about you; this conversation is archived, not shown again.")) return;
-    await api(`/api/plans/${encoded}/chat/clear`, { method: "POST", plan: planFile.meta.id });
-    refresh();
-  });
-  section.append(composer, actions(send, clear), status);
-  return section;
 }
 
 function progressSection(progress) {
@@ -270,9 +149,10 @@ export async function planOverview(id) {
     api(`/api/plans/${encoded}/status`),
     api(`/api/plans/${encoded}/metrics`),
   ]);
-  const proposals = isDraft ? [] : await api(`/api/plans/${encoded}/proposals`);
-  const messages = isDraft ? [] : await api(`/api/plans/${encoded}/chat`);
   const progress = isDraft ? null : await api(`/api/plans/${encoded}/progress`);
+  const old = !isDraft && !isActive;  // an archived plan keeps its conversation, readable here
+  const proposals = old ? await api(`/api/plans/${encoded}/proposals`) : [];
+  const messages = old ? await api(`/api/plans/${encoded}/chat`) : [];
   const bases = {};
   for (const version of new Set(proposals.map((p) => p.based_on_version))) {
     bases[version] = await api(`/api/plans/${encoded}/versions/${version}`).catch(() => null);
@@ -298,7 +178,7 @@ export async function planOverview(id) {
       fitnessCard,
       volumeCard,
       weeksLink,
-      chatSection(planFile, messages, proposals, bases, !isActive),
+      isActive ? line(link("Talk to your coach", "#/chat")) : foldable("Chat on this plan", false, chatSection(planFile, messages, proposals, bases, true)),
       progressSection(progress),
       foldable("Plan versions", false, versionLine(planFile), ...recentEdits(planFile)),
     );

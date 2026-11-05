@@ -70,7 +70,7 @@ Each edit is a new plan version with a note the coach can read, so a later revie
 
 ### One coach, who knows what's going on
 
-There is one coach and one conversation. On every message it sees your plan, every run with its review, your hand edits and notes, your training-load numbers, and its own notes about you. Ask "is my easy pace too fast?" and you get an answer that cites your actual runs. Tell it "my calf has been tight since Tuesday" and it may ask a follow-up question, write that down, and propose a change.
+There is one coach and one conversation, on its own Coach tab. On every message it sees your plan, every run with its review, your hand edits and notes, your training-load numbers, and its own notes about you. Ask "is my easy pace too fast?" and you get an answer that cites your actual runs. Tell it "my calf has been tight since Tuesday" and it may ask a follow-up question, write that down, and propose a change.
 
 The coach runs as a small agent loop with three tools, and nothing else:
 

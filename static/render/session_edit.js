@@ -1,5 +1,5 @@
 // Hand edits: the session menu, the toast with Undo, and the request the workout page's plan controls share. Code applies these, no coach.
-import { api, button, editMemo, el, input, labelled, muted, notice, planPath, postJson, refresh, statusLine, textarea, toast } from "./ui.js";
+import { api, button, editMemo, el, input, labelled, muted, notice, postJson, refresh, statusLine, textarea, toast } from "./ui.js";
 import { DAYS, addDays, dateText } from "./format.js";
 
 async function undo(id) {
@@ -22,8 +22,8 @@ export async function sendEdit(id, body) {
   const note = body.note?.trim();
   const ask = actionButton("Ask the coach to check this week", async () => {
     editMemo.chatDraft = `I changed the plan by hand: ${result.summary}.${note ? ` Reason: ${note}.` : ""} Can you check the rest of the week?`;
-    if (location.hash === planPath(id)) refresh();
-    else location.hash = planPath(id);
+    if (location.hash === "#/chat") refresh();
+    else location.hash = "#/chat";
   });
   const rereview = body.activity_id ? ["Re-run the review to judge it against this"] : [];
   toast([result.summary, ...result.warnings, ...rereview].join(" · "), actionButton("Undo", () => undo(id)), ask);
