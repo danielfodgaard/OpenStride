@@ -1,12 +1,14 @@
 # OpenStride, agent-first: a design
 
-*Draft, 2026-11-06. A design only; no code changes come with it.*
+*Draft, 2026-11-06, revised the same day with the write boundary and the analyst. A design only; no code changes come with it.*
 
 ## The idea
 
 Today OpenStride is an app with a coach in one tab. The coach has three tools and sees a fixed, pre-assembled context on every message. Everything else, from importing a run to moving a session, is a page, a form or a menu that calls a fixed API route.
 
-The rebuild turns that inside out. **The agent is the application.** The athlete talks to one agent, on the phone or the laptop, and the agent does whatever they ask: sets up the plan, reads the runs, explains a chart, moves a session, logs a sore calf, changes a setting, writes a race report. The app underneath is a workspace the agent works in: the athlete's data as files, a command-line tool for the things code must do, a renderer for the things the athlete needs to see, and one gate. **The only action that waits for the athlete is a change to the training plan.** Everything else the agent does on its own authority.
+The rebuild turns that inside out. **The agent is the interface, in place of the GUI.** The athlete talks to one agent, on the phone or the laptop, and the agent does whatever they ask: sets up the plan, reads the runs, explains a chart, moves a session, logs a sore calf, changes a setting, writes a race report. The app underneath is a workspace the agent works in: the athlete's data as files, a command-line tool for the things code must do, a renderer for the things the athlete needs to see, and one gate. **The only action that waits for the athlete is a change to the training plan.** Everything else the agent does on its own authority, within a write boundary: it may write what it authors, it may never write what the watch recorded.
+
+Behind the interface sits a second agent, **the analyst**: a data-scientist that runs in a sandbox over a read-only copy of the data, computes rather than estimates, and comes back with reports, charts and proposals. New plans, a block review, a drift in easy pace, a shoe that is due for retirement: the analyst's findings reach the athlete through the same stream and the same approval card.
 
 This is the Omarchy pattern. Omarchy ships an operating system whose every menu action also has a command line, so the agent can drive the system, and it briefs the agent when something happens (a crash, a failed update). The human talks to the agent; the agent uses the system. OpenStride becomes the same thing for one runner's training: an opinionated workspace with a CLI for every action, briefs when something happens, and a conversation on top.
 
@@ -19,7 +21,7 @@ The payoff is the one the README already names: the app gets better when the mod
 | How the athlete uses the app | Pages, forms, menus, plus a Coach tab | One conversation. Pages become cards the agent shows |
 | The agent's tools | Three fixed tools (propose, read a run, update notes) | A shell in a workspace, the `openstride` CLI, skills, subagents |
 | Context on each message | ~50k tokens of JSON stuffed into every prompt | The agent reads what it needs from files; the workspace guide tells it where things are |
-| Who assembles the review, the proposal, the plan | Separate prompts and models per task, wired in code | The same agent, following a skill, calling the CLI for facts and validation |
+| Who assembles the review, the proposal, the plan | Separate prompts and models per task, wired in code | The interface agent for the everyday; the analyst, in a sandbox, for anything that needs computation |
 | Approval | Every proposal; hand edits bypass the coach | Every plan change, hand edits included, through one card. Nothing else |
 | Activity data | OpenStride parses .fit and .gpx, syncs Garmin, computes CTL/ATL | intervals.icu holds and analyses activities, wellness and fitness; OpenStride mirrors them |
 | Watch delivery | OpenStride builds .fit workouts and pushes to Garmin, unofficially | The plan is pushed to the intervals.icu calendar; intervals.icu sends it to Garmin, Coros, Wahoo and the rest |
@@ -33,9 +35,11 @@ The current split, "the LLM coaches, code handles facts", survives, with two ame
 
 1. **The agent operates, code holds the invariants.** Code no longer decides *when* the model is asked or *what* it sees. It owns four things: facts that must be exact (dates, pace arithmetic, VDOT, the plan schema and its validator), the one approval gate, the rendering of what the athlete sees, and the connection to intervals.icu. Everything between those is the agent's.
 2. **Data is files, and the files are the API.** The athlete's whole situation is a directory the agent can read with `cat`, `grep`, `jq` and Python. No endpoint stands between the agent and the data. Writes go through the CLI where an invariant exists, and straight to the file where none does.
+   **Three tiers of write access**, enforced in code: *recorded data* (activities, streams, wellness, athlete settings mirrored from intervals.icu) is never written by any agent; *the plan* is written only through the approval gate; *authored data* (notes, journal, reviews, reports, matches, settings, proposals) the agent writes freely and git keeps.
 3. **Prefer the general tool, promote to a dedicated one only to gate, render or audit.** The agent gets a shell first. A dedicated command exists for an action only when the harness needs to intercept it (apply a plan), draw it (show a week) or keep it consistent (compute paces).
 4. **Every change is explainable and reversible.** The workspace is a git repository. The agent commits what it changes with a reason; the athlete, or the agent on the athlete's word, can revert any of it.
-5. **The plan is sacred.** Nothing writes the plan except `openstride plan apply`, and that needs an approval the athlete gave through the card they were shown. This is enforced in code, not in the prompt.
+5. **The plan is sacred, and the record is untouchable.** Nothing writes the plan except `openstride plan apply`, and that needs an approval the athlete gave through the card they were shown. Nothing writes what the watch recorded except the connector that mirrors it. Both are enforced in code, not in the prompt.
+6. **Compute, don't estimate.** When an answer rests on numbers across many runs, the agent hands the question to the analyst, which writes code over the data in a sandbox and returns a result it can show. The model's judgment goes into what to ask and what the result means, not into arithmetic.
 
 ## Architecture
 
@@ -57,30 +61,34 @@ The current split, "the LLM coaches, code handles facts", survives, with two ame
   └──────────────┬───────────────────────────────┘
                  │ one persistent agent session per athlete
   ┌──────────────┴───────────────────────────────┐
-  │  Agent runtime (Claude Agent SDK harness)    │
+  │  Interface agent (Claude Agent SDK harness)  │
   │  tools: Bash, Read, Write, Edit, Glob, Grep  │
   │  + the `openstride` CLI inside the workspace │
   │  skills: review-run, weekly-review, new-plan,│
   │          daily-brief, race-report, …         │
-  │  hooks: deny writes to plan/, log every call │
-  └──────────────┬───────────────────────────────┘
-                 │ cwd
-  ┌──────────────┴───────────────────────────────┐
-  │  Workspace = data/ as a git repository       │
-  │  plan/  athlete/  activities/  wellness/     │
-  │  journal/  outbox/  settings.yaml  GUIDE.md  │
-  └──────────────────────────────────────────────┘
-                 ▲
-                 │ sync (activities, streams, intervals, wellness, zones)
-                 ▼ push (planned sessions as calendar events → watch)
-          intervals.icu  ←→  Garmin / Coros / Polar / Suunto / Strava
+  │  hooks: deny writes to plan/ and recorded    │
+  │         data, log every call                 │
+  └──────┬───────────────────────┬───────────────┘
+         │ cwd                   │ `openstride analyse "…"`
+  ┌──────┴────────────────┐  ┌───┴──────────────────────────────┐
+  │  Workspace = data/    │  │  Analyst (sandboxed subagent)    │
+  │  as a git repository  │◄─┤  workspace mounted READ-ONLY     │
+  │  plan/ athlete/       │  │  scratch/ for scripts and data   │
+  │  activities/ wellness/│  │  Python: pandas, numpy, plotting │
+  │  journal/ reports/    │  │  no network (web opt-in per run) │
+  │  outbox/ settings     │  │  out: report, charts, proposal   │
+  └───────────▲───────────┘  └──────────────────────────────────┘
+              │ sync (activities, streams, intervals, wellness, zones)
+              ▼ push (planned sessions as calendar events → watch)
+       intervals.icu  ←→  Garmin / Coros / Polar / Suunto / Strava
 ```
 
-Three layers, each with one job:
+Four parts, each with one job:
 
 - **The surface** shows one stream and one input. It renders cards it is given; it never computes anything.
-- **The server** keeps the invariants: the gate, the queue, the renderer, the connector, the triggers. It is the part that must be right regardless of the model.
-- **The agent** does the coaching and the operating, in a workspace that is just files and a CLI.
+- **The server** keeps the invariants: the gate, the write boundary, the queue, the renderer, the connector, the triggers. It is the part that must be right regardless of the model.
+- **The interface agent** talks to the athlete and operates the workspace: it reads, explains, logs, edits what it authors, drafts proposals, and decides when a question needs the analyst.
+- **The analyst** runs in a sandbox over a read-only copy of the data, computes, and returns reports, charts and proposals. It never talks to the athlete directly and never writes the workspace.
 
 ## The workspace
 
@@ -92,29 +100,46 @@ data/
   settings.yaml              units, quiet hours, which triggers are on, model and budget, intervals.icu athlete id
   athlete/
     memory.md                the coach's notes, as today: the one file that outlives everything
-    profile.yaml             facts that don't change often: birth year, HR max/rest, zones, thresholds (mirrored from intervals.icu)
-  plan/                      READ-ONLY to the agent; written only by `openstride plan apply`
+    profile.yaml             RECORDED: birth year, HR max/rest, zones, thresholds, mirrored from intervals.icu
+    gear.yaml                authored: shoes and their mileage, from intervals.icu's gear where the athlete tracks it there, else from conversation
+  plan/                      GATED: written only by `openstride plan apply`
     plan.json                the active plan (the current schema: weeks → sessions → steps, dated)
     request.json             what the plan was built from
     paces.json               reference paces, computed in code
     calendar.json            plan session key → intervals.icu event id, for push and drift checks
   proposals/
     2026-11-06T09-12_next-2-weeks.json   a proposed plan file plus rationale and changes; pending, approved or rejected
-  activities/
-    2026-11-05T18-02_run.json            the mirror of one intervals.icu activity: summary, intervals.icu's own analysis fields, the agent's review
+  activities/                RECORDED: written only by the intervals.icu connector
+    2026-11-05T18-02_run.json            the mirror of one intervals.icu activity: summary and intervals.icu's own analysis fields
     2026-11-05T18-02_run.streams.json    the recording (time, distance, HR, pace, cadence, altitude), fetched on first need
-    index.jsonl                          one line per activity: id, date, type, distance, time, load, match; the fast way to scan a season
-  wellness/
-    2026-11.jsonl                        one line per day from intervals.icu: ctl, atl, tsb, ramp, resting HR, HRV, sleep, weight, notes
+    index.jsonl                          one line per activity: id, date, type, distance, time, load; the fast way to scan a season
+  notes/                     authored: the agents' sidecars to the record, one folder per activity id
+    2026-11-05T18-02_run/review.md       the review, as the agent wrote it
+    2026-11-05T18-02_run/match.json      which planned session this counts as, when the automatic match is wrong
+    2026-11-05T18-02_run/athlete.md      what the athlete said about it (RPE, how it felt), written from conversation
+  wellness/                  RECORDED: one line per day from intervals.icu: ctl, atl, tsb, ramp, resting HR, HRV, sleep, weight
+    2026-11.jsonl
   journal/
     2026-11-05.md                        what the agent did and concluded that day: the review it wrote, what it asked, what it noticed
     weeks/2026-W45.md                    the weekly review
+  reports/                   authored by the analyst: one folder per run, with the report, its charts and the scripts that made them
+    2026-11-06T10-40_easy-pace-drift/
   outbox/                                cards the agent asked to show, consumed by the server (see Cards)
   logs/
     usage.jsonl                          tokens and cost per turn
 ```
 
-What this removes: `plans/<id>/versions/`, `undo_keys`, `chat.json` per plan, `metrics_cache.json`, `reviews/`, `raw/`, `series/`. Versions are git history. The chat is the harness session plus the journal. Metrics come from intervals.icu. Reviews live on the activity. Raw files live on intervals.icu.
+What this removes: `plans/<id>/versions/`, `undo_keys`, `chat.json` per plan, `metrics_cache.json`, `reviews/`, `raw/`, `series/`. Versions are git history. The chat is the harness session plus the journal. Metrics come from intervals.icu. Reviews live beside the activity, in `notes/`. Raw files live on intervals.icu.
+
+**The write boundary, by directory.** The labels above are the whole rule:
+
+| Tier | Directories | Who writes | How it is enforced |
+|---|---|---|---|
+| Recorded | `activities/`, `wellness/`, `athlete/profile.yaml` | The intervals.icu connector only | Hook denies the agents; read-only mount in the container setup; post-turn check reverts |
+| Gated | `plan/` | `openstride plan apply`, with the athlete's approval | The same, plus the token check in `apply` |
+| Authored | `athlete/memory.md`, `athlete/gear.yaml`, `notes/`, `journal/`, `reports/`, `proposals/`, `settings.yaml`, `outbox/` | The interface agent directly; the analyst only through `reports/` and `plan draft` | Git: every write is a commit with a reason, and a revert away |
+
+A wrong fact in the record is fixed at the source, on intervals.icu, and comes back on the next sync. A disagreement with the record, say a run the athlete says was a race, is a sidecar in `notes/`, never an edit to the mirror.
 
 **Git as the ledger.** The server initialises the repository. Every agent turn ends with a commit of whatever changed, with the agent's one-line reason as the message; every `plan apply` is its own commit tagged with the approval. `git log -- plan/plan.json` is the plan history the Plans page shows today. "Undo that" is a revert the agent runs itself. A corrupted memory file is `git checkout` away. Backups are `git bundle` or a zip of the directory, as today.
 
@@ -145,6 +170,11 @@ What this removes: `plans/<id>/versions/`, `undo_keys`, `chat.json` per plan, `m
 - `openstride icu upload <file.fit>` : forward a file the athlete dropped in the chat to intervals.icu, then sync
 - `openstride icu wellness --date today --note "…" --soreness 3` : write wellness fields the athlete reports in conversation back to intervals.icu
 
+**The analyst** (the only way to run computation outside the interface agent's own shell):
+
+- `openstride analyse "<question>" [--web] [--effort high]` : starts an analyst run in the sandbox with the question and the thread's relevant context, waits, and prints the report path and a summary. The analyst's charts go through `show chart`, its proposals through `plan draft`, so they arrive in the stream like anything else
+- `openstride reports` : what the analyst has produced, newest first
+
 **Showing things** (the only way to put a card in the stream):
 
 - `openstride show week [N|this|next]`, `show session <key>`, `show activity <id>`, `show fitness [--from --to]`, `show volume`, `show plan`
@@ -162,7 +192,9 @@ Each command is small and tested on its own, as the modules it wraps are today. 
 
 **What counts as a plan change:** any write to `plan/`. The first plan, a regenerated draft, a coach proposal, a hand edit ("move Thursday to Saturday"), a skip, a restore of an old version. They all go the same way: the agent builds the new plan file, calls `plan draft`, and the athlete sees one card.
 
-**What does not:** the coach's notes, the journal, a review, logging a session the athlete describes, a wellness note, a setting, deleting a mirrored activity, syncing, re-pushing the calendar, reverting something the agent wrote outside `plan/`. The agent does these and says so in a line.
+**What does not:** the coach's notes, the journal, a review, a match correction, logging what the athlete says about a run, a wellness note sent to intervals.icu, a setting, syncing, re-pushing the calendar, running the analyst, reverting something an agent authored. The agent does these and says so in a line.
+
+**What neither agent can do at all:** change, delete or fabricate anything in the record. A duplicate or a wrong activity is removed on intervals.icu, by the athlete, and disappears on the next sync.
 
 **The flow:**
 
@@ -175,10 +207,10 @@ A trivial edit costs the athlete one tap, which is the price of the rule being u
 
 **Enforcement, in layers:**
 
-- The harness's `PreToolUse` hook denies any Bash, Write or Edit call whose arguments touch `plan/` unless the command is `openstride plan apply`. Hooks run in code, before the tool runs.
+- The harness's `PreToolUse` hook denies any Bash, Write or Edit call whose arguments touch `plan/` or a recorded directory unless the command is `openstride plan apply`. Hooks run in code, before the tool runs.
 - `plan apply` checks the token's signature, the proposal id, and that the plan file's commit is the one the proposal was based on.
-- After every turn the server checks `git status` and the hash of `plan/`: a change that did not come through `apply` is reverted and the agent is told, in the next turn, what it tried and why it was undone.
-- In the containerised setup (`compose.yaml`), the agent runs in its own container with `plan/` mounted read-only, and the server applies the plan in its own. That makes the hook a convenience and the mount the boundary.
+- After every turn the server checks `git status` and the hashes of `plan/` and the recorded directories: a change that did not come through `apply` or the connector is reverted and the agent is told, in the next turn, what it tried and why it was undone.
+- In the containerised setup (`compose.yaml`), the interface agent runs in its own container with `plan/` and the recorded directories mounted read-only, the analyst in another with the whole workspace read-only, and the server applies the plan and runs the connector in its own. That makes the hook a convenience and the mounts the boundary.
 
 Nothing in the prompt is load-bearing for this.
 
@@ -201,9 +233,36 @@ The cost of this choice is a dependency on the Claude Code runtime (Node) next t
 
 Skills are text. They get better when the athlete or a contributor edits them, and they hand more judgment to the model as the model earns it. The conservative coaching stance in today's prompts ("one bad run is not a reason to change anything; no change is a good answer") moves into them unchanged.
 
-**Subagents for bulk reading.** Reading twenty activity streams to answer "is my easy pace drifting faster this block" should not sit in the main session's context. The harness's subagents do that: the main agent delegates the scan to a subagent on a cheaper model, with the data-analysis skill, and gets a short result back. The main session stays on the capable model with its context intact.
+**The analyst is a subagent, not a second product.** The harness's subagent mechanism starts it; what makes it the analyst is where it runs and what it is given. See the next section.
 
-**Models and effort.** The conversation runs on Claude Opus 5.5 at high effort, as today's default. Trigger-initiated turns run at medium effort. Subagents run on Claude Sonnet 5.5. All three are settings the athlete can change by asking, and a stronger model is a one-line change, which is the point.
+**Models and effort.** The conversation runs on Claude Opus 5.5 at high effort, as today's default. Trigger-initiated turns run at medium effort. The analyst runs on the same model as the conversation, because its work is the kind that rewards capability, at an effort the caller chooses; cheap bulk reads inside an analyst run go to Claude Sonnet 5.5 subagents of its own. All of these are settings the athlete can change by asking, and a stronger model is a one-line change, which is the point.
+
+## The analyst
+
+The interface agent is good at the everyday: reading the last run, explaining a chart, moving a session. It is the wrong tool for "is my easy pace drifting faster through this block", "build me a marathon plan from everything you know about me", or "which of my shoes is done". Those need code over many files, intermediate data that should not pass through a conversation's context, and a place to be wrong without consequence. That is the analyst.
+
+**Where it runs.** A sandbox: a container (or, bare, a locked-down subprocess) with the workspace mounted read-only at the same path, a `scratch/` directory it owns, Python with pandas, numpy, scipy and a plotting library, the `openstride` CLI with only `paces`, `dates`, `plan validate`, `plan diff`, `plan draft`, `show` and `icu streams` available, and no network. Web search and fetch are a per-run option (`--web`) for research that needs it, such as shoe reviews or a race course profile, and off otherwise, because the web is the one way text nobody vetted reaches the sandbox.
+
+**What it is given.** The question, the relevant part of the thread as the interface agent summarises it, and the workspace. It reads `GUIDE.md` like the interface agent does, plus its own skill, `analyst`, which says how to work: load the index and the streams it needs, compute with code, check the result two ways, keep every script and the data it derived in the report folder so the work can be rerun, and write a report a runner can read with the numbers that matter and a chart where one helps.
+
+**What it returns.** Only authored things:
+
+- a report folder under `reports/`, with the Markdown report, the charts, the scripts and the derived data
+- cards, through `show chart` and `show table`, which the server renders into the stream under the interface agent's reply
+- a proposal, through `plan draft`, when the question was about the plan or the findings warrant one, which lands as the same approval card as any other
+- additions to `athlete/gear.yaml` or a suggested note for `memory.md`, handed back to the interface agent to write, since the analyst does not write the workspace
+
+The interface agent reads the summary, tells the athlete what was found in its own words, and shows the cards. The athlete can ask to see the report, the scripts or the data behind any number.
+
+**When it runs.**
+
+- On demand, when the interface agent judges a question needs computation. The `GUIDE.md` rule of thumb: more than a handful of activities, any trend, any plan from scratch, anything with a number the athlete will act on.
+- On a schedule, from the triggers: the weekly review calls it for the planned-against-done numbers; a monthly block review and the race report are analyst runs end to end.
+- Never on its own initiative, and never talking to the athlete directly.
+
+**Examples of what it can do that the interface agent should not attempt.** Pace at a fixed heart rate across the block, corrected for temperature and climb from the streams. The decoupling of HR from pace in long runs, as a trend. Time in zones against the plan's intent, week by week. Which shoe the easy miles went on and how many are on each pair, against the retirement range the athlete set. A full plan drafted from the request, the paces, the history and the notes, validated, with its rationale, as a proposal. A block review that says what worked and what to change, with the numbers behind it.
+
+**Why a separate agent and not a bigger tool list.** Sandboxing is what lets the analyst be given a shell, Python and the whole dataset without any risk to the record or the plan. Separation is what keeps the conversation's context clean and lets the analyst take ten minutes and many tool calls while the interface agent stays responsive. And the boundary makes the analyst swappable: a better model, a different harness, or a hosted sandbox later, with the same inputs and outputs.
 
 ## The surface
 
@@ -255,8 +314,9 @@ Omarchy briefs the agent when the system does something. OpenStride briefs it wh
 | New activity | A sync finds one | Reviews it against the planned session, writes the review on the activity and in the journal, matches it if the automatic match looks wrong, asks one question if something is unclear, drafts a proposal only if a trend warrants one |
 | Morning brief | A time the athlete sets; off by default | Two lines: today's session in context, one thing worth knowing from wellness |
 | Wellness signal | A sync shows an anomaly intervals.icu flags, or a sharp drop in HRV, sleep or form against the athlete's own baseline | Says so, asks how they feel, may propose an easier day |
-| Week end | The last planned day of the week has passed | The weekly review: planned against done, load against form, what the next week needs; proposals if so |
-| Plan ends | The day after the race | The race report and the plan-history entry in memory; asks what is next |
+| Week end | The last planned day of the week has passed | The weekly review: planned against done, load against form, what the next week needs; proposals if so. The numbers come from an analyst run |
+| Block review | Every four weeks of a plan; off by default | An analyst run over the block: trends, what worked, what to change, as a report and possibly a proposal |
+| Plan ends | The day after the race | The race report, an analyst run, and the plan-history entry in memory; asks what is next |
 | Calendar drift | A sync finds a planned event changed in intervals.icu | Asks what the athlete wants |
 | Sync or budget problem | The connector fails, or spend passes the monthly cap in settings | Tells the athlete once, with what to do |
 
@@ -282,8 +342,8 @@ Levers, all settings: the model per role (main, triggers, subagents), effort per
 ## Security
 
 - **The API keys** (Anthropic, intervals.icu) stay in the server's environment and `data/secrets/`, outside the workspace. The agent's shell never sees them; the CLI's `icu` commands run through the server.
-- **The shell** is confined to the workspace directory and has no network except through `openstride icu`. In the container setup that is a container boundary; bare, it is the hook denying paths outside the workspace plus a user-level sandbox where the platform offers one. This is the athlete's own data on the athlete's own machine, so the threat is a mistake, not an attacker, but the plan directory and the secrets are protected as if it were.
-- **Injection** through data: activity names and descriptions arrive from intervals.icu and can contain anything. The guide says they are data. The only consequential action, a plan change, waits for the athlete anyway, and everything else is in git.
+- **The shells** are confined to the workspace directory and have no network except through `openstride icu`, and for the analyst only when a run opts into the web. In the container setup that is a container boundary; bare, it is the hook denying paths outside the workspace plus a user-level sandbox where the platform offers one. This is the athlete's own data on the athlete's own machine, so the threat is a mistake, not an attacker, but the plan, the record and the secrets are protected as if it were.
+- **Injection** through data: activity names and descriptions arrive from intervals.icu and can contain anything, and a web-enabled analyst run reads pages nobody vetted. The guide says both are data. The only consequential action, a plan change, waits for the athlete anyway; the record cannot be written by any agent; and everything authored is in git.
 - **Password and network exposure** stay as today: localhost or Tailscale, a password beyond that, refusal to start open without one.
 
 ## What stays, what goes
@@ -295,11 +355,11 @@ Levers, all settings: the model per role (main, triggers, subagents), effort per
 | `lifecycle.py`, `storage.py` versions and undo | Replaced by git and `plan apply` |
 | `edits.py` | Its rules (no two runs a day, nothing into the past, race fixed) move into the validator; the operations become the agent editing the plan file |
 | `chat.py`, `prompts/*` | Replaced by the harness, `GUIDE.md` and the skills |
-| `review.py`, `generator.py`, `adapt.create_proposal` | Become skills; the model writes the plan file directly and the CLI validates it |
+| `review.py`, `generator.py`, `adapt.create_proposal` | Become skills; the model writes the plan file directly and the CLI validates it. Plan generation is an analyst run |
 | `activities.py`, `series.py`, `workout_fit.py`, `metrics.py`, `garmin/*` | Removed; intervals.icu does this |
 | `memory.py` | Stays as a file convention; git replaces its versioning |
 | `static/` | Rewritten as the stream and the card renderer; `charts.js` survives inside the activity and fitness cards |
-| Tests | The fact modules keep theirs. New tests: the gate (every way around it), the card renderer, the connector against a fake intervals.icu, the triggers, and the skills against the demo workspace with a recorded model |
+| Tests | The fact modules keep theirs. New tests: the gate and the write boundary (every way around them), the card renderer, the connector against a fake intervals.icu, the analyst sandbox (no write, no network, no secrets), the triggers, and the skills against the demo workspace with a recorded model |
 | The offline demo | Stays, as a demo workspace with a recorded session, and is how the surface is developed without an API key |
 
 ## Phases
@@ -308,10 +368,11 @@ Each phase ships on its own and leaves the current app working until the last on
 
 1. **intervals.icu in, Garmin out.** The connector, the mirror layout, the calendar push. The existing coach reads the mirror instead of its own parsers. Deletes the most code for the least risk, and decides the data layout the rest depends on.
 2. **The workspace and the CLI.** `data/` becomes a git repository with the layout above; the CLI exposes the fact modules and the gated `plan draft`/`plan apply`. Nothing user-facing changes yet; the current routes call the CLI.
-3. **The agent runtime behind the Coach tab.** The harness replaces `chat.py`, with the guide, the hooks and the first skills (`review-run`, `new-plan`). The approval card appears under the coach's replies, as proposals do today. The rest of the app is still there for anything the agent does not yet do well, which is how the skills get tuned.
-4. **The stream.** The new surface replaces the tabs: glance header, stream, cards, input, Data drawer. The old pages are removed as each becomes a card.
-5. **Triggers.** New activity, week end, plan end first; the morning brief and wellness signals once the first three feel right.
-6. **Harden.** The container split with `plan/` read-only, the budget cap, the hosted-version questions.
+3. **The interface agent behind the Coach tab.** The harness replaces `chat.py`, with the guide, the hooks, the write boundary and the first skills (`review-run`). The approval card appears under the coach's replies, as proposals do today. The rest of the app is still there for anything the agent does not yet do well, which is how the skills get tuned.
+4. **The analyst.** The sandbox, `openstride analyse`, the `analyst` skill, and `new-plan` as its first job, replacing `generator.py`. Then the weekly review's numbers.
+5. **The stream.** The new surface replaces the tabs: glance header, stream, cards, input, Data drawer. The old pages are removed as each becomes a card.
+6. **Triggers.** New activity, week end, plan end first; the block review, the morning brief and wellness signals once the first three feel right.
+7. **Harden.** The container split with the read-only mounts, the budget cap, the hosted-version questions.
 
 ## Open questions
 
@@ -319,4 +380,5 @@ Each phase ships on its own and leaves the current app working until the last on
 - **The Node runtime.** Is a dependency on the Claude Code harness acceptable for the bare install, or should the fallback harness be the default from the start?
 - **How much to show without asking.** The glance header is the minimum. A tap on "this week" could open a week card without a message. That is still the agent's data and renderer; it is only a question of whether a tap counts as a message.
 - **File uploads.** Keep the drop-a-`.fit` path (forwarded to intervals.icu) or require every activity to come through intervals.icu?
-- **Hosted later.** The workspace and CLI design ports to a managed sandbox per athlete without change. Whether that is the hosted version, and what it would cost per athlete, is a separate decision.
+- **Hosted later.** The workspace and CLI design ports to a managed sandbox per athlete without change, and the analyst is the natural first thing to host. Whether that is the hosted version, and what it would cost per athlete, is a separate decision.
+- **The analyst's web access.** Off by default, on per run. Should some runs, such as a shoe question, turn it on without asking, or should the athlete always be told first?
