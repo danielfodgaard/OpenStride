@@ -1,16 +1,21 @@
-"""One settings object, read once from the environment and .env."""
+"""One settings object, read once from the environment and .env. Secrets live here and nowhere in the workspace."""
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, get_args
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Inside an agent's shell the CLI must not read the server's .env: the keys stay with the server.
+IN_AGENT_SHELL = bool(os.environ.get("OPENSTRIDE_AGENT_TOKEN"))
+if not IN_AGENT_SHELL:
+    try:
+        load_dotenv()
+    except OSError:
+        pass
 
-GarminSync = Literal["off", "personal_api"]
-GarminPush = Literal["off", "unofficial"]
+# Never handed to an agent's shell: the runtime blanks these in the subprocess environment.
+SECRET_ENV = ("INTERVALS_ICU_API_KEY", "OPENSTRIDE_PASSWORD", "TS_AUTHKEY")
 
 
 @dataclass(frozen=True)
@@ -20,42 +25,60 @@ class Settings:
     data_dir: Path
     password: str  # empty means no login
     allow_open: bool  # listen beyond localhost with no password anyway
-    garmin_sync: GarminSync  # reading activities: Garmin's official Personal API
-    garmin_push: GarminPush  # sending workouts: python-garminconnect, opt-in
-    garmin_sync_minutes: int  # 0 means manual only
-    garmin_mode_used: bool = False  # the old GARMIN_MODE filled in a setting
+    provider: str  # which analyzer holds the record: intervals_icu, demo or none
+    icu_athlete_id: str
+    icu_api_key: str
+    runtime: str  # claude, or scripted for the offline demo and tests
+    sandbox: str  # auto, on or off: OS sandboxing of the agents' shells
+
+    @property
+    def workspace(self) -> Path:
+        given = os.environ.get("OPENSTRIDE_WORKSPACE")  # set by the runtime for the CLI inside an agent's shell
+        return Path(given) if given and IN_AGENT_SHELL else self.data_dir / "workspace"
+
+    @property
+    def state(self) -> Path:
+        return self.data_dir / "state"
 
 
 def load() -> Settings:
-    # GARMIN_MODE is the v4.0 name for the pair; the two settings win where they are set.
-    old_mode = os.environ.get("GARMIN_MODE")
-    garmin_mode = old_mode or "off"
-    if garmin_mode not in ("off", "personal_api", "unofficial"):
-        raise ValueError(f"GARMIN_MODE must be off, personal_api or unofficial, not {garmin_mode!r}")
-    garmin_sync = os.environ.get("GARMIN_SYNC") or ("off" if garmin_mode == "off" else "personal_api")
-    garmin_push = os.environ.get("GARMIN_PUSH") or ("unofficial" if garmin_mode == "unofficial" else "off")
-    if garmin_sync not in get_args(GarminSync):
-        raise ValueError(f"GARMIN_SYNC must be one of {', '.join(get_args(GarminSync))}, not {garmin_sync!r}")
-    if garmin_push not in get_args(GarminPush):
-        raise ValueError(f"GARMIN_PUSH must be one of {', '.join(get_args(GarminPush))}, not {garmin_push!r}")
+    key = os.environ.get("INTERVALS_ICU_API_KEY") or ""
+    demo = bool(os.environ.get("OPENSTRIDE_DEMO"))
+    provider = os.environ.get("OPENSTRIDE_PROVIDER") or ("demo" if demo else "intervals_icu" if key else "none")
+    if provider not in ("intervals_icu", "demo", "none"):
+        raise ValueError(f"OPENSTRIDE_PROVIDER must be intervals_icu, demo or none, not {provider!r}")
+    sandbox = os.environ.get("OPENSTRIDE_SANDBOX") or "auto"
+    if sandbox not in ("auto", "on", "off"):
+        raise ValueError(f"OPENSTRIDE_SANDBOX must be auto, on or off, not {sandbox!r}")
     return Settings(
         host=os.environ.get("OPENSTRIDE_HOST") or "127.0.0.1",
         port=int(os.environ.get("OPENSTRIDE_PORT") or 8000),
-        data_dir=Path(os.environ.get("OPENSTRIDE_DATA_DIR") or Path(__file__).parent.parent / "data"),
+        data_dir=Path(
+            os.environ.get("OPENSTRIDE_DATA_DIR")
+            or (Path(os.environ["OPENSTRIDE_WORKSPACE"]).parent if os.environ.get("OPENSTRIDE_WORKSPACE") else Path(__file__).parent.parent / "data")
+        ).resolve(),
         password=os.environ.get("OPENSTRIDE_PASSWORD") or "",
         allow_open=os.environ.get("OPENSTRIDE_ALLOW_OPEN") == "1",
-        garmin_sync=garmin_sync,
-        garmin_push=garmin_push,
-        garmin_sync_minutes=int(os.environ.get("GARMIN_SYNC_MINUTES") or 0),
-        garmin_mode_used=bool(old_mode) and not (os.environ.get("GARMIN_SYNC") and os.environ.get("GARMIN_PUSH")),
+        provider=provider,
+        icu_athlete_id=os.environ.get("INTERVALS_ICU_ATHLETE_ID") or "0",  # 0 is "the key's own athlete"
+        icu_api_key=key,
+        runtime=os.environ.get("OPENSTRIDE_RUNTIME") or ("scripted" if demo else "claude"),
+        sandbox=sandbox,
     )
 
 
 settings = load()
 
 
+def reload() -> Settings:
+    """For tests and the demo, which change the environment after import."""
+    global settings
+    settings = load()
+    return settings
+
+
 def uvicorn_host() -> str | None:
-    """`uvicorn app.main:app --host ...` never reaches the app, so read it where uvicorn does."""
+    """`uvicorn app.server:app --host ...` never reaches the app, so read it where uvicorn does."""
     arguments = sys.argv[1:]
     for index, argument in enumerate(arguments):
         if argument.startswith("--host="):
@@ -69,11 +92,6 @@ def is_loopback(host: str) -> bool:
     return host in ("localhost", "::1") or host.startswith("127.")
 
 
-def exposed_without_password() -> bool:
-    """Unlike the start-up refusal, OPENSTRIDE_ALLOW_OPEN doesn't excuse this."""
-    return not is_loopback(uvicorn_host() or settings.host) and not settings.password
-
-
 def open_server_problem() -> str | None:
     """Why the server must not start, if it would be open to the network with no password."""
     host = uvicorn_host() or settings.host
@@ -81,6 +99,6 @@ def open_server_problem() -> str | None:
         return None
     return (
         f"Refusing to start: listening on {host} with no OPENSTRIDE_PASSWORD. This server holds your "
-        "API key, so anyone who can reach it can spend your money. Set OPENSTRIDE_PASSWORD, or stay on "
-        "127.0.0.1 and use Tailscale (see the README), or set OPENSTRIDE_ALLOW_OPEN=1 to accept the risk."
+        "API keys, so anyone who can reach it can spend your money. Set OPENSTRIDE_PASSWORD, or stay on "
+        "127.0.0.1 and use Tailscale (see docs/SETUP.md), or set OPENSTRIDE_ALLOW_OPEN=1 to accept the risk."
     )

@@ -1,5 +1,9 @@
-from datetime import date, datetime, timedelta
-from typing import Any, Literal
+"""The plan: what the athlete asked for, the weeks, and a proposal to change them.
+
+Input from an agent is read leniently (missing optional fields get defaults); what is stored is complete.
+"""
+from datetime import date, timedelta
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -9,13 +13,18 @@ from app.vdot import parse_time
 Day = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 DAYS: tuple[Day, ...] = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 Modality = Literal["run", "strength", "cross"]
-SCHEMA_VERSION = "3.0"
+SessionType = Literal["easy", "long", "tempo", "intervals", "recovery", "race", "strength", "cross_training"]
+MODALITIES: dict[str, Modality] = dict.fromkeys(("easy", "long", "tempo", "intervals", "recovery", "race"), "run") | {
+    "strength": "strength",
+    "cross_training": "cross",
+}
+SCHEMA_VERSION = "4.0"
 
 MAX_PACE_MIN_PER_KM = 20  # slower than a walk; VDOT formulas turn meaningless near 40 min/km
 
 
 class SavedRequest(BaseModel):
-    """Request fields as stored in a plan file, valid forever."""
+    """What the plan was built from, valid forever."""
 
     model_config = ConfigDict(allow_inf_nan=False)
 
@@ -65,7 +74,7 @@ class SavedRequest(BaseModel):
 
 
 class PlanRequest(SavedRequest):
-    """API input. The race date window depends on today, so saved plans must not re-check it."""
+    """A request for a new plan. The race date window depends on today, so saved plans must not re-check it."""
 
     @model_validator(mode="after")
     def check_race_date(self):
@@ -76,65 +85,48 @@ class PlanRequest(SavedRequest):
 
 
 class Step(BaseModel):
-    repeat: int  # sets, for strength
-    description: str
-    distance_km: float
-    duration_min: float
-    target_pace: str
-    reps: int  # 0 when not applicable
-    load: str
-
-    # Fields stay required in the LLM schema; this only fills them in for v1 and v2 files.
-    @model_validator(mode="before")
-    @classmethod
-    def fill_old_files(cls, data):
-        return {"reps": 0, "load": ""} | data if isinstance(data, dict) else data
+    repeat: int = 1  # sets, for strength
+    description: str = ""
+    distance_km: float = 0
+    duration_min: float = 0
+    target_pace: str = ""
+    reps: int = 0  # 0 when not applicable
+    load: str = ""
 
 
 class Session(BaseModel):
+    id: str = ""  # stable across versions of the plan; assigned in code when missing
     day: Day
-    type: Literal["easy", "long", "tempo", "intervals", "recovery", "race", "strength", "cross_training"]
+    type: SessionType
     modality: Modality
     title: str
-    distance_km: float
-    duration_min: float
-    target_pace: str
-    description: str
-    steps: list[Step]
+    distance_km: float = 0
+    duration_min: float = 0
+    target_pace: str = ""
+    description: str = ""
+    steps: list[Step] = []
+    status: Literal["planned", "skipped", "replaced"] = "planned"
+    moved_from: date | None = None  # the original date of a moved session
+    edit_note: str = ""
 
     @model_validator(mode="before")
     @classmethod
-    def fill_old_files(cls, data):
-        return {"modality": "run"} | data if isinstance(data, dict) else data
+    def fill_modality(cls, data):
+        if isinstance(data, dict) and "modality" not in data and data.get("type") in MODALITIES:
+            return data | {"modality": MODALITIES[data["type"]]}
+        return data
 
 
 class Week(BaseModel):
     week_number: int
     phase: Literal["base", "build", "peak", "taper"]
-    focus: str
-    planned_km: float
+    focus: str = ""
+    planned_km: float = 0
     sessions: list[Session]
-
-
-class TrainingPlan(BaseModel):
-    summary: str
-    warnings: list[str]
-    weeks: list[Week]
-
-
-class RegeneratedPlan(TrainingPlan):
-    """A plan plus the schedule after the athlete's feedback, which can change these fields."""
-
-    long_run_day: Day
-    available_days: list[Day]
-    runs_per_week: int
 
 
 class DatedSession(Session):
     date: date
-    status: Literal["planned", "skipped", "replaced"] = "planned"
-    moved_from: date | None = None  # the original date of a moved session
-    edit_note: str = ""
 
 
 class DatedWeek(Week):
@@ -142,46 +134,23 @@ class DatedWeek(Week):
     sessions: list[DatedSession]
 
 
-class DatedPlan(TrainingPlan):
+class DatedPlan(BaseModel):
+    schema_version: str = SCHEMA_VERSION
+    summary: str = ""
+    warnings: list[str] = []
     weeks: list[DatedWeek]
 
+    def week(self, number: int) -> DatedWeek | None:
+        return next((w for w in self.weeks if w.week_number == number), None)
 
-class Match(BaseModel):
-    planned_date: str = ""  # "" when unplanned
-    week_number: int = 0
-    session_index: int = -1
+    def week_of(self, day: date) -> DatedWeek | None:
+        return next((w for w in self.weeks if w.start_date <= day <= w.start_date + timedelta(days=6)), None)
 
+    def sessions(self) -> list[DatedSession]:
+        return [s for w in self.weeks for s in w.sessions]
 
-class Usage(BaseModel):
-    input_tokens: int  # uncached
-    output_tokens: int
-    cache_read_input_tokens: int = 0
-    cache_creation_input_tokens: int = 0
-
-
-class HistoryEntry(BaseModel):
-    version: int
-    proposal_id: str
-    accepted_at: str
-    rationale: str
-    origin: Literal["proposal", "manual", "undo"] = "proposal"  # older files were all proposals
-    summary: str = ""
-    undo_matches: dict[str, Match] = {}  # what a manual edit changed, so Undo puts it back
-    undo_keys: dict[str, str] = {}  # session keys that shifted: new to old
-
-
-class Meta(BaseModel):
-    id: str
-    created_at: str
-    app_version: str
-    model: str
-    usage: Usage
-    # Defaults let v1.0 files load unchanged.
-    version: int = 1
-    history: list[HistoryEntry] = []
-    status: Literal["draft", "active", "archived"] = "draft"
-    accepted_at: str = ""
-    feedback_history: list[str] = []
+    def session(self, session_id: str) -> DatedSession | None:
+        return next((s for s in self.sessions() if s.id == session_id), None)
 
 
 class Paces(BaseModel):
@@ -195,175 +164,41 @@ class Paces(BaseModel):
     race_pace: str
 
 
-class PlanFile(BaseModel):
-    schema_version: Literal["1.0", "2.0", "3.0"] = SCHEMA_VERSION
-    meta: Meta
+class PlanDoc(BaseModel):
+    """The three files under plan/, together."""
+
     request: SavedRequest
     paces: Paces
     plan: DatedPlan
 
-    def week(self, number: int) -> DatedWeek | None:
-        return next((w for w in self.plan.weeks if w.week_number == number), None)
-
-    def week_of(self, day: date) -> DatedWeek | None:
-        return next((w for w in self.plan.weeks if w.start_date <= day <= w.start_date + timedelta(days=6)), None)
-
-    def session_at(self, week: int, index: int) -> DatedSession | None:
-        """None for a week or index the plan doesn't have, including an unplanned match's -1."""
-        found = self.week(week)
-        return found.sessions[index] if found and 0 <= index < len(found.sessions) else None
-
-
-class Lap(BaseModel):
-    index: int
-    distance_km: float
-    time_s: int
-    pace: str
-    avg_hr: int
-    extra: dict[str, Any] = {}  # every other field the file holds for this lap or split, in FIT units
-
-
-class ActivitySummary(BaseModel):
-    id: str
-    plan_id: str  # activities stay with the plan they were imported under
-    source_file: str
-    start_time: datetime
-    date: date
-    distance_km: float
-    moving_time_s: int
-    elapsed_time_s: int
-    avg_pace: str
-    avg_hr: int
-    max_hr: int
-    avg_cadence_spm: int
-    elevation_gain_m: float
-    laps: list[Lap]
-    km_splits: list[Lap]
-    user_note: str
-    rpe: int
-    match: Match
-    modality: Modality = "run"  # strength for a watch's gym file, cross for other sports
-    sport: str = "running"
-    start_utc: str = ""  # as stored in the file; "" for activities imported before v3.1
-    external_id: str = ""  # "garmin:<id>" for a synced activity
-    partial: bool = False  # built from a service's summary: no route, charts or laps
-    extra: dict[str, Any] = {}  # every other field the file's session holds, in FIT units, for the coach
-    extra_version: int = 0  # EXTRA_VERSION once the file has been read for `extra`; older imports are re-read at startup
-
-
-class RunReview(BaseModel):
-    completion: Literal["as_planned", "partly", "missed_targets", "unplanned"]
-    headline: str
-    observations: list[str]
-    flags: list[str]
-    effort: Literal["easier_than_planned", "as_planned", "harder_than_planned"]
-
-
-class ReviewMeta(BaseModel):
-    """Envelope for every saved LLM output other than a plan."""
-
-    model: str
-    created_at: str
-    usage: Usage
-
-
-class ReviewFile(BaseModel):
-    activity_id: str
-    review: RunReview
-    meta: ReviewMeta
-
 
 class Change(BaseModel):
-    week_number: int
+    week: int
     day: Day
     summary: str
 
 
-class AdaptationResult(BaseModel):
-    recommendation: Literal["change", "no_change"]
-    rationale: str
-    changes: list[Change]
+class Draft(BaseModel):
+    """What an agent hands to `openstride plan draft`: the weeks it wants, and why."""
+
+    rationale: str = ""
+    changes: list[Change] = []
+    request: dict | None = None  # a new plan's request, or changed constraints for the current one
+    summary: str | None = None
+    warnings: list[str] | None = None
     weeks: list[Week]
 
 
 class Proposal(BaseModel):
-    proposal_id: str
-    plan_id: str
-    based_on_version: int
-    scope: Literal["this_week", "next_2_weeks", "rest_of_plan"]
-    scope_weeks: list[int]
-    user_context: str
-    status: Literal["pending", "accepted", "rejected"]
-    acceptable: bool
-    result: AdaptationResult
-    meta: ReviewMeta
-    origin: Literal["chat", "adapt"] = "adapt"  # older files count as adapt
-    warnings: list[str] = []  # trade-offs to show above the diff; they never block
-
-
-class ChatMessage(BaseModel):
     id: str
-    role: Literal["user", "coach"]
     created_at: str
-    text: str
-    action: Literal["none", "proposal_created"] = "none"
-    proposal_id: str = ""
-    usage: Usage = Usage(input_tokens=0, output_tokens=0)
-    model: str = ""
-    flags: list[str] = []  # older messages; the coach no longer returns them
-    memory_updated: bool = False  # the coach rewrote its notes in this reply
-
-
-class DayLoad(BaseModel):
-    date: date
-    load: float
-    ctl: float
-    atl: float
-    tsb: float
-    km: float
-
-
-class WeekVolume(BaseModel):
-    week_number: int
-    start_date: date
-    planned_km: float
-    actual_km: float
-    planned_sessions: int
-    completed_sessions: int
-    planned_strength: int
-    completed_strength: int
-    planned_cross_min: float
-    actual_cross_min: float
-    planned_cross: int = 0
-    completed_cross: int = 0
-    skipped_sessions: int = 0
-    replaced_sessions: int = 0
-
-
-class Snapshot(BaseModel):
-    ctl: float
-    atl: float
-    tsb: float
-    ctl_7d_change: float
-    weekly_km_4wk_avg: float
-
-
-class Metrics(BaseModel):
-    as_of: date
-    days: list[DayLoad]
-    weeks: list[WeekVolume]
-    current: Snapshot
-
-
-class ManualActivity(BaseModel):
-    id: str
-    plan_id: str
-    date: date
-    modality: Modality
-    title: str
-    duration_min: int
-    distance_km: float
-    rpe: int
-    note: str
-    details: list[Step]
-    match: Match
+    kind: Literal["change", "new_plan"]
+    status: Literal["pending", "approved", "rejected", "stale"] = "pending"
+    base_commit: str  # the plan's commit this was drafted against; "" when there was no plan
+    rationale: str
+    changes: list[Change] = []
+    warnings: list[str] = []  # trade-offs shown above the diff; they never block
+    author: str = "agent"  # agent or analyst
+    decided_at: str = ""
+    decision_note: str = ""
+    doc: PlanDoc  # the whole plan as it would be

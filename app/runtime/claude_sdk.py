@@ -1,0 +1,156 @@
+"""The Claude Agent SDK as the harness: its loop, shell and file tools, skills, session resume and
+compaction, run as a subprocess of the server with the workspace as its working directory.
+
+The boundary is set three ways: permission rules and the OS sandbox (when the machine has one) in the
+harness's settings, and a PreToolUse hook that runs hooks.check before every tool call.
+"""
+import asyncio
+import json
+import logging
+import os
+import platform
+import shutil
+import sys
+from pathlib import Path
+
+from app import config, workspace
+from app.runtime import hooks
+from app.runtime.base import TurnRequest
+
+log = logging.getLogger(__name__)
+
+COACH_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
+WEB_TOOLS = ["WebSearch", "WebFetch"]
+
+
+def sandbox_available() -> bool:
+    if platform.system() == "Darwin":
+        return True
+    return platform.system() == "Linux" and bool(shutil.which("bwrap")) and bool(shutil.which("socat"))
+
+
+def sandbox_on() -> bool:
+    mode = config.settings.sandbox
+    return mode == "on" or (mode == "auto" and sandbox_available())
+
+
+def absolute(path: Path) -> str:
+    """A path as permission rules and sandbox settings write an absolute one."""
+    return "/" + str(path.resolve())
+
+
+def harness_settings(request: TurnRequest, socket: str) -> dict:
+    """Permission rules for the file tools, and the sandbox for the shell."""
+    policy = request.policy
+    state = workspace.state()
+    protected = [policy.workspace / p for p in workspace.PROTECTED]
+    deny_write = [absolute(p) for p in protected] if policy.role == "coach" else [absolute(policy.workspace)]
+    deny_read = [absolute(state), absolute(Path(__file__).parent.parent.parent / ".env")]
+    rules = [f"Edit({path}/**)" for path in deny_write] + [f"Edit({path})" for path in deny_write]
+    rules += [f"Read({path}/**)" for path in deny_read[:1]] + [f"Read({deny_read[1]})"]
+    settings: dict = {"permissions": {"deny": rules}}
+    if sandbox_on():
+        settings["sandbox"] = {
+            "enabled": True,
+            "autoAllowBashIfSandboxed": True,
+            "allowUnsandboxedCommands": False,
+            "failIfUnavailable": config.settings.sandbox == "on",
+            "network": {"allowedDomains": [], "allowUnixSockets": [socket] if socket else []},
+            "filesystem": {
+                "allowWrite": [absolute(policy.scratch or policy.workspace)],
+                "denyWrite": deny_write,
+                "denyRead": deny_read,
+            },
+        }
+    return settings
+
+
+def environment(request: TurnRequest) -> dict:
+    """What the harness and the agent's shell see. Secrets are blanked; the CLI finds the server by socket and token."""
+    bin_dir = str(Path(sys.executable).parent)
+    env = {name: "" for name in config.SECRET_ENV}
+    env |= {
+        "PATH": bin_dir + os.pathsep + os.environ.get("PATH", ""),
+        "OPENSTRIDE_WORKSPACE": str(request.policy.workspace),
+        "OPENSTRIDE_AGENT_TOKEN": request.token,
+        "OPENSTRIDE_DATA_DIR": "",
+        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",  # keeps the Anthropic key out of the shell
+        "CLAUDE_CONFIG_DIR": str(workspace.state() / "claude"),  # sessions live with the data, so they survive a container
+        "DISABLE_AUTOUPDATER": "1",
+        "DISABLE_TELEMETRY": "1",
+    }
+    return env | request.env
+
+
+class ClaudeSdk:
+    name = "claude"
+
+    async def run(self, request: TurnRequest):
+        from claude_agent_sdk import (
+            AssistantMessage, ClaudeAgentOptions, HookMatcher, ResultMessage, TextBlock, ToolUseBlock, query,
+        )
+        from claude_agent_sdk.types import StreamEvent
+
+        policy = request.policy
+        denied: list[str] = []
+
+        async def pre_tool(hook_input, tool_use_id, context):
+            reason = hooks.check(policy, hook_input.get("tool_name", ""), hook_input.get("tool_input") or {})
+            if reason is None:
+                return {}
+            denied.append(reason)
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
+
+        env = environment(request)
+        tools = COACH_TOOLS + (WEB_TOOLS if policy.web else [])
+        options = ClaudeAgentOptions(
+            cwd=str(policy.cwd),
+            system_prompt=request.system_prompt,
+            tools=tools,
+            allowed_tools=tools,
+            permission_mode="dontAsk",
+            setting_sources=["project"],
+            skills="all",
+            resume=request.session_id,
+            model=request.model,
+            effort=request.effort,
+            include_partial_messages=True,
+            hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[pre_tool], on_failure="block")]},
+            env=env,
+            add_dirs=[str(policy.workspace)] if policy.role == "analyst" else [],
+            settings=json.dumps(harness_settings(request, env.get("OPENSTRIDE_AGENT_SOCKET", ""))),
+            stderr=lambda line: log.debug("harness: %s", line),
+        )
+        result = {"session_id": request.session_id, "usage": {}, "cost_usd": 0.0, "error": "", "turns": 0}
+        try:
+            async with asyncio.timeout(request.max_seconds):
+                async for message in query(prompt=request.prompt, options=options):
+                    if isinstance(message, StreamEvent):
+                        if message.parent_tool_use_id:
+                            continue
+                        event = message.event
+                        if event.get("type") == "content_block_delta" and event.get("delta", {}).get("type") == "text_delta":
+                            yield ("delta", event["delta"].get("text", ""))
+                    elif isinstance(message, AssistantMessage):
+                        if message.parent_tool_use_id:
+                            continue
+                        for block in message.content:
+                            if isinstance(block, TextBlock) and block.text.strip():
+                                yield ("text", block.text)
+                            elif isinstance(block, ToolUseBlock):
+                                yield ("tool", {"name": block.name, "input": block.input})
+                        while denied:
+                            yield ("denied", denied.pop(0))
+                    elif isinstance(message, ResultMessage):
+                        result |= {
+                            "session_id": message.session_id, "usage": message.usage or {}, "cost_usd": message.total_cost_usd or 0.0,
+                            "turns": message.num_turns, "model_usage": message.model_usage or {},
+                        }
+                        if message.is_error:
+                            result["error"] = "; ".join(message.errors or []) or message.result or message.subtype
+        except TimeoutError:
+            result["error"] = f"The turn was stopped after {request.max_seconds // 60} minutes."
+        except Exception as error:  # the harness failed to start or died: report it, don't take the server down
+            log.exception("The agent runtime failed")
+            result["error"] = f"The agent could not run: {type(error).__name__}: {error}"
+        yield ("result", result)

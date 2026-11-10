@@ -1,25 +1,22 @@
 [project]
 name = "openstride"
-version = "0.1.2"
-description = "An open-source running coach"
+version = "0.2.0"
+description = "An open-source running coach: an agent on top of your training data"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic>=2",
-    "anthropic",
     "python-dotenv",
-    "fitdecode",
-    "gpxpy",
     "python-multipart",
-    "filelock",
-    # Pinned with its dependencies: its token reaches a whole Garmin account, so upgrade on purpose.
-    "garminconnect==0.3.20",
-    "curl-cffi==0.17.0",
-    "ua-generator==2.1.7",
-    "requests==2.34.2",
-    "garmin-connect-personal-api-python>=1,<2",
+    "httpx",
+    "pyyaml",
+    "claude-agent-sdk>=0.2.180",
 ]
+
+[project.optional-dependencies]
+# What the analyst computes with, inside its sandbox.
+analyst = ["pandas", "numpy", "scipy", "matplotlib"]
 
 [project.scripts]
 openstride = "app.cli:main"
