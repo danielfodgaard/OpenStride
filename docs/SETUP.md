@@ -1,6 +1,43 @@
 # OpenStride setup
 
-How to reach OpenStride from your phone, connect Garmin, and keep it safe. For the basic install, see the [README](../README.md).
+How to connect your activities, reach OpenStride from your phone, and keep it safe. For the basic install, see the [README](../README.md).
+
+## The provider: intervals.icu
+
+OpenStride does not read your watch. A provider does, analyses the recordings, and OpenStride mirrors the result. The first provider is [intervals.icu](https://intervals.icu), which is free for your own data.
+
+1. Create an intervals.icu account and connect your watch platform to it **directly** under Settings (Garmin, Coros, Polar, Suunto, Wahoo). Do not route it through Strava: Strava does not let intervals.icu pass its data on through the API, and those activities arrive empty.
+2. Under Settings, Developer Settings, copy your **API key** and your **athlete id** (it looks like `i123456`).
+3. Put both in `.env`:
+
+       INTERVALS_ICU_API_KEY=...
+       INTERVALS_ICU_ATHLETE_ID=i123456
+
+4. Check it: `uv run openstride doctor`. It says who you are connected as. `uv run openstride doctor --write` also creates one test workout a year from now on your calendar, reports whether intervals.icu read it as a structured workout, and removes it.
+5. Start OpenStride. The first sync brings the last 180 days; after that it polls every 15 minutes (`sync_minutes` in settings) and on **Sync now** in the Data drawer. For more history, ask your coach to sync from an earlier date.
+
+**What flows where.** Activities, their analysis, wellness and your zones come in and are kept under `data/workspace/activities/`, `wellness/` and `athlete/profile.yaml`. When you approve a plan change, the sessions still ahead go out to your intervals.icu calendar as structured workouts, and intervals.icu sends them to your watch if you turned that on there. A session with no recording that you tell your coach about is logged on intervals.icu as a manual activity; how you feel is written to its wellness page.
+
+**If you edit a planned workout on intervals.icu,** the next sync notices and your coach asks what you want: make the plan match (a proposal) or put the calendar back. OpenStride never adopts a change to the plan from outside by itself.
+
+**The key** lives only in `.env`. It is never written into the workspace, never shown to the agent's shell, and never sent to Claude.
+
+**Another analyzer.** The contract is `app/providers/base.py`; `app/providers/demo.py` is a small complete implementation to copy from. A provider that has no calendar simply does not offer watch delivery.
+
+## The sandbox
+
+The agent has a shell. Three things keep it inside the lines: a check before each tool call, an OS sandbox around the shell, and a check after each turn that puts back anything protected that changed. The first and third always run. The second depends on the machine:
+
+| Machine | What it needs |
+|---|---|
+| macOS | Nothing; Seatbelt is built in |
+| Linux | `bubblewrap` and `socat` (`sudo apt install bubblewrap socat`) |
+| Docker | The container must be allowed to make namespaces: uncomment `cap_add` and `security_opt` in `compose.yaml`, or set `OPENSTRIDE_SANDBOX=weak` for the harness's weaker nested sandbox. Neither has been tested by me; `doctor` tells you the result |
+| Windows | Run under WSL |
+
+`uv run openstride doctor` says whether it is on, and the Data drawer shows it. With it on, the agent's shell can write only what the agent authors, cannot read the server's state or `.env`, and has no network. With it off, a script the agent runs in its shell is not confined by the OS: the plan and the record are still restored after the turn if touched, but your API key is in the shell's environment and the network is open to it. On a machine you care about, install the two packages.
+
+`OPENSTRIDE_SANDBOX` in `.env`: `auto` (the default: on when the machine can), `on` (refuse to run a shell without it), `weak`, or `off`.
 
 ## Phone access
 
@@ -12,81 +49,63 @@ Phone and laptop use one server over HTTPS. Nothing syncs: both talk to the same
 4. Start OpenStride, then run `scripts/phone-access.sh` (Windows: `powershell -File scripts\phone-access.ps1`). If you changed the port, set `OPENSTRIDE_PORT` for the script too.
 5. Open the printed `https://<machine>.<tailnet>.ts.net` URL on the phone and use Add to Home Screen.
 
-The server stays bound to localhost; only devices in your tailnet can reach it. `scripts/phone-access-off.sh` (or `.ps1`) turns it off, and clears any other `tailscale serve` setting on the machine too. No password is needed unless you share the tailnet with other people.
+The server stays bound to localhost; only devices in your tailnet can reach it. `scripts/phone-access-off.sh` (or `.ps1`) turns it off, and clears any other `tailscale serve` setting on the machine too. No password is needed unless you share the tailnet with other people. Never use `tailscale funnel`: it would put this server on the public internet.
 
 On a server without Tailscale installed, uncomment the `tailscale` service in `compose.yaml`, follow the notes there, and put `TS_AUTHKEY` in `.env`.
 
-On the same Wi-Fi without Tailscale, `OPENSTRIDE_HOST=0.0.0.0` with a password and `http://<laptop-ip>:8000` works too. It has no HTTPS, so the app can't be installed on the phone and the password crosses the network in the clear. Prefer Tailscale.
-
-## Garmin
-
-Reading your activities and sending workouts are two separate settings in `.env`:
-
-| Setting | Values | What it does |
-|---|---|---|
-| `GARMIN_SYNC` | `off`, `personal_api` | Sync runs through Garmin's official, read-only Personal API |
-| `GARMIN_PUSH` | `off`, `unofficial` | Send workouts through `python-garminconnect` |
-
-Download workout .fit works with both off. The older `GARMIN_MODE` still works: `personal_api` turns on sync, and `unofficial` turns on both.
-
-**Syncing runs.**
-
-1. Create a key at <https://connect.garmin.com/app/settings/personalApiToken> and choose 365 days. It is shown once.
-2. In `.env`, set `GARMIN_SYNC=personal_api` and `GARMIN_PERSONAL_API_KEY=<your key>`, then restart the server.
-3. Press **Sync from Garmin** on the Workouts page, or set `GARMIN_SYNC_MINUTES` to sync on a timer while the server runs (0 is manual only, minimum 15).
-
-When the key expires, sync reports that Garmin refused it: create a new one and replace it in `.env`. The key mints a 24-hour access token, cached in `data/secrets/` with mode 600. Garmin says this API is for your own data and not for commercial apps serving several users. It cannot send workouts.
-
-Runs and other sports go through the same steps as an uploaded file: matching, review, charts and metrics. Strength sessions become logged sessions with no route. The first sync starts a week before the active plan, or 30 days back with no plan. Later syncs look back 3 days from the last one, so a run the watch uploads up to 3 days late is still found; anything later has to be uploaded by hand. If a review fails, the run is still imported and the sync reports a warning. An activity is imported once: if you delete a workout here, sync won't bring it back.
-
-**Workouts on the watch.** Every planned run has **Download workout .fit**. Connect the watch by USB and copy the file into `GARMIN/NewFiles`; many Garmin watches pick it up on the next unplug. Strength and cross sessions are not exported.
-
-**Send to Garmin (experimental: not yet tested against a real Garmin account).** The Personal API can't write, so sending uses `python-garminconnect`, which Garmin does not sanction and which can break without notice.
-
-1. Set `GARMIN_PUSH=unofficial` in `.env` and restart.
-2. Open **Garmin settings** (in the footer) at `http://127.0.0.1:8000` or the Tailscale HTTPS address, and log in, with your MFA code if asked. The login is refused anywhere else.
-3. **Send to Garmin** on a planned run uploads the workout, schedules it on the session's date and sends it to your last-used device. Sending it again replaces the old copy. After a plan change, the weeks page offers to re-send only what changed.
-
-**Secrets** live only in `.env` and `data/secrets/`. They are never logged, sent to Claude, or written to plan or activity files.
-
-## Garmin security
-
-The login for sending saves a session token that gives **full access to your Garmin account**, so treat it like a password.
-
-- **What it does here:** only uploads, schedules, replaces and deletes workouts OpenStride made. Your activities are read through the official API, never with this token.
-- **Where it lives:** `data/secrets/garmin-unofficial/`, folder mode 700 and files 600. Your password is never written anywhere. The token is left out of every backup, even with "include secrets".
-- **Disconnect:** press **Disconnect Garmin** in Garmin settings, or run `uv run openstride garmin-disconnect`. Either one deletes the token and turns sending off.
-- **Revoking access:** deleting the token here doesn't end it at Garmin. If it may have leaked, change your Garmin password too. Keep MFA on.
-- **Exposure:** sending is refused if the server listens beyond localhost with no `OPENSTRIDE_PASSWORD`. Never use `tailscale funnel`: it would put this server on the public internet.
-- **Upgrades:** `python-garminconnect` and its dependencies are pinned to exact versions in `pyproject.toml` and `uv.lock`. Upgrade them deliberately and read what changed first.
+The glance header, this week and the cards you opened stay readable offline. A message waits for the server.
 
 ## Password
 
 Set `OPENSTRIDE_PASSWORD` for any setup other than localhost or Tailscale. Every page and API route then needs a login, valid for 30 days on that device. Changing the password signs every device out.
 
-The server refuses to listen beyond localhost with no password, because it holds your API key and an open server can spend your money. `OPENSTRIDE_ALLOW_OPEN=1` overrides that; `compose.yaml` sets it because the container must listen on all its interfaces while the only published port is on the host's localhost. If you change `ports:` to publish wider, set a password.
+The server refuses to listen beyond localhost with no password, because it holds your API keys and an open server can spend your money and approve changes to your plan. `OPENSTRIDE_ALLOW_OPEN=1` overrides that; `compose.yaml` sets it because the container must listen on all its interfaces while the only published port is on the host's localhost. If you change `ports:` to publish wider, set a password.
+
+## Settings you change by asking
+
+`data/workspace/settings.yaml` holds what is yours to tune, and your coach changes it when you say so ("turn on the morning brief at 6:45", "no messages after nine", "cap the month at $10"):
+
+| Setting | Default | |
+|---|---|---|
+| `triggers.new_activity`, `week_end`, `plan_end`, `calendar_drift` | on | A review when a run arrives, a look back when a week ends, a report after the race, a question when the calendar was edited |
+| `triggers.morning_brief`, `morning_brief_time` | off, 07:30 | Two or three sentences on the day |
+| `triggers.wellness_signal`, `block_review` | off | A question when resting HR, HRV, sleep or form departs from your own baseline; a computed review every four weeks |
+| `quiet_hours` | 21:30 to 07:00 | Everything but a new activity waits for morning |
+| `budget.monthly_usd` | 0 (no cap) | The agent's own check-ins pause when the month reaches it; it still answers you |
+| `models`, `effort` | Claude Opus 5.5 for the coach and the analyst | A stronger or cheaper model is one line |
+| `sync_minutes` | 15 | 0 turns the timer off |
 
 ## Backups
 
-`GET /api/backup` downloads `openstride-backup-<date>.zip`: the data folder without lock files, `data/secrets/` and earlier backups. Add `?include_secrets=1` to include secrets, which are tokens, so keep that file private. The Garmin login token is never included.
-
-`scripts/backup.sh <folder>` writes the same zip to a folder, and is safe while the server runs. For a daily backup at 03:00, in `crontab -e`:
+`GET /api/backup`, or **Download backup** in the Data drawer, gives `openstride-backup-<date>.zip`: the data folder without secrets, locks and the analyst's scratch folders. `scripts/backup.sh <folder>` writes the same zip and is safe while the server runs. For a daily backup at 03:00, in `crontab -e`:
 
     0 3 * * * PATH=$HOME/.local/bin:$PATH /path/to/OpenStride/scripts/backup.sh $HOME/openstride-backups
 
-To restore, stop the server and unzip into an empty data folder. A backup without secrets means logging in again. Migrations write a backup to `data/backups/` first.
+To restore, stop the server and unzip into an empty data folder. The workspace is also a git repository: `git -C data/workspace log` is everything that ever changed, with the reason.
 
 With Docker: `docker compose exec openstride openstride backup /app/data/backups`.
 
-## Running on an always-on server
+## Coming from 0.1
 
-The laptop can be replaced by a small VPS or home server, using the same `compose.yaml` and `.env`.
+The new version keeps its data in two new folders, `data/workspace/` and `data/state/`. Your old files (`data/plans/`, `data/activities/`, `data/reviews/`, `data/athlete/`) are not read at start, and are never changed or removed.
 
-- **Through Tailscale (recommended):** no public port. Install Tailscale on the server and run `scripts/phone-access.sh`, or use the sidecar in `compose.yaml`.
-- **Behind Caddy:** automatic HTTPS on a domain you own. Set `OPENSTRIDE_PASSWORD` in `.env`, keep the port on `127.0.0.1` as `compose.yaml` has it, install Caddy on the server, and use this `Caddyfile`:
+    uv run openstride migrate
 
-      openstride.example.com {
-          reverse_proxy 127.0.0.1:8000
-      }
+brings over:
 
-  This one is on the public internet, so the password is not optional, and pick a long one.
+- **The plan**, with every earlier version as a commit in the workspace's history.
+- **The coach's notes** about you.
+- **Reviews, your notes on runs, hand-logged sessions and the chat**, as text under `journal/legacy/`, where the coach can read them.
+
+Activities themselves now come from the provider. If your watch history is already on intervals.icu, the first sync has it. If it is not, `uv run openstride migrate --upload` also sends the raw `.fit` and `.gpx` files OpenStride kept, and your hand-logged sessions, to intervals.icu.
+
+The plan is not sent to your intervals.icu calendar by the migration. Ask your coach to send it ("put my plan on my watch"), or it goes with your first approved change.
+
+`--force` replaces a plan the workspace already has. Running the migration twice changes nothing. Garmin settings in `.env` (`GARMIN_*`) are no longer used; intervals.icu takes that role.
+
+## Docker
+
+    docker compose up -d --build
+    docker compose exec openstride openstride doctor
+
+The image has git, bubblewrap, socat and the analyst's Python packages. Read the sandbox section above: in a default container the sandbox is off unless you allow namespaces or set `OPENSTRIDE_SANDBOX=weak`. The image has not been run by me; treat the first start as a test.

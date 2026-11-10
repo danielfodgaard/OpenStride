@@ -2,6 +2,20 @@
 
 *Draft, 2026-11-06, revised with the write boundary and the analyst, and on 2026-11-07 with providers. A design only; no code changes come with it.*
 
+## Status
+
+Built on the `agent-first` branch as version 0.2.0. The design below is what was built, with these differences:
+
+- **The CLI reaches the server through files, not a socket.** A request is a file in the turn's spool folder inside the workspace (`app/spool.py`). The OS sandbox closes sockets along with the network; files are what every sandbox and a shared volume have in common.
+- **A tap on the glance header opens the card directly**, without a message to the agent. It is the same card from the same builder, instantly and for free.
+- **Usage is kept in the server's state folder**, not under `logs/` in the workspace, and read with `openstride usage`.
+- **`GUIDE.md`, `proposals/` and `reports/` are written only by the server.** The guide tracks the app's version; what the athlete wants the coach to hold to goes in `athlete/memory.md`.
+- **The boundary on a bare install is the harness's OS sandbox** (Seatbelt, or bubblewrap), probed at start. The two-container split is not built.
+- **Hand-logged sessions and wellness notes are written to the provider**, at the athlete's word, and come back through the sync. They are the athlete's own input, not a change to what the watch recorded.
+- **New activities are briefed as one turn per sync**, and the first sync is history, not news.
+- **The local provider from the old parsers is not built.** The second implementation of the contract is a fixture provider that reads neutral-shape files, which is also the offline demo.
+- **Not yet verified:** the intervals.icu connector against the live API, and the Docker image.
+
 ## The idea
 
 Today OpenStride is an app with a coach in one tab. The coach has three tools and sees a fixed, pre-assembled context on every message. Everything else, from importing a run to moving a session, is a page, a form or a menu that calls a fixed API route.
