@@ -75,7 +75,7 @@ def test_a_failed_detail_call_does_not_lose_the_activity(provider):
     assert len(result["new"]) == 15 and any("intervals are down" in note for note in result["notes"])
     provider.fail_intervals = False
     again = mirror.sync()  # asked again, and this time it has them
-    assert len(again["updated"]) == 15 and mirror.load(again["updated"][0])["intervals"]
+    assert len(again["updated"]) == 15 and all(mirror.load(key)["intervals"] for key in again["updated"])
     assert mirror.sync()["updated"] == []
 
 

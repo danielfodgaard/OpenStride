@@ -109,21 +109,23 @@ def sync(since: date | None = None, today: date | None = None) -> dict:
         known = {row["id"]: row for row in rows()}
         digests = state.get("digests", {})
         taken = {row["key"] for row in known.values()}
+        owed = set(state.get("intervals_owed", []))
         seen = set()
         for record in fetched:
             seen.add(record["id"])
             mark = digest(record["source"] or record)
             existing = known.get(record["id"])
-            if existing and digests.get(record["id"]) == mark:
+            if existing and digests.get(record["id"]) == mark and record["id"] not in owed:
                 continue
             key = existing["key"] if existing else new_key(record, taken)
             taken.add(key)
             if not record["intervals"] and not record["partial"]:
                 try:
                     record["intervals"] = provider.intervals(record["id"])
+                    owed.discard(record["id"])
                 except ProviderError as error:
                     result["notes"].append(f"No intervals for {record['name'] or key}: {error}")
-                    mark = ""  # not remembered as done, so the next sync asks again
+                    owed.add(record["id"])  # asked for again at the next sync, wherever its window starts
             record["intervals"] = [interval | {"source": pruned(interval.get("source") or {})} for interval in record["intervals"]]
             record["source"] = pruned(record["source"])
             workspace.write_file(folder() / f"{key}.json", json.dumps(record | {"key": key}, indent=1))
@@ -131,12 +133,28 @@ def sync(since: date | None = None, today: date | None = None) -> dict:
             known[record["id"]] = {field: (record | {"key": key}).get(field) for field in INDEX_FIELDS}
             digests[record["id"]] = mark
             result["updated" if existing else "new"].append(key)
+        for ident in sorted(owed - seen):  # detail that failed last time, for activities outside this window
+            row = known.get(ident)
+            path = folder() / f"{row['key']}.json" if row else None
+            if path is None or not path.exists():
+                owed.discard(ident)
+                continue
+            try:
+                found = provider.intervals(ident)
+            except ProviderError:
+                continue
+            record = json.loads(path.read_text())
+            record["intervals"] = [interval | {"source": pruned(interval.get("source") or {})} for interval in found]
+            workspace.write_file(path, json.dumps(record, indent=1))
+            owed.discard(ident)
+            result["updated"].append(row["key"])
         for ident, row in list(known.items()):
             if ident not in seen and since.isoformat() <= row["date"] <= today.isoformat():
                 (folder() / f"{row['key']}.json").unlink(missing_ok=True)
                 (folder() / f"{row['key']}.streams.json").unlink(missing_ok=True)
                 del known[ident]
                 digests.pop(ident, None)
+                owed.discard(ident)
                 result["removed"].append(row["key"])
         ordered = sorted(known.values(), key=lambda row: row["start_local"])
         workspace.write_file(folder() / "index.jsonl", "".join(json.dumps(row) + "\n" for row in ordered))
@@ -156,7 +174,7 @@ def sync(since: date | None = None, today: date | None = None) -> dict:
 
         counts = ", ".join(f"{len(result[kind])} {kind}" for kind in ("new", "updated", "removed") if result[kind]) or "no new activities"
         workspace.commit_protected(f"Sync from {provider.name}: {counts}", ["activities", "wellness", "athlete/profile.yaml"])
-        save_sync_state(state | {"last_sync_date": today.isoformat(), "last_sync_at": workspace.now_iso(), "digests": digests, "last_error": ""})
+        save_sync_state(state | {"last_sync_date": today.isoformat(), "last_sync_at": workspace.now_iso(), "digests": digests, "intervals_owed": sorted(owed), "last_error": ""})
     return result
 
 

@@ -82,7 +82,7 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 ## How I know it works
 
-- **214 automated tests** (`uv run pytest`): the validator (each rule triggered by a mutated plan), the gate (every way to apply without approval), the write boundary and the tool-call check, both providers against the contract (intervals.icu through a fake HTTP transport), the mirror and calendar, the cards, the turn loop driven by a scripted agent, the agent API, the CLI, the triggers, the migration and the server.
+- **217 automated tests** (`uv run pytest`): the validator (each rule triggered by a mutated plan), the gate (every way to apply without approval), the write boundary and the tool-call check, both providers against the contract (intervals.icu through a fake HTTP transport), the mirror and calendar, the cards, the turn loop driven by a scripted agent, the agent API, the CLI, the triggers, the migration and the server.
 - **Live runs of the real harness** against the demo workspace, with and without the OS sandbox: a question answered with a card, a plan change drafted as a proposal, a session logged at the provider, the guard rails probed (plan and record read-only, network closed, state unreadable), and an analyst run that computed with a script and filed its report. Those runs found seven bugs that are fixed and now covered by tests.
 - **An offline demo** with no API key: `OPENSTRIDE_DEMO=1 uv run openstride`.
 
