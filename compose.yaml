@@ -10,6 +10,8 @@ services:
       OPENSTRIDE_ALLOW_OPEN: "1"
       OPENSTRIDE_PORT: "8000"
       OPENSTRIDE_DATA_DIR: /app/data
+      # "Today" is the container's local date. Set your time zone, or a late-evening run lands on tomorrow.
+      # TZ: Europe/Copenhagen
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

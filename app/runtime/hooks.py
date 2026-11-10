@@ -24,6 +24,8 @@ WRAPPERS = {"sudo", "command", "exec", "time", "nohup", "nice", "env", "xargs", 
 SEPARATORS = re.compile(r"\|\||&&|[;|\n&]|\$\(|`|\)")
 REDIRECT = re.compile(r"(?:\d|&)?>{1,2}\|?\s*(\"[^\"]+\"|'[^']+'|[^\s;|&<>()]+)")
 HARMLESS_TARGETS = ("/dev/null", "/dev/stdout", "/dev/stderr", "&1", "&2")
+# The server's own address. Its approve route is the athlete's; nothing in a shell command needs to name it.
+SERVER = re.compile(r"\blocalhost\b|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|/api/(proposals|messages|turn|sync)", re.I)
 ENVIRONMENT = re.compile(r"ANTHROPIC|API_KEY|\benviron\b|\bprintenv\b|\bexport\s+-p\b|\bdeclare\s+-x\b|\bcompgen\s+-[ev]", re.I)
 TIER_REASON = {
     "gated": "plan/ changes only when the athlete approves a proposal. Write the new weeks to a file in scratch/ and run `openstride plan draft --from <file>`.",
@@ -114,6 +116,8 @@ def bash_problem(policy: Policy, command: str) -> str | None:
             return "That reaches for the server's own files or secrets, which are not part of the workspace."
     if re.search(r"(^|[\s/\"'=])\.env(\b|$)", command) or "/proc/" in command or ENVIRONMENT.search(command):
         return "That reaches for the server's own files or secrets, which are not part of the workspace."
+    if SERVER.search(command):
+        return "The server is reached only through the `openstride` command. Approving a plan is the athlete's, on the card."
     cwd = policy.cwd
     for segment in segments(command):
         tokens = bare(words(segment))

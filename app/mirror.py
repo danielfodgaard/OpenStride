@@ -123,6 +123,7 @@ def sync(since: date | None = None, today: date | None = None) -> dict:
                     record["intervals"] = provider.intervals(record["id"])
                 except ProviderError as error:
                     result["notes"].append(f"No intervals for {record['name'] or key}: {error}")
+                    mark = ""  # not remembered as done, so the next sync asks again
             record["intervals"] = [interval | {"source": pruned(interval.get("source") or {})} for interval in record["intervals"]]
             record["source"] = pruned(record["source"])
             workspace.write_file(folder() / f"{key}.json", json.dumps(record | {"key": key}, indent=1))

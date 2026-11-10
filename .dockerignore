@@ -2,6 +2,7 @@
 .git
 .env
 data
+backups
 __pycache__
 .pytest_cache
 tests

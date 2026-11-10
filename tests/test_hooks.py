@@ -78,6 +78,8 @@ DENIED = [
     ("Bash", {"command": "cat ../state/secrets/approval_key"}, "secrets"),
     ("Bash", {"command": "cat ../../.env"}, "secrets"),
     ("Bash", {"command": "sudo rm plan/plan.json"}, "approves"),
+    ("Bash", {"command": "python3 -c \"import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/proposals/x/approve', data=b'')\""}, "only through the `openstride` command"),
+    ("Bash", {"command": "python3 scratch/call.py http://localhost:8000"}, "only through the `openstride` command"),
     ("Bash", {"command": "echo $ANTHROPIC_API_KEY"}, "secrets"),
     ("Bash", {"command": "printenv | grep -i key"}, "secrets"),
     ("Bash", {"command": "env"}, "secrets"),

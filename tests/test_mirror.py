@@ -73,6 +73,10 @@ def test_a_failed_detail_call_does_not_lose_the_activity(provider):
     provider.fail_intervals = True
     result = mirror.sync()
     assert len(result["new"]) == 15 and any("intervals are down" in note for note in result["notes"])
+    provider.fail_intervals = False
+    again = mirror.sync()  # asked again, and this time it has them
+    assert len(again["updated"]) == 15 and mirror.load(again["updated"][0])["intervals"]
+    assert mirror.sync()["updated"] == []
 
 
 def test_streams_are_fetched_once_and_kept_out_of_git(provider):

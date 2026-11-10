@@ -35,7 +35,7 @@ The agent has a shell. Three things keep it inside the lines: a check before eac
 | Docker | The container must be allowed to make namespaces: uncomment `cap_add` and `security_opt` in `compose.yaml`, or set `OPENSTRIDE_SANDBOX=weak` for the harness's weaker nested sandbox. Neither has been tested by me; `doctor` tells you the result |
 | Windows | Run under WSL |
 
-`uv run openstride doctor` says whether it is on, and the Data drawer shows it. With it on, the agent's shell can write only what the agent authors, cannot read the server's state or `.env`, and has no network. With it off, a script the agent runs in its shell is not confined by the OS: the plan and the record are still restored after the turn if touched, but your API key is in the shell's environment and the network is open to it. On a machine you care about, install the two packages.
+`uv run openstride doctor` says whether it is on, and the Data drawer shows it. With it on, the agent's shell can write only what the agent authors, cannot read the server's state or `.env`, and has no network. With it off, a script the agent runs in its shell is not confined by the OS: the plan and the record are still restored after the turn if touched, and commands that name the server, the environment or the network are refused, but a script written to get around that could reach your API key in the shell's environment, the network, and the server's own approve route. A model following its instructions does none of this; the sandbox is what makes it impossible rather than unlikely. On a machine you care about, install the two packages.
 
 `OPENSTRIDE_SANDBOX` in `.env`: `auto` (the default: on when the machine can), `on` (refuse to run a shell without it), `weak`, or `off`.
 
