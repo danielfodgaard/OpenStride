@@ -216,6 +216,7 @@ class Agent:
         """After every turn, however it ended: undo what the agent may not write, then commit the rest."""
         try:
             with workspace.lock():
+                workspace.sweep()
                 undone = workspace.enforce()
                 if undone:
                     self.add_notice(

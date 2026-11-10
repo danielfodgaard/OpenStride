@@ -361,7 +361,7 @@ def files() -> dict:
     found = []
     for path in sorted(root.rglob("*")):
         rel = path.relative_to(root).as_posix()
-        if not path.is_file() or workspace.under(rel, HIDDEN) or path.name.endswith(".tmp"):
+        if not path.is_file() or workspace.under(rel, HIDDEN) or path.name.endswith(".tmp") or rel in workspace.SANDBOX_LITTER:
             continue
         found.append({"path": rel, "size": path.stat().st_size, "tier": workspace.tier(rel)})
     return {"files": found}
@@ -424,7 +424,7 @@ def write_backup(folder: Path) -> Path:
             relative = path.relative_to(data_dir)
             if not path.is_file() or path.is_symlink() or path.name.endswith((".lock", ".tmp", ".zip", ".sock")):
                 continue
-            if "secrets" in relative.parts or relative.parts[:2] == ("state", "analyst"):
+            if "secrets" in relative.parts or relative.parts[0] == "analyst" or relative.parts[:2] == ("workspace", "scratch"):
                 continue
             try:
                 archive.write(path, relative)

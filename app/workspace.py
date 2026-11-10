@@ -25,8 +25,15 @@ SERVER_ONLY = (".git", ".claude", ".gitignore", "GUIDE.md", "proposals", "report
 PROTECTED = GATED + RECORDED + SERVER_ONLY
 TRACKED_PROTECTED = tuple(p for p in PROTECTED if p != ".git")
 AUTHORED_DIRS = ("athlete", "notes", "journal", "journal/weeks", "scratch")
-GITIGNORE = "scratch/\n*.tmp\n__pycache__/\nactivities/*.streams.json\n"
-GIT_IDENTITY = ("-c", "user.name=OpenStride", "-c", "user.email=openstride@localhost", "-c", "commit.gpgsign=false")
+# Empty placeholders the OS sandbox mounts over names it guards. They are not the athlete's data.
+SANDBOX_LITTER = (
+    ".env", ".env.development", ".env.development.local", ".env.local", ".env.production", ".env.production.local", ".env.test",
+    ".env.test.local", ".gitmodules", ".npmrc", ".yarnrc", ".yarnrc.yml", "bunfig.toml", "package.json", "package-lock.json",
+    "pnpm-lock.yaml", "yarn.lock", "node_modules",
+)
+GITIGNORE = "scratch/\n*.tmp\n__pycache__/\nactivities/*.streams.json\n" + "".join(f"/{name}\n" for name in SANDBOX_LITTER)
+# safe.directory: in a container the data folder is often a bind mount owned by another user, and git would refuse it.
+GIT_IDENTITY = ("-c", "user.name=OpenStride", "-c", "user.email=openstride@localhost", "-c", "commit.gpgsign=false", "-c", "safe.directory=*")
 GUIDE_DIR = Path(__file__).parent / "guide"
 
 DEFAULT_SETTINGS = {
@@ -246,6 +253,20 @@ def restore(paths, revision: str = "HEAD") -> None:
                         file.unlink()
             elif target.is_file() and path not in tracked:
                 target.unlink()
+
+
+def sweep(folder: Path | None = None) -> None:
+    """Remove the sandbox's empty placeholders, so the folder holds only what someone put there."""
+    folder = folder or root()
+    for name in SANDBOX_LITTER:
+        path = folder / name
+        try:
+            if path.is_file() and path.stat().st_size == 0:
+                path.unlink()
+            elif path.is_dir() and not any(p.is_file() for p in path.rglob("*")):
+                shutil.rmtree(path)
+        except OSError:
+            pass
 
 
 def enforce() -> list[str]:

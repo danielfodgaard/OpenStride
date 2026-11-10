@@ -11,7 +11,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import clock, hub as hub_module, spool, workspace
+from app import clock, config, hub as hub_module, spool, workspace
 from app.agent import system_prompt
 from app.runtime.base import TurnRequest
 from app.runtime.hooks import Policy
@@ -27,7 +27,8 @@ _waiting: dict[str, int] = {}  # run id -> callers waiting on it right now
 
 
 def runs_dir() -> Path:
-    return workspace.state() / "analyst"
+    """Beside the workspace and the server's state, inside neither: the analyst may read and write only here."""
+    return config.settings.data_dir / "analyst"
 
 
 def run_file(run_id: str) -> Path:
@@ -82,7 +83,7 @@ async def execute(hub, run: dict) -> dict:
     settings = workspace.settings()
     policy = Policy(
         role="analyst", workspace=workspace.root(), cwd=scratch, scratch=scratch, web=bool(run["web"]),
-        secrets=(str(workspace.state() / "secrets"), "approval_key", "session_secret"),
+        secrets=(str(workspace.state()), "approval_key", "session_secret"),
     )
     token = hub.token_for("analyst")
     today = clock.today()
@@ -120,6 +121,7 @@ async def execute(hub, run: dict) -> dict:
         run["error"] = run["error"] or f"The report could not be filed: {error}"
     run["state"] = "failed" if run["error"] and not run["report"] else "done"
     save(run)
+    workspace.sweep(scratch)
     hub.stream.publish("data_changed")
     return run
 

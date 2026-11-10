@@ -89,6 +89,7 @@ def environment(request: TurnRequest) -> dict:
         "OPENSTRIDE_TURN": request.token,
         "OPENSTRIDE_DATA_DIR": "",
         "CLAUDE_CONFIG_DIR": str(workspace.state() / "claude"),  # sessions live with the data, so they survive a container
+        "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*",  # the agent's own git log, on a bind mount
         "DISABLE_AUTOUPDATER": "1",
         "DISABLE_TELEMETRY": "1",
     }

@@ -16,7 +16,10 @@ def test_the_shell_gets_no_secrets_and_knows_where_the_workspace_is(ws, monkeypa
     monkeypatch.setenv("OPENSTRIDE_PASSWORD", "hunter2")
     env = claude_sdk.environment(request(ws))
     assert env["INTERVALS_ICU_API_KEY"] == "" and env["OPENSTRIDE_PASSWORD"] == ""
-    assert ("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB" in env) == claude_sdk.sandbox_available()  # the harness needs the OS sandbox to scrub
+    assert "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB" not in env  # the harness needs the OS sandbox to scrub, and it is off here
+    monkeypatch.setenv("OPENSTRIDE_SANDBOX", "on")
+    config.reload()
+    assert claude_sdk.environment(request(ws))["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] == "1"
     assert env["OPENSTRIDE_WORKSPACE"] == str(workspace.root()) and env["OPENSTRIDE_TURN"] == "tok" and env["OPENSTRIDE_SPOOL"] == "/tmp/spool"
     assert env["OPENSTRIDE_DATA_DIR"] == "" and env["CLAUDE_CONFIG_DIR"].startswith(str(workspace.state()))
 
@@ -41,6 +44,10 @@ def test_the_sandbox_is_set_up_only_where_it_can_run(ws, monkeypatch):
     assert box["network"] == {"allowedDomains": []}
     assert f"/{(workspace.root() / 'plan').resolve()}" in box["filesystem"]["denyWrite"]
     assert f"/{workspace.state().resolve()}" in box["filesystem"]["denyRead"]
+    assert box["enableWeakerNestedSandbox"] is False
+    monkeypatch.setenv("OPENSTRIDE_SANDBOX", "weak")
+    config.reload()
+    assert claude_sdk.harness_settings(request(ws))["sandbox"]["enableWeakerNestedSandbox"] is True
 
 
 def test_the_analyst_may_write_nothing_in_the_workspace(ws, tmp_path):

@@ -92,3 +92,15 @@ def test_init_is_safe_to_repeat_and_keeps_what_the_agent_wrote(ws):
     assert (workspace.root() / ".claude" / "skills" / "review-run" / "SKILL.md").exists()
     assert "{{PROVIDER}}" not in (workspace.root() / "GUIDE.md").read_text()
     assert os.stat(workspace.state() / "secrets").st_mode & 0o077 == 0
+
+
+def test_the_sandboxs_empty_placeholders_are_swept_and_real_files_are_not(ws):
+    root = workspace.root()
+    for name in (".env", "package.json", "yarn.lock"):
+        (root / name).write_text("")
+    (root / "node_modules" / ".bin").mkdir(parents=True)
+    (root / ".npmrc").write_text("registry=https://example.com\n")  # someone's real file: left alone
+    workspace.sweep()
+    assert not any((root / name).exists() for name in (".env", "package.json", "yarn.lock", "node_modules"))
+    assert (root / ".npmrc").exists()
+    assert workspace.changed(["."]) == []  # and git never sees one
