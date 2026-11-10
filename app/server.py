@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app import agent_api, analyst, cards, clock, config, hub as hub_module, logsafe, mirror, ops, plan, providers, spool, triggers, workspace
+from app import agent_api, analyst, cards, clock, config, hub as hub_module, logsafe, migrate, mirror, ops, plan, providers, spool, triggers, workspace
 from app.agent import Agent, make_runtime
 from app.hub import hub
 from app.providers import ProviderError
@@ -62,6 +62,12 @@ async def lifespan(app: FastAPI):
         demo.prepare(Path(demo_folder))
     await asyncio.to_thread(workspace.init)
     hub.bind(asyncio.get_running_loop())
+    imported = await asyncio.to_thread(migrate.auto, config.settings.data_dir)
+    if imported:
+        logger.info("Imported from the earlier version: %s", " ".join(imported))
+        hub.stream.append("notice", level="ok", text="Brought over from the earlier version of OpenStride: your plan with its history, your coach's notes, and your reviews and chat. The old files were left exactly as they were.")
+    if providers.active() is None and not hub.stream.last("notice", topic="no_provider"):
+        hub.stream.append("notice", level="warning", topic="no_provider", text="No provider is connected yet, so there are no activities to look at. Add INTERVALS_ICU_API_KEY and INTERVALS_ICU_ATHLETE_ID to .env and restart (docs/SETUP.md).")
     hub.runtime = make_runtime()
     hub.agent = Agent(hub, hub.runtime)
     hub.agent.start()

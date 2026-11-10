@@ -87,21 +87,19 @@ With Docker: `docker compose exec openstride openstride backup /app/data/backups
 
 ## Coming from 0.1
 
-The new version keeps its data in two new folders, `data/workspace/` and `data/state/`. Your old files (`data/plans/`, `data/activities/`, `data/reviews/`, `data/athlete/`) are not read at start, and are never changed or removed.
+The new version keeps its data in new folders beside the old ones: `data/workspace/`, `data/state/` and `data/analyst/`. Your old files (`data/plans/`, `data/activities/`, `data/reviews/`, `data/athlete/`) are only ever read, never changed or removed.
 
-    uv run openstride migrate
-
-brings over:
+The first time the new version starts on an old data folder, it brings over by itself:
 
 - **The plan**, with every earlier version as a commit in the workspace's history.
 - **The coach's notes** about you.
 - **Reviews, your notes on runs, hand-logged sessions and the chat**, as text under `journal/legacy/`, where the coach can read them.
 
-Activities themselves now come from the provider. If your watch history is already on intervals.icu, the first sync has it. If it is not, `uv run openstride migrate --upload` also sends the raw `.fit` and `.gpx` files OpenStride kept, and your hand-logged sessions, to intervals.icu.
+Activities themselves now come from the provider. If your watch history is already on intervals.icu, the first sync has it. If it is not, `uv run openstride migrate --upload` (with Docker: `docker compose exec openstride openstride migrate --upload`) also sends the raw `.fit` and `.gpx` files OpenStride kept, and your hand-logged sessions, to intervals.icu.
 
 The plan is not sent to your intervals.icu calendar by the migration. Ask your coach to send it ("put my plan on my watch"), or it goes with your first approved change.
 
-`--force` replaces a plan the workspace already has. Running the migration twice changes nothing. Garmin settings in `.env` (`GARMIN_*`) are no longer used; intervals.icu takes that role.
+`openstride migrate` runs the same import by hand; `--force` replaces a plan the workspace already has, and running it twice changes nothing. To go back to 0.1, check out the old version: its files are where it left them. Garmin settings in `.env` (`GARMIN_*`) are no longer used; intervals.icu takes that role.
 
 ## Docker
 

@@ -146,3 +146,14 @@ def run(source: Path, upload: bool = False, force: bool = False) -> list[str]:
     if providers.active() is None:
         report.append("Next: connect a provider (INTERVALS_ICU_API_KEY in .env), and your activities arrive with the first sync.")
     return report
+
+
+def auto(source: Path) -> list[str]:
+    """At the first start after an upgrade: bring the old data over once, without being asked. Reads only."""
+    marker = workspace.state() / "migrated"
+    if marker.exists():
+        return []
+    has_old = find_plan(source) is not None or (source / "athlete" / "memory.md").exists()
+    report = run(source) if has_old and plan.load() is None else []
+    workspace.write_file(marker, workspace.now_iso())
+    return report

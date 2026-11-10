@@ -105,7 +105,7 @@ uv run openstride
 
 Open http://127.0.0.1:8000 and tell your coach about your next race.
 
-**Coming from 0.1:** `uv run openstride migrate` brings your plan with its versions, the coach's notes, and your reviews and chat into the workspace. Nothing in the old `data/` files is changed or removed. See [docs/SETUP.md](docs/SETUP.md#coming-from-01).
+**Coming from 0.1:** the first start brings your plan with its versions, the coach's notes, and your reviews and chat into the workspace by itself. Nothing in the old `data/` files is changed or removed. See [docs/SETUP.md](docs/SETUP.md#coming-from-01).
 
 **Phone access, the sandbox, Docker, password and backups:** [docs/SETUP.md](docs/SETUP.md).
 

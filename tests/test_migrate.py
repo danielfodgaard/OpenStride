@@ -61,3 +61,28 @@ def test_every_old_version_becomes_a_commit(ws, tmp_path):
 
 def test_a_folder_with_nothing_old_in_it(ws, tmp_path):
     assert migrate.run(tmp_path)[0].startswith("Nothing to migrate")
+
+
+def test_the_first_start_after_an_upgrade_imports_once_by_itself(tmp_path, monkeypatch):
+    """The old layout sits in the data folder; the server starts; the plan is there, and the old files are as they were."""
+    from fastapi.testclient import TestClient
+
+    from app import config, providers
+
+    data = tmp_path / "upgraded"
+    shutil.copytree(LEGACY, data)
+    before = fingerprint(data)
+    monkeypatch.setenv("OPENSTRIDE_DATA_DIR", str(data))
+    monkeypatch.setenv("OPENSTRIDE_PROVIDER", "none")
+    config.reload()
+    from app import server
+
+    with TestClient(server.app) as client:
+        assert client.get("/api/glance").json()["has_plan"] is True
+        notices = [e["text"] for e in client.get("/api/stream").json()["events"] if e["type"] == "notice"]
+        assert any("Brought over" in text for text in notices) and any("No provider is connected" in text for text in notices)
+    old_now = {path: digest for path, digest in fingerprint(data).items() if not path.startswith(("workspace/", "state/"))}
+    assert old_now == before
+    with TestClient(server.app) as client:  # a second start imports nothing and says nothing new
+        assert len([e for e in client.get("/api/stream").json()["events"] if e["type"] == "notice"]) == 2
+    assert providers.active() is None
