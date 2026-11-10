@@ -1,0 +1,16 @@
+[
+ {
+  "id": "g1",
+  "name": "Daily trainer",
+  "kind": "shoes",
+  "distance_km": 612.4,
+  "retired": false
+ },
+ {
+  "id": "g2",
+  "name": "Race flats",
+  "kind": "shoes",
+  "distance_km": 88.0,
+  "retired": false
+ }
+]

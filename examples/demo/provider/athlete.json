@@ -1,0 +1,29 @@
+{
+ "provider": "demo",
+ "name": "Demo Runner",
+ "sex": "M",
+ "birth_date": "1992-03-14",
+ "weight_kg": 71.5,
+ "hr_max": 188,
+ "hr_rest": 52,
+ "hr_threshold": 170,
+ "threshold_pace": "4:37/km",
+ "hr_zones": [
+  136,
+  150,
+  160,
+  170,
+  178,
+  188
+ ],
+ "pace_zones": [
+  77.5,
+  87.7,
+  94.3,
+  100,
+  103.4,
+  111.5
+ ],
+ "timezone": "Asia/Singapore",
+ "source": {}
+}

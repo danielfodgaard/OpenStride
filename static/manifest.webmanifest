@@ -1,7 +1,7 @@
 {
   "name": "OpenStride",
   "short_name": "OpenStride",
-  "description": "Your running coach: plans, workouts and reviews.",
+  "description": "Your running coach: one conversation on top of your training data.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

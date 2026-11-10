@@ -1,173 +1,150 @@
-import json
-from pathlib import Path
+"""Each rule, triggered by a mutated copy of the sample plan."""
+from datetime import date, timedelta
 
 import pytest
 
-from app.models import PlanFile, SavedRequest, Session, TrainingPlan
-from app.validate import soft_warnings, validate_plan
+from app import plan, validate
+from app.models import Change, PlanDoc
+from tests.conftest import TODAY
 
-SAMPLE = json.loads(Path("examples/sample_plan.json").read_text())
-N_WEEKS = len(SAMPLE["plan"]["weeks"])
+TODAY_DATE = date.fromisoformat(TODAY)
 
 
 @pytest.fixture
-def plan():
-    return TrainingPlan.model_validate(SAMPLE["plan"])
+def doc(demo_ws) -> PlanDoc:
+    return plan.load()
 
 
-def errors_for(plan, **request_changes):
-    request = SavedRequest.model_validate(SAMPLE["request"] | request_changes)
-    return validate_plan(plan, request, N_WEEKS)
+def copy(doc: PlanDoc) -> PlanDoc:
+    return doc.model_copy(deep=True)
 
 
-def find(plan, week, day):
-    return next(s for s in plan.weeks[week].sessions if s.day == day)
+def test_the_sample_plan_has_no_fact_errors(doc):
+    assert validate.facts(doc.plan, doc.request) == []
 
 
-def test_sample_passes(plan):
-    assert errors_for(plan) == []
-    assert soft_warnings(plan) == []
+def test_two_runs_on_one_day_is_an_error(doc):
+    week = doc.plan.weeks[5]
+    runs = [s for s in week.sessions if s.modality == "run"]
+    runs[1].day, runs[1].date = runs[0].day, runs[0].date
+    assert any("more than one run on the same day" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def test_week_count(plan):
-    plan.weeks.pop(0)
-    assert any("numbered 1..10" in e for e in errors_for(plan))
+def test_a_skipped_run_does_not_count_as_a_second_run(doc):
+    week = doc.plan.weeks[5]
+    runs = [s for s in week.sessions if s.modality == "run"]
+    runs[1].day, runs[1].date, runs[1].status = runs[0].day, runs[0].date, "skipped"
+    assert not any("same day" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def test_week_numbers(plan):
-    plan.weeks[1].week_number = 5
-    assert any("numbered 1..10" in e for e in errors_for(plan))
+def test_type_and_modality_must_agree(doc):
+    doc.plan.weeks[5].sessions[0].modality = "strength"
+    assert any("must have modality run" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def test_unavailable_day(plan):
-    find(plan, 0, "Sat").day = "Fri"
-    assert any("not an available day" in e for e in errors_for(plan))
+def test_the_race_must_be_on_the_race_date_and_last(doc):
+    race = next(s for s in doc.plan.sessions() if s.type == "race")
+    race.date -= timedelta(days=1)
+    assert any("must be on the race date" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def test_too_many_sessions(plan):
-    extra = find(plan, 0, "Sat").model_copy(update={"day": "Mon"})
-    plan.weeks[0].sessions.append(extra)
-    assert any("more than runs_per_week" in e for e in errors_for(plan))
+def test_nothing_after_the_race(doc):
+    last = doc.plan.weeks[-1]
+    extra = last.sessions[0].model_copy(update={"id": "extra", "date": doc.request.race_date + timedelta(days=1)})
+    last.sessions.append(extra)
+    assert any("after the race" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def test_two_runs_on_one_day(plan):
-    find(plan, 0, "Sat").day = "Thu"
-    assert any("more than one run" in e for e in errors_for(plan))
+def test_duplicate_ids_are_an_error(doc):
+    doc.plan.weeks[5].sessions[1].id = doc.plan.weeks[5].sessions[0].id
+    assert any("is used 2 times" in e for e in validate.facts(doc.plan, doc.request))
 
 
-def strength_session(day):
-    return Session(
-        day=day, type="strength", modality="strength", title="Strength", distance_km=0,
-        duration_min=30, target_pace="", description="", steps=[],
-    )
+def test_constraints_name_the_athletes_own_limits(doc):
+    week = doc.plan.weeks[5]
+    run = next(s for s in week.sessions if s.modality == "run")
+    run.day = "Mon"
+    assert any("not one of your usual training days" in w for w in validate.constraints(doc.plan, doc.request))
 
 
-def test_strength_may_share_a_day_with_a_run(plan):
-    plan.weeks[0].sessions.append(strength_session("Tue"))
-    assert errors_for(plan, strength_sessions_per_week=1) == []
+def test_a_new_plan_is_held_to_the_request_strictly(doc):
+    run = next(s for s in doc.plan.weeks[5].sessions if s.modality == "run")
+    run.day, run.date = "Mon", doc.plan.weeks[5].start_date
+    errors, _ = validate.new_plan(doc, len(doc.plan.weeks))
+    assert any("usual training days" in e for e in errors)
+    errors, _ = validate.new_plan(plan.load(), 12)
+    assert any("Expected 12 weeks" in e for e in errors)
 
 
-def test_strength_beyond_the_request_is_too_many(plan):
-    plan.weeks[0].sessions.append(strength_session("Tue"))
-    assert any("more than the 4 requested" in e for e in errors_for(plan))
+def test_a_change_only_warns_about_the_athletes_limits(doc):
+    new = copy(doc)
+    run = next(s for s in new.plan.weeks[5].sessions if s.type == "easy")
+    run.day, run.date = "Mon", new.plan.weeks[5].start_date
+    errors, warnings = validate.change(doc, new, [], TODAY_DATE)
+    assert errors == []
+    assert any("usual training days" in w for w in warnings)
 
 
-def test_strength_is_exempt_from_the_hard_day_rule(plan):
-    plan.weeks[4].sessions.append(strength_session("Wed"))
-    plan.weeks[4].sessions.append(strength_session("Sat"))
-    assert soft_warnings(plan) == []
+def test_what_already_happened_cannot_change_except_its_status(doc):
+    new = copy(doc)
+    past = new.plan.weeks[0].sessions[0]
+    past.distance_km += 2
+    errors, _ = validate.change(doc, new, [], TODAY_DATE)
+    assert any("already happened" in e for e in errors)
+    new = copy(doc)
+    new.plan.weeks[0].sessions[0].status = "skipped"
+    new.plan.weeks[0].sessions[0].edit_note = "Was ill"
+    assert validate.change(doc, new, [Change(week=1, day=new.plan.weeks[0].sessions[0].day, summary="was ill")], TODAY_DATE)[0] == []
 
 
-def test_long_run_rule_can_be_lifted_for_proposals(plan):
-    find(plan, 0, "Sun").day = "Sat"
-    find(plan, 0, "Sat").day = "Sun"
-    assert any("long run" in e for e in errors_for(plan))
-    request = SavedRequest.model_validate(SAMPLE["request"])
-    assert validate_plan(plan, request, N_WEEKS, long_run_rule=False) == []
+def test_a_session_matched_to_an_activity_is_frozen_even_today(doc):
+    today_session = next(s for s in doc.plan.sessions() if s.date == TODAY_DATE)
+    new = copy(doc)
+    new.plan.session(today_session.id).duration_min += 15
+    assert validate.change(doc, new, [], TODAY_DATE)[0] == []
+    errors, _ = validate.change(doc, new, [], TODAY_DATE, done={today_session.id})
+    assert any("already happened" in e for e in errors)
 
 
-def test_modality_must_match_the_type(plan):
-    find(plan, 0, "Sat").modality = "cross"
-    assert any("must have modality run" in e for e in errors_for(plan))
+def test_a_session_cannot_move_into_the_past(doc):
+    new = copy(doc)
+    future = next(s for s in new.plan.sessions() if s.date > TODAY_DATE and s.type == "easy")
+    future.date = TODAY_DATE - timedelta(days=1)
+    errors, _ = validate.change(doc, new, [], TODAY_DATE)
+    assert any("that day has passed" in e for e in errors)
 
 
-def test_long_run_on_wrong_day(plan):
-    find(plan, 0, "Sun").day = "Fri"
-    assert any("long run" in e for e in errors_for(plan, available_days=["Tue", "Thu", "Fri", "Sat", "Sun"]))
+def test_the_race_cannot_change(doc):
+    new = copy(doc)
+    next(s for s in new.plan.sessions() if s.type == "race").title = "Fun run"
+    assert "The race session must stay exactly as it is" in validate.change(doc, new, [], TODAY_DATE)[0]
 
 
-def test_consecutive_hard_sessions_are_a_warning_not_an_error(plan):
-    find(plan, 4, "Thu").day = "Wed"
-    assert errors_for(plan, available_days=["Tue", "Wed", "Thu", "Sat", "Sun"]) == []
-    assert any("consecutive days: Week 5 Tue and Week 5 Wed" in w for w in soft_warnings(plan))
+def test_a_removed_session_needs_its_own_change_entry(doc):
+    new = copy(doc)
+    week = new.plan.weeks[5]
+    gone = next(s for s in week.sessions if s.type == "intervals")
+    week.sessions.remove(gone)
+    errors, _ = validate.change(doc, new, [], TODAY_DATE)
+    assert any("without its own entry" in e for e in errors)
+    explained = [Change(week=week.week_number, day=gone.day, summary="dropped: calf")]
+    assert validate.change(doc, new, explained, TODAY_DATE)[0] == []
 
 
-def test_consecutive_hard_sessions_across_weeks(plan):
-    find(plan, 1, "Tue").day = "Mon"
-    assert errors_for(plan, available_days=["Mon", "Tue", "Thu", "Sat", "Sun"]) == []
-    assert any("Week 1 Sun and Week 2 Mon" in w for w in soft_warnings(plan))
+def test_an_imperfect_plan_does_not_block_a_later_change(doc):
+    old = copy(doc)
+    runs = [s for s in old.plan.weeks[6].sessions if s.modality == "run"]
+    runs[1].day, runs[1].date = runs[0].day, runs[0].date  # already wrong before the change
+    new = copy(old)
+    next(s for s in new.plan.weeks[5].sessions if s.type == "easy").distance_km += 1
+    assert validate.change(old, new, [], TODAY_DATE)[0] == []
 
 
-def test_missing_race(plan):
-    find(plan, 9, "Sun").type = "easy"
-    assert any("exactly one race" in e for e in errors_for(plan))
-
-
-def test_two_races_in_last_week(plan):
-    find(plan, 9, "Sat").type = "race"
-    assert any("exactly one race" in e for e in errors_for(plan))
-
-
-def test_race_in_earlier_week(plan):
-    find(plan, 3, "Sun").type = "race"
-    assert any("exactly one race" in e for e in errors_for(plan))
-
-
-def test_race_on_wrong_weekday(plan):
-    assert any("must be on Sat" in e for e in errors_for(plan, race_date="2027-01-09"))
-
-
-def test_race_may_fall_outside_available_days(plan):
-    race = find(plan, 9, "Sun")
-    race.day = "Fri"
-    assert errors_for(plan, race_date="2027-01-08") == [
-        "The last week has a session after the race on Fri"
-    ]
-
-
-def test_session_after_race(plan):
-    race = find(plan, 9, "Sun")
-    find(plan, 9, "Sat").type, race.type = "race", "easy"
-    assert any("after the race" in e for e in errors_for(plan, race_date="2027-01-09"))
-
-
-def test_llm_may_adjust_paces(plan):
-    find(plan, 0, "Sat").target_pace = "5:00/km"
-    find(plan, 0, "Tue").steps[0].target_pace = "6:30/km"
-    assert errors_for(plan) == []
-
-
-def test_negative_numbers(plan):
-    plan.weeks[0].planned_km = -1
-    find(plan, 0, "Sat").distance_km = -1
-    find(plan, 0, "Tue").steps[0].duration_min = -1
-    errors = errors_for(plan)
-    assert sum("negative" in e for e in errors) == 3
-
-
-def test_repeat_below_one(plan):
-    find(plan, 0, "Tue").steps[0].repeat = 0
-    assert any("repeat below 1" in e for e in errors_for(plan))
-
-
-def test_volume_jump_is_a_soft_warning(plan):
-    plan.weeks[1].planned_km = plan.weeks[0].planned_km * 1.2
-    assert errors_for(plan) == []
-    assert any("more than 15%" in w for w in soft_warnings(plan))
-
-
-def test_strength_and_cycling_sample_is_valid():
-    sample = PlanFile.model_validate_json(Path("examples/sample_plan_v3.json").read_text())
-    assert validate_plan(sample.plan, sample.request, 10) == []
-    assert soft_warnings(sample.plan) == []
-    assert {s.modality for w in sample.plan.weeks for s in w.sessions} == {"run", "strength", "cross"}
+def test_judgments_flag_back_to_back_hard_days_and_volume_jumps(doc):
+    week = doc.plan.weeks[5]
+    hard = [s for s in week.sessions if s.type in ("tempo", "intervals")]
+    hard[1].date = hard[0].date + timedelta(days=1)
+    week.planned_km = doc.plan.weeks[4].planned_km * 1.3
+    found = validate.judgments(doc.plan)
+    assert any("consecutive days" in w for w in found)
+    assert any("rises more than 15%" in w for w in found)

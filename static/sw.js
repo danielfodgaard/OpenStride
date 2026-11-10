@@ -1,23 +1,16 @@
 // App shell from the cache, so the app opens at once even when the server can't be reached.
 // API reads go to the network first; the last good copy answers when it fails.
-const SHELL_CACHE = "openstride-shell-v11";  // bump when SHELL changes
-const API_CACHE = "openstride-api-v1";
+const SHELL_CACHE = "openstride-shell-v12";  // bump when SHELL changes
+const API_CACHE = "openstride-api-v2";
 const SHELL = [
   "/",
   "/app.js",
+  "/cards.js",
   "/charts.js",
+  "/format.js",
+  "/md.js",
   "/style.css",
   "/manifest.webmanifest",
-  "/render/chat.js",
-  "/render/coach_data.js",
-  "/render/format.js",
-  "/render/garmin.js",
-  "/render/plan_overview.js",
-  "/render/session_edit.js",
-  "/render/ui.js",
-  "/render/weeks.js",
-  "/render/workout.js",
-  "/render/workouts_list.js",
   "/fonts/barlow-latin-400-normal.woff2",
   "/fonts/barlow-latin-600-normal.woff2",
   "/fonts/barlow-semi-condensed-latin-600-normal.woff2",
@@ -31,7 +24,7 @@ const SHELL = [
   "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
 ];
-const NOT_CACHED = /^\/api\/backup|\.fit$/;
+const NOT_CACHED = /^\/api\/(backup|events|raw|status|files|file|log)/;  // the live feed and the drawer are never served stale
 const NETWORK_TIMEOUT_MS = 8000;  // a sleeping laptop over Tailscale hangs rather than refuses
 
 self.addEventListener("install", (event) => {

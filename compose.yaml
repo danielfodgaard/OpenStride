@@ -10,10 +10,18 @@ services:
       OPENSTRIDE_ALLOW_OPEN: "1"
       OPENSTRIDE_PORT: "8000"
       OPENSTRIDE_DATA_DIR: /app/data
+      # "Today" is the container's local date. Set your time zone, or a late-evening run lands on tomorrow.
+      # TZ: Europe/Copenhagen
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
+    # The OS sandbox for the agents' shells needs to make namespaces, which a default container may not.
+    # `openstride doctor` (docker compose exec openstride openstride doctor) says whether it is on.
+    # To turn it on, either allow namespaces for this container:
+    # cap_add: [SYS_ADMIN]
+    # security_opt: ["seccomp=unconfined", "apparmor=unconfined"]
+    # or set OPENSTRIDE_SANDBOX=weak in .env for the harness's weaker nested sandbox. See docs/SETUP.md.
     # For the tailscale sidecar below: delete `ports:` and uncomment this line.
     # network_mode: service:tailscale
 

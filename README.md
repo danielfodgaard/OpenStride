@@ -1,172 +1,133 @@
 # OpenStride
 
-**An open-source running coach: the coaching is done by an LLM, and the app is a thin layer of JSON on top.**
+**An open-source running coach where the agent is the interface.** You talk to one coach, on your phone or your laptop, and it does what you ask: sets up your plan, reads your runs, explains a chart, moves a session, logs a sore calf. There are no pages or menus underneath, only your training data as files on your own machine and an agent that works in them.
 
-Your plan, your runs and your coach's reasoning live as files on your own computer. Every change to the plan comes with a written reason, and nothing changes unless you accept it. MIT licensed.
+One thing waits for you: **a change to your training plan.** Everything else the agent does on its own authority. MIT licensed.
+
+<p>
+<img src="docs/screenshots/stream-phone.png" alt="The stream on a phone: a glance header, the coach's message and a week card" width="270">
+<img src="docs/screenshots/proposal-phone.png" alt="A plan change waiting for approval, with what it moves and a warning to weigh" width="270">
+</p>
 
 ---
 
-## The design principle: the LLM coaches, code handles facts
+## The idea
 
-Hardcoding coaching logic isn't worth it. Models keep getting better; a rulebook I write today doesn't. So OpenStride sends the model as much context as possible and keeps the app simple.
+Hardcoding coaching logic isn't worth it. Models keep getting better; a rulebook written today doesn't. Earlier versions of OpenStride gave the model three tools and a fixed prompt, so a better model could only write better prose inside the same box.
 
-But "just ask the LLM" breaks in predictable ways: a wrong date, a pace that's 4:14 when it should be 4:41, a plan that schedules a run on a day you said you can't train. Each of those costs more than the 30 lines of code that would have prevented it.
+This version turns that inside out. The app is a **workspace** the agent works in:
 
-So the split is:
-
-| The LLM decides | Code does |
+| | |
 |---|---|
-| Periodisation, weekly volume, session choice, taper | **Facts:** dates, pace arithmetic, parsing .fit/.gpx files into summaries |
-| Whether to adjust the reference paces (and says why) | **Structure:** JSON schemas, and one renderer that always draws a plan the same way |
-| How to read a vague goal ("sub-1:30, stay injury-free") | **Verification:** a thin validator that *reports* problems back to the LLM and never fixes them itself |
-| Run reviews, plan changes, the coach conversation, what to remember about you | **Control:** *when* the LLM is asked; you approve every change, and your own edits never go through the LLM |
+| **Data is files** | Your plan, your activities, wellness, the coach's notes, a journal: a folder (`data/workspace/`) the agent reads with whatever it finds best, and a git repository, so every change has a reason and an undo |
+| **Every action is a command** | `openstride` does what code must do exactly: paces, dates, validating a plan, showing a card, reaching the provider. The agent types it; so can you |
+| **One gate** | `plan/` is written only when you approve a proposal. Enforced in code, not in a prompt |
+| **The record is not the agent's** | What your watch recorded and the provider computed is written only by the sync. A disagreement goes in a note beside it |
+| **Analysis is a provider's job** | intervals.icu analyses your files, keeps fitness and wellness, and sends workouts to your watch. OpenStride defines the contract; another analyzer can plug in behind it |
+| **An analyst behind the coach** | Questions that need computation go to a second agent that runs code over a read-only copy of your data and returns a report, charts and, when it concerns the plan, a proposal |
 
-Two consequences:
+A stronger model reads more of the data, writes better throwaway analysis and follows the skills more carefully, with no code change. That is the point.
 
-- **The app gets better when the model does.** Change the model name in `.env` and the coaching improves, with no code changes.
-- **Every decision is explainable.** The model has to return structured JSON with a `rationale` field, so you always see the reason behind a change.
+The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md).
 
 ---
 
-## What it does
+## What it is like to use
 
-### Plan generation
+**One screen.** A header with today's session, your next key session, the week, your form and the days to the race. A conversation below it. One box to type in, which also takes a photo or a `.fit` file.
 
-You describe your goal, a recent race, your current weekly volume, which days you can train, your long-run day, and optionally strength and cross-training sessions.
+**The coach shows, not tells.** Ask how the week is going and you get the week as a card, drawn by code the same way every time, and two sentences on what to notice. Cards: a week, a session, an activity with pace and heart rate against the plan, fitness and fatigue, weekly volume, the plan, a table, a chart, an analyst's report.
 
-- **Reference paces in code.** OpenStride computes your VDOT from the recent race with the Daniels–Gilbert formulas and derives easy / marathon / threshold / interval / repetition paces. These go to the model as *reference data*. It may adjust them if your context justifies it, and it has to say so in the plan summary.
-- **Structured outputs.** The model returns a plan that must match a strict JSON schema (weeks → sessions → steps).
-- **Errors vs warnings.**
-  - **Errors** are constraints *you* set: sessions only on your available days, the right number of weeks, the race on race day, nothing in the past modified. They go back to the model once, with a "fix these problems" message.
-  - **Warnings** are coaching judgments: back-to-back hard days, a big week-over-week volume jump. They never block anything; they're shown next to the plan so you can see the trade-off.
+**A plan change is a card with two buttons.** "Move Thursday to Saturday", a new plan, a skipped session, a rebuild after illness: the coach drafts it, the validator checks it, and you see what moves, what it costs and why. Facts are refused (a session moved into the past, something already done altered, two runs on one day). Judgments are shown to you and never block (not one of your usual days, hard days back to back, a jump in volume). Nothing changes unless you approve; when you do, the new sessions go to your watch through the provider's calendar.
 
-  My first version treated "long run on your long-run day" and "no consecutive hard days" as hard rules. Then I asked the coach to swap Thursday and Saturday for one week, and it silently dropped an interval session to satisfy the rules. Those rules were coaching judgments pretending to be facts, so they became warnings.
-- **Plans are drafts until you accept them.** You can regenerate with feedback ("long run on Sunday instead", "too much volume early on"); only an accepted plan becomes your active plan. Old plans are archived, not deleted.
+**The coach checks in.** A review when a run arrives, a look back when a week ends, a report after the race. Optional: a morning brief, a wellness signal, a four-week block review. Quiet hours and a monthly budget are settings you change by asking.
 
-### Editing the plan by hand
+**It remembers.** `athlete/memory.md` holds what data can't say: who you are, your history, how you respond to training, what you agreed. It outlives plans and conversations, and you can read and edit it.
 
-Some changes are yours to make, not the coach's. The "⋯" menu on every session applies them at once, with no LLM call, no cost and an Undo button:
+**You can look underneath.** The Data drawer lists every file with who may write it, its history, and what the agents have cost this month.
 
-- **Move** a session to another day, or **swap** two sessions in the same or adjacent weeks. On a laptop you can drag a session onto a day or another session.
-- **Change** what a session is: distance, duration, target pace, type, title and description. The week's planned volume follows, and an interval session becomes one steady block when its amount or pace changes.
-- **Skip** a session, and unskip it later. A skipped session is your choice and is never counted as missed.
-- **Delete** a session that is still ahead of you. It leaves the plan for good, the week's volume follows, and a copy already on your Garmin is removed. Undo brings it back.
-- **Put a workout on any plan day.** Under a workout, "In your plan" lists every day of the plan: pick a session and the workout counts as it, pick a day with nothing of that kind planned and the day gets a session that is the workout. "I did something else than planned" marks the planned session as replaced, and can be taken back. A synced Garmin run that matched the wrong session is fixed the same way.
+<p>
+<img src="docs/screenshots/activity-laptop.png" alt="An activity card: distance, time, pace, heart rate, and pace and heart-rate charts against the planned range" width="560">
+</p>
 
-Each edit is a new plan version with a note the coach can read, so a later review or adaptation knows what moved and why. Workouts already on your Garmin follow the edit: a moved or changed session is re-sent, a skipped one is removed. Edits only warn about coaching judgments ("Wed isn't one of your usual training days", "hard runs on consecutive days"); facts, like two runs on one day or moving a session into the past, are refused.
+---
 
-### Tracking
+## How it is built
 
-- **Import .fit and .gpx files** from any watch. Each file is parsed into a summary (distance, time, laps, km splits, heart rate, cadence) and matched to the planned session on that date. Every other named field the file holds goes with it as `extra`, for the run, each lap and each km split: calories, training effect, running dynamics, temperature, power, time in heart-rate zones, whatever the watch wrote. The raw file never goes to the LLM; the review gets the summary plus the recording thinned to one row every 30 seconds. Files imported before this were read again once at the next start.
-- **Every imported run gets an automatic review** from the model: did you hit the purpose of the session, and is anything worth flagging ("HR high for an easy run")? Reviews never change the plan.
-- **Strength and cross-training** sessions can be logged by hand or imported (rides and swims match cross-training sessions).
+```
+  phone / laptop        one stream, cards, an approval card, one input
+        │
+  OpenStride server     the gate, the write boundary, the turn queue, the cards, the triggers, the provider sync
+        │
+  the coach             Claude Agent SDK harness: a shell and file tools in the workspace, skills, the openstride CLI
+        │      └──── the analyst: a second agent in its own folder, workspace read-only, computes and reports
+  data/workspace/       plan/  proposals/  activities/  wellness/  athlete/  notes/  journal/  reports/   (a git repository)
+        ▲
+  provider              intervals.icu today; a contract any analyzer can implement  ←→  Garmin, Coros, Polar, Suunto, Wahoo
+```
 
-### On your phone and your watch
+**Who may write what** is fixed in code, in three tiers:
 
-- **A Workouts page and a page per workout**: route, pace against the planned range, heart rate and laps.
-- **An installable app.** Install it from the phone's browser; this week's plan and opened workouts stay readable offline.
-- **One server for phone and laptop.** Over [Tailscale](https://tailscale.com/), your phone reaches the OpenStride running on your laptop with HTTPS, and nothing is exposed to the internet.
-- **Garmin, from your phone.** Sync runs from Garmin Connect through the official Personal API. Download planned sessions as structured workouts and copy them to your watch over USB, which is verified on a real watch. Send them straight to the watch from the app (experimental: not yet tested against a real Garmin account).
+| Tier | Paths | Who writes |
+|---|---|---|
+| Recorded | `activities/`, `wellness/`, `athlete/profile.yaml` | Only the provider sync |
+| Gated | `plan/` | Only your approval of a proposal |
+| Authored | notes, journal, reviews, settings, the coach's memory | The agent, freely; git keeps every version |
 
-### One coach, who knows what's going on
+**How the boundary holds.** Before each tool call a check refuses writes to protected paths, git commands that change history, anything that reaches the network or the server's secrets. On a machine that can (macOS; Linux with bubblewrap and socat) the agents' shells also run in an OS sandbox: the protected folders are read-only, there is no network, the server's state is unreadable. After every turn, anything that still differs from the last server commit in a protected path is put back and the agent is told. The Approve button is the only caller of `plan apply`, and it is not reachable from an agent's shell. Without the OS sandbox the first and third layers still hold for files, but the shell itself is not confined; `openstride doctor` says which you have.
 
-There is one coach and one conversation, on its own Coach tab. On every message it sees your plan, every run with its review, your hand edits and notes, your training-load numbers, and its own notes about you. Ask "is my easy pace too fast?" and you get an answer that cites your actual runs. Tell it "my calf has been tight since Tuesday" and it may ask a follow-up question, write that down, and propose a change.
-
-The coach runs as a small agent loop with three tools, and nothing else:
-
-- **Propose a plan change.** The coach writes a precise change request; a separate call applies it within a scope (this week / next 2 weeks / rest of plan), the validator checks it, and you get a rationale, a one-line reason per change and a diff of the affected weeks under the coach's reply. The coach is told to be conservative: a single bad session is not a reason to change anything, and **"no change recommended" is a valid, good answer.** Accepting creates a new plan version; you can always restore an older one. The coach can never edit your plan directly.
-- **Read one run in full.** Every run in its context carries the file's extra fields for the whole run. When a question turns on how a particular run unfolded, the coach can ask for that run's laps and km splits with their extras and its 30-second recording, at most four runs per message.
-- **Update its notes.** See below. The reply comes first and the notes are written after it, so you read the answer while that happens; the page shows what the coach is doing, and for how long, from the moment you send.
-
-After a hand edit, the toast offers "Ask the coach to check this week", which opens the conversation with your edit already written in.
-
-### Memory: what the coach remembers about you
-
-The coach's notes are one Markdown file, `data/athlete/memory.md`, that outlives plans and cleared chats. It holds what the app's data can't say: who you are, your goals beyond this plan, your life and schedule, injury and health history, how you respond to training, agreements you've made with the coach, how each plan went, and the questions the coach still wants to ask. Facts the app already holds (paces, volume, which sessions you did) stay out of it, because they are recomputed on every call and a copy would go stale.
-
-- **Every LLM call reads it**: the coach, plan generation, proposals and run reviews. A new plan starts from what the last one taught.
-- **Only two writers.** The coach rewrites the file through its tool, in the same reply, without asking. You can read and edit it on the Coach data tab, which also shows what the coaching has cost in tokens. Code never writes it.
-- **Every rewrite keeps the previous version**, and you can restore one from the same page.
-- **The conversation itself stays windowed** (the last 30 messages go into the prompt). Anything worth keeping longer, the coach is told to write down.
-
-### Training load, in code
-
-Fitness, fatigue and form (CTL / ATL / TSB) are computed in code from a Banister-style TRIMP load per session and drawn next to weekly planned-vs-actual volume. The same numbers go into every prompt, so the coach, reviews and proposals all reason from one set of facts.
+**The provider contract** is in `app/providers/base.py`: activities with their analysis, recordings, wellness and athlete settings are required; a calendar, uploads, wellness notes, hand-logged sessions and gear are capabilities a provider declares. The mirror keeps a neutral shape with the provider's own record under `source`. There are two implementations, intervals.icu and a fixture provider, and both pass the same conformance test.
 
 ---
 
 ## How I know it works
 
-- **783 automated tests** (`pytest`) cover the pace model, the validator (each rule triggered by a mutated sample plan), .fit/.gpx parsing and matching, plan lifecycle and versioning, hand edits and undo, proposal merging, the coach's tool loop and notes, Garmin sync and delivery against fakes, metrics and the API.
-- **Test activities with known outcomes** in `examples/activities`: synthetic runs that match the sample plan (interval laps, heart-rate drift, a deliberately bad run, unplanned runs) plus real edge cases (a cycling file, GPS tracks without heart rate). Each has an expected match and review.
-- **An offline demo** with a full plan, three weeks of reviewed runs, a chat thread and a pending proposal, which runs without an API key (see below).
-- **Measured costs.** Every LLM call logs its token usage, so the costs below come from the app, not from guesses.
+- **217 automated tests** (`uv run pytest`): the validator (each rule triggered by a mutated plan), the gate (every way to apply without approval), the write boundary and the tool-call check, both providers against the contract (intervals.icu through a fake HTTP transport), the mirror and calendar, the cards, the turn loop driven by a scripted agent, the agent API, the CLI, the triggers, the migration and the server.
+- **Live runs of the real harness** against the demo workspace, with and without the OS sandbox: a question answered with a card, a plan change drafted as a proposal, a session logged at the provider, the guard rails probed (plan and record read-only, network closed, state unreadable), and an analyst run that computed with a script and filed its report. Those runs found seven bugs that are fixed and now covered by tests.
+- **An offline demo** with no API key: `OPENSTRIDE_DEMO=1 uv run openstride`.
 
----
-
-## What it costs
-
-OpenStride's software is free. The only running cost is your own Claude API usage, at [Anthropic's list prices](https://platform.claude.com/docs/en/about-claude/pricing) (Sonnet 5.5: $2 / $10 per million input / output tokens; Haiku 5.5: $0.10 / $0.50). Hosting is $0: it runs on your own computer. Hand edits cost nothing.
-
-**Measured per call**, on a sample half-marathon plan with three weeks of training logged:
-
-| Action | Model | Tokens in | Tokens out | Cost |
-|---|---|---|---|---|
-| Generate a 10-week plan with strength and cycling | Haiku 5.5 | 2,868 | 23,152 | $0.012 |
-| Regenerate with feedback | Haiku 5.5 | 8,634 | 14,051 | $0.008 |
-| Review a run (average of 13) | Haiku 5.5 | 7,519 | 617 | $0.0011 |
-| Chat message, a question | Sonnet 5.5 | 50,492 | 909 | $0.110 |
-| Chat message that leads to a proposal | Sonnet 5.5 | 50,935 | 2,607 | $0.128 |
-| The proposal itself | Sonnet 5.5 | 52,011 | 4,056 | $0.145 |
-| The proposal, when validation forces a retry | Sonnet 5.5 | 104,300 | 11,019 | $0.319 |
-
-Plan generation was measured on Haiku. On the default Opus 5.5, the same token counts cost about $0.47 per plan and $0.32 per regeneration.
-
-The chat rows were measured before the coach became a tool loop on Opus 5.5 (the default `CHAT_MODEL` now). A reply that proposes a change is now two coach calls around the proposal call, on the same cached prefix; at Opus prices ($4 / $20 per million) expect roughly twice the Sonnet figures above for a question and about three times for a proposal. Not yet re-measured.
-
-**Per month**, built from the measured numbers (5 runs a week, one 10-week plan plus one regeneration on Sonnet, spread over its 2.3 months):
-
-| Usage | Cost per month |
-|---|---|
-| Light: plan + every run reviewed + a weekly check-in with the coach | **~$0.44**, plus ~$0.10 once for the plan |
-| Heavy: the above + 20 chat messages + 2 proposals, on Sonnet | **~$3.00** |
-
-The coach is most of the heavy-use cost, because every message sends the full plan and history, and that input grows as the plan goes on. The coach's calls set a prompt-cache breakpoint, so the second and third call inside one reply re-read the prefix at a tenth of the price; whether the cache also survives between replies depends on how fast you type. Cached tokens are counted and priced in the usage footer.
+**Not yet verified:** the intervals.icu connector has not been run against the live API. It is written from a maintained client's request and response shapes and tested against a fake. `openstride doctor` checks your connection, and `openstride doctor --write` proves the calendar by creating and removing one test workout a year out. The Docker image builds on the same code but has not been run.
 
 ---
 
 ## Run it
 
-You need [uv](https://docs.astral.sh/uv/) and a [Claude API key](https://platform.claude.com/).
+You need [uv](https://docs.astral.sh/uv/), git, a [Claude API key](https://platform.claude.com/) and an [intervals.icu](https://intervals.icu) account with your watch connected to it.
 
 ```bash
 git clone https://github.com/danielfodgaard/OpenStride.git
 cd OpenStride
-uv sync
-cp .env.example .env        # then set ANTHROPIC_API_KEY
+uv sync --extra analyst
+cp .env.example .env        # ANTHROPIC_API_KEY, INTERVALS_ICU_API_KEY, INTERVALS_ICU_ATHLETE_ID
+uv run openstride doctor    # checks the provider, the key, the harness and the sandbox
 uv run openstride
 ```
 
-Open http://127.0.0.1:8000. Your plans, runs, reviews and chat are stored as JSON files in `data/`, and the coach's notes about you as `data/athlete/memory.md`.
+Open http://127.0.0.1:8000 and tell your coach about your next race.
 
-**Offline demo, no API key needed:** `OPENSTRIDE_DEMO=1 uv run openstride`
+**Coming from 0.1:** the first start brings your plan with its versions, the coach's notes, and your reviews and chat into the workspace by itself. Nothing in the old `data/` files is changed or removed. See [docs/SETUP.md](docs/SETUP.md#coming-from-01).
 
-**Tests:** `uv run pytest`
+**Phone access, the sandbox, Docker, password and backups:** [docs/SETUP.md](docs/SETUP.md).
 
-**Phone access, Garmin, password and backups:** see [docs/SETUP.md](docs/SETUP.md).
+---
 
-**Models:** set per task in `.env` (`PLAN_MODEL`, `ADAPT_MODEL`, `REVIEW_MODEL`, `CHAT_MODEL`) to trade quality for cost. Everything defaults to Opus 5.5; the table above shows what the cheaper models cost.
+## What it costs
+
+OpenStride is free. You pay for your own Claude API usage, and intervals.icu is free for your own data. Every turn's cost is recorded as the harness reports it; the Data drawer shows the month's total, and `budget.monthly_usd` in settings pauses the agent's own check-ins when it is reached.
+
+There are no measured per-action figures for this version yet. A turn now reads only what the question needs instead of the whole plan and history, and uses more round trips to do it, so the old numbers do not carry over. Models are settings: Claude Opus 5.5 for the coach and the analyst by default, a cheaper one for the analyst's bulk reading. You change them by asking.
 
 ---
 
 ## What's next
 
-- **Send to Garmin, verified:** testing workout sending against a real Garmin account.
-- **Nutrition:** race-day fuelling and day-to-day guidance by session type, focused on eating enough for the training load.
-- **Then:** one-command install for technical testers, and eventually a hosted version for everyone else.
+- The intervals.icu connector run against a real account, and the workout syntax checked on a real watch.
+- Measured costs per kind of turn.
+- A second real provider behind the contract.
+- The agent and the server in separate containers, so the boundary in Docker does not depend on the sandbox.
 
 ---
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The dependencies are under permissive licences compatible with MIT: FastAPI, Pydantic, the Anthropic SDK, fitdecode, filelock, garminconnect and pytest (MIT), uvicorn and python-dotenv (BSD-3-Clause), gpxpy, python-multipart and garmin-connect-personal-api-python (Apache-2.0).
+MIT, see [LICENSE](LICENSE). The dependencies are under permissive licences compatible with MIT: FastAPI, Pydantic, the Claude Agent SDK, PyYAML and pytest (MIT), uvicorn, httpx and python-dotenv (BSD-3-Clause), python-multipart (Apache-2.0). The optional analyst extra adds pandas, numpy and scipy (BSD-3-Clause) and matplotlib (PSF-based).

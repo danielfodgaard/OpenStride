@@ -1,330 +1,456 @@
-// Hash router, plus the views that aren't a plan page or a workout page.
-import { chatView } from "./render/chat.js";
-import { coachDataView } from "./render/coach_data.js";
-import { garminView } from "./render/garmin.js";
-import {
-  actions, activePlan, api, breadcrumb, button, buttonLink, chip, downloadButton, el, garminStatus, input,
-  labelled, line, link, main, nextRoute,
-  planPath, postJson, rowLink, stale, statusLine, table, viewToken,
-} from "./render/ui.js";
-import { dateText } from "./render/format.js";
-import { daysToGo, draftActions, planBasics, planOverview, weekSummary } from "./render/plan_overview.js";
-import { weeksView } from "./render/weeks.js";
-import { sessionView, workoutView } from "./render/workout.js";
-import { workoutsView } from "./render/workouts_list.js";
+// The page: one stream to read, one box to write in. It draws what the server sends and computes nothing.
+import { LIVE, renderCard } from "./cards.js";
+import { amount, chip, dateText, el, timeText } from "./format.js";
+import { markdown } from "./md.js";
 
-// A fixed date would drift out of the allowed 3-24 week window.
-function defaultRaceDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 70 + (7 - date.getDay()) % 7);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+const $ = (id) => document.getElementById(id);
+const events = $("events"), live = $("live"), streamBox = $("stream"), peek = $("peek"), drawer = $("drawer");
+const state = { first: null, last: 0, busy: false, files: [], liveCards: new Map(), source: null, retry: 1000, typing: null };
 
-function formRequest(form) {
-  const data = new FormData(form);
-  const distance = data.get("race_distance");
-  return {
-    goal_description: data.get("goal_description"),
-    race_distance_km: Number(distance === "custom" ? data.get("custom_distance") : distance),
-    goal_time: data.get("goal_time").trim() || null,
-    race_date: data.get("race_date"),
-    recent_race_distance_km: Number(data.get("recent_race_distance_km")),
-    recent_race_time: data.get("recent_race_time").trim(),
-    current_weekly_km: Number(data.get("current_weekly_km")),
-    longest_recent_run_km: Number(data.get("longest_recent_run_km")),
-    runs_per_week: Number(data.get("runs_per_week")),
-    available_days: data.getAll("available_days"),
-    long_run_day: data.get("long_run_day"),
-    experience: data.get("experience"),
-    notes: data.get("notes"),
-    strength_sessions_per_week: Number(data.get("strength_sessions_per_week")),
-    cross_training: data.get("cross_training").trim(),
-    cross_sessions_per_week: Number(data.get("cross_sessions_per_week")),
-    equipment: data.get("equipment").trim(),
-    hr_max: Number(data.get("hr_max")),
-    hr_rest: Number(data.get("hr_rest")),
-    age: Number(data.get("age")),
-  };
-}
-
-function fillForm(form, request) {
-  const fields = form.elements;
-  const preset = [...fields.race_distance.options].find((o) => Number(o.value) === request.race_distance_km);
-  fields.race_distance.value = preset ? preset.value : "custom";
-  fields.custom_distance.value = preset ? "" : request.race_distance_km;
-  // Checkbox groups come back as a RadioNodeList, so they are skipped here and filled below.
-  for (const [name, value] of Object.entries(request)) {
-    if (fields[name] instanceof HTMLElement) fields[name].value = value ?? "";
-  }
-  for (const box of fields.available_days) box.checked = request.available_days.includes(box.value);
-}
-
-async function newView(draftId) {
-  const token = viewToken();
-  const form = document.getElementById("plan-form").content.firstElementChild.cloneNode(true);
-  const status = statusLine();
-  const preview = el("div");
-  preview.className = "field";
-  form.elements.race_date.value = defaultRaceDate();
-  const card = el("section");
-  card.append(form, status);
-  main.replaceChildren(el("h1", "New plan"), card, preview);
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = form.querySelector("button[type=submit]");
-    submit.disabled = true;
-    status.textContent = "Generating… this takes about a minute";
-    try {
-      const planFile = await postJson("/api/plan", formRequest(form));
-      status.textContent = "";
-      location.hash = `#/new/${encodeURIComponent(planFile.meta.id)}`;
-    } catch (error) {
-      status.textContent = error.message;
-    } finally {
-      submit.disabled = false;
-    }
-  });
-
-  if (!draftId) return;
-  const encoded = encodeURIComponent(draftId);
-  const planFile = await api(`/api/plans/${encoded}`);
-  if (stale(token)) return;
-  if (planFile.meta.status !== "draft") {
-    location.replace(planPath(draftId));
-    return;
-  }
-  fillForm(form, planFile.request);
-  const review = el("section");
-  review.append(el("h2", "Draft preview"), draftActions(planFile, status, form, formRequest), actions(downloadButton(planFile, status)));
-  preview.append(
-    review,
-    planBasics(planFile),
-    line(link("View weeks", `${planPath(draftId)}/weeks`)),
-  );
-}
-
-const planRow = (plan) => rowLink(planPath(plan.id), plan.goal_description, `Race ${dateText(plan.race_date)} · version ${plan.version}`, chip(plan.status));
-
-function planGroup(title, plans) {
-  const section = el("section");
-  const list = el("div");
-  list.className = "plan-list";
-  list.append(...plans.map(planRow));
-  section.append(el("h2", title), list);
-  return section;
-}
-
-async function activePlanCard(plan) {
-  const encoded = encodeURIComponent(plan.id);
-  const [status, metrics] = await Promise.all([api(`/api/plans/${encoded}/status`), api(`/api/plans/${encoded}/metrics`)]);
-  const section = el("section");
-  const goal = link(plan.goal_description, planPath(plan.id));
-  goal.className = "big";
-  const where = status.week_number ? `Week ${status.week_number} of ${status.weeks_total} · ` : "";
-  section.append(
-    el("h2", "Active plan"),
-    goal,
-    el("p", `Race ${dateText(plan.race_date)} · ${daysToGo(status.days_to_race)}`),
-    el("p", `${where}${weekSummary(status, metrics)}`),
-    actions(buttonLink("Open overview", planPath(plan.id))),
-  );
-  return section;
-}
-
-async function plansView() {
-  const token = viewToken();
-  const plans = await api("/api/plans");
-  const active = plans.find((p) => p.status === "active");
-  const activeCard = active ? await activePlanCard(active) : null;
-  if (stale(token)) return;
-  const drafts = plans.filter((p) => p.status === "draft");
-  const past = plans.filter((p) => p.status === "archived").sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const status = statusLine();
-  const importInput = input("file");
-  importInput.value = "";
-  importInput.accept = ".json,application/json";
-  importInput.dataset.online = "";
-  importInput.addEventListener("change", async () => {
-    const file = importInput.files[0];
-    if (!file) return;
-    status.textContent = "Importing…";
-    const body = new FormData();
-    body.append("file", file);
-    try {
-      const planFile = await api("/api/plans/import", { method: "POST", body });
-      location.hash = planPath(planFile.meta.id);
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  });
-  const more = el("section");
-  more.append(line(link("Create a plan", "#/new")), labelled("Import plan file", importInput), status);
-  main.replaceChildren(
-    el("h1", "All plans"),
-    ...(plans.length ? [] : [el("p", "No plans yet.")]),
-    ...(activeCard ? [activeCard] : []),
-    ...(drafts.length ? [planGroup("Drafts", drafts)] : []),
-    ...(past.length ? [planGroup("Past plans", past)] : []),
-    more,
-  );
-}
-
-async function versionsView(id) {
-  const token = viewToken();
-  const encoded = encodeURIComponent(id);
-  const planFile = await api(`/api/plans/${encoded}`);
-  const versions = await api(`/api/plans/${encoded}/versions`);
-  if (stale(token)) return;
-  const status = statusLine();
-  const rows = versions.map(({ version, history }) => {
-    const view = el("div");
-    view.append(link("View", `${planPath(id)}/versions/${version}`));
-    if (planFile.meta.status === "active" && version !== planFile.meta.version) {
-      view.append(" ", button("Restore", status, async () => {
-        await api(`/api/plans/${encoded}/restore/${version}`, { method: "POST", plan: id });
-        location.hash = planPath(id);
-      }));
-    }
-    return [version, history[0]?.accepted_at ?? planFile.meta.accepted_at, history[0]?.rationale ?? "Accepted plan", view];
-  });
-  main.replaceChildren(
-    breadcrumb(["All plans", "#/plans"], [planFile.request.goal_description, planPath(id)], ["Versions"]),
-    el("h1", "Plan versions"),
-    table(["Version", "Accepted", "Why", ""], rows),
-    status,
-  );
-}
-
-async function versionView(id, version) {
-  const token = viewToken();
-  const planFile = await api(`/api/plans/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`);
-  if (stale(token)) return;
-  const rows = planFile.plan.weeks.flatMap((week) => week.sessions.map((s) => [
-    week.week_number, s.date, s.day, s.type, s.title, s.distance_km ? `${s.distance_km} km` : `${s.duration_min} min`, s.target_pace,
-  ]));
-  main.replaceChildren(
-    breadcrumb(
-      ["All plans", "#/plans"],
-      [planFile.request.goal_description, planPath(id)],
-      ["Versions", `${planPath(id)}/versions`],
-      [`Version ${planFile.meta.version}`],
-    ),
-    el("h1", `Version ${planFile.meta.version}, read-only`),
-    planBasics(planFile),
-    table(["Week", "Date", "Day", "Type", "Session", "Planned", "Target"], rows),
-  );
-}
-
-async function homeView() {
-  const active = await activePlan();
-  location.replace(active ? planPath(active.meta.id) : "#/workouts");
-}
-
-async function route() {
-  nextRoute();
-  const [path, search] = location.hash.replace(/^#\/?/, "").split("?");
-  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const [page, id, section, a, b] = parts;
+// --- talking to the server ---------------------------------------------------------------------
+async function api(path, options = {}) {
+  let response;
   try {
-    if (!page) await homeView();
-    else if (page === "workouts" && !id) await workoutsView(new URLSearchParams(search));
-    else if (page === "workouts") await workoutView(id);
-    else if (page === "new") await newView(id);
-    else if (page === "garmin") await garminView();
-    else if (page === "chat") await chatView();
-    else if (page === "coach") await coachDataView();
-    else if (page === "plans" && !id) await plansView();
-    else if (page === "plans" && !section) await planOverview(id);
-    else if (page === "plans" && section === "weeks") await weeksView(id, a);
-    else if (page === "plans" && section === "sessions") await sessionView(id, a, b);
-    else if (page === "plans" && section === "versions" && !a) await versionsView(id);
-    else if (page === "plans" && section === "versions") await versionView(id, a);
-    else main.replaceChildren(el("p", "Page not found."));
-  } catch (error) {
-    main.replaceChildren(el("p", error.message));
+    response = await fetch(path, options);
+  } catch {
+    throw new Error("The server can't be reached.");
   }
+  if (response.status === 401) { location.href = "/login"; throw new Error("Log in again."); }
+  const offline = response.headers.get("X-OpenStride-Offline") === "1";
+  setOffline(offline || Boolean(response.headers.get("X-OpenStride-Saved-At")) && !navigator.onLine);
+  let body = null;
+  try { body = await response.json(); } catch { /* no body */ }
+  if (!response.ok) throw new Error(body?.detail || body?.error || `The server answered ${response.status}.`);
+  return body;
 }
 
-function markTab() {
-  const tab = location.hash.split("/")[1] || "workouts";
-  for (const a of document.querySelectorAll("#tabs a")) {
-    if (a.hash.split("/")[1] === tab) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
-  }
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+function setOffline(offline) {
+  const banner = $("offline-banner");
+  banner.hidden = !offline;
+  if (offline) banner.textContent = "Offline: showing what this device saved. Messages wait until the server is back.";
 }
 
-function currentTheme() {
-  return document.documentElement.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+function toast(text) {
+  const node = el("div", text, "toast");
+  $("toasts").append(node);
+  setTimeout(() => node.remove(), 5000);
 }
 
-function showTheme() {
-  const toggle = document.getElementById("theme-toggle");
-  const next = currentTheme() === "dark" ? "light" : "dark";
-  toggle.textContent = next === "dark" ? "Dark" : "Light";
-  toggle.setAttribute("aria-label", `Switch to ${next} theme`);
-  document.querySelector("meta[name=theme-color]").content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
-}
-
-// TODO(v4.1): a way back to following the system theme once one is picked.
-function setUpTheme() {
-  document.getElementById("theme-toggle").addEventListener("click", () => {
-    const theme = currentTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = theme;
+// --- cards -------------------------------------------------------------------------------------
+const ctx = {
+  post,
+  send: (text) => sendMessage(text),
+  refresh: () => { refreshLive(); loadGlance(); },
+  peek: async (type, args) => {
+    peek.replaceChildren(el("p", "Loading…", "muted"));
+    if (!peek.open) peek.showModal();
     try {
-      localStorage.setItem("openstride:theme", theme);
-    } catch {
-      // Blocked storage only costs remembering the choice.
+      const data = await api(`/api/card?type=${type}&args=${encodeURIComponent(JSON.stringify(args || {}))}`);
+      const close = el("button", "Close", "quiet close");
+      close.type = "button";
+      close.addEventListener("click", () => peek.close());
+      peek.replaceChildren(close, renderCard(type, data, ctx));
+    } catch (error) {
+      peek.replaceChildren(el("p", error.message, "notice"));
     }
-    showTheme();
+  },
+};
+peek.addEventListener("click", (event) => { if (event.target === peek) peek.close(); });
+
+async function fillCard(box, type, args, data) {
+  try {
+    const built = data || await api(`/api/card?type=${type}&args=${encodeURIComponent(JSON.stringify(args || {}))}`);
+    box.replaceChildren(renderCard(type, built, ctx));
+  } catch (error) {
+    if (!box.childElementCount || box.firstElementChild.classList.contains("muted")) box.replaceChildren(el("p", error.message, "muted"));
+  }
+}
+
+function cardEvent(event, type, args, data) {
+  const box = el("section", null, `card card-${type}`);
+  box.append(el("p", "Loading…", "muted"));
+  fillCard(box, type, args, data);
+  if (LIVE.has(type) && !data) state.liveCards.set(event.id, { box, type, args });
+  return box;
+}
+
+function refreshLive() {
+  for (const { box, type, args } of state.liveCards.values()) if (box.isConnected) fillCard(box, type, args);
+}
+
+// --- the stream --------------------------------------------------------------------------------
+function renderEvent(event) {
+  if (event.type === "message") {
+    const row = el("div", null, `message ${event.role}`);
+    if (event.role === "coach" && event.origin && !["athlete", "system"].includes(event.origin)) row.append(el("p", `${event.origin.replaceAll("_", " ")} · ${timeText(event.at)}`, "origin"));
+    row.append(event.role === "coach" ? markdown(event.text) : el("p", event.text));
+    for (const name of event.attachments || []) row.append(chip(name));
+    return row;
+  }
+  if (event.type === "card") return cardEvent(event, event.card, event.args, event.data);
+  if (event.type === "proposal") return cardEvent(event, "proposal", { id: event.proposal_id });
+  if (event.type === "notice") return el("p", event.text, `stream-note ${event.level || ""}`);
+  if (event.type === "turn" && event.state === "failed") return el("p", event.error || "That turn failed.", "stream-note warning");
+  if (event.type === "turn" && event.state === "stopped") return el("p", "Stopped.", "stream-note");
+  return null;
+}
+
+function nearBottom() {
+  return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+}
+
+function scrollDown(force = false) {
+  if (force || nearBottom()) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
+}
+
+function addEvent(event, { prepend = false } = {}) {
+  if (event.id && !prepend) {
+    if (event.id <= state.last) return;
+    state.last = event.id;
+  }
+  if (event.id && (state.first === null || event.id < state.first)) state.first = event.id;
+  const node = renderEvent(event);
+  if (!node) return;
+  node.dataset.id = event.id || "";
+  const stick = nearBottom();
+  if (prepend) events.prepend(node);
+  else events.append(node);
+  if (!prepend && stick) scrollDown(true);
+}
+
+async function loadHistory() {
+  const data = await api("/api/stream?limit=80");
+  events.replaceChildren();
+  state.last = 0;
+  state.first = null;
+  for (const event of data.events) addEvent(event);
+  $("earlier").hidden = !(state.first && state.first > 1);
+  setBusy(data.busy);
+  if (!data.events.length) events.append(emptyState());
+  scrollDown(true);
+}
+
+function emptyState() {
+  const box = el("section", null, "card welcome");
+  box.append(el("h3", "Welcome to OpenStride"));
+  box.append(el("p", "Everything here happens in this conversation. Tell your coach about your next race and how you train, ask about a run, or ask for a change. The only thing that waits for your approval is a change to your plan."));
+  const actions = el("div", null, "actions");
+  for (const text of ["I want to train for a race", "What do you know about my training so far?"]) {
+    const button = el("button", text);
+    button.type = "button";
+    button.addEventListener("click", () => sendMessage(text));
+    actions.append(button);
+  }
+  box.append(actions);
+  return box;
+}
+
+$("earlier").addEventListener("click", async () => {
+  const data = await api(`/api/stream?limit=80&before=${state.first}`);
+  const height = document.documentElement.scrollHeight;
+  for (const event of data.events.reverse()) addEvent(event, { prepend: true });
+  $("earlier").hidden = !(state.first && state.first > 1) || !data.events.length;
+  window.scrollTo({ top: document.documentElement.scrollHeight - height + window.scrollY });
+});
+
+// The reply as it is written, and what the wait is for.
+function setBusy(busy) {
+  state.busy = busy;
+  $("stop").hidden = !busy;
+  $("send").hidden = busy;
+  if (busy) showTyping("Working…");
+  else clearTyping();
+}
+
+function showTyping(status) {
+  if (!state.typing) {
+    live.hidden = false;
+    const text = el("div", null, "message coach streaming");
+    const line = el("p", "", "status");
+    live.replaceChildren(text, line);
+    state.typing = { text, line, raw: "" };
+  }
+  if (status) state.typing.line.textContent = status;
+  scrollDown();
+}
+
+function clearTyping() {
+  state.typing = null;
+  live.hidden = true;
+  live.replaceChildren();
+}
+
+function connect() {
+  const source = new EventSource("/api/events");
+  state.source = source;
+  source.addEventListener("open", async () => {
+    state.retry = 1000;
+    setOffline(false);
+    try {  // whatever was missed while the connection was down
+      const data = await api(`/api/stream?after=${state.last}&limit=500`);
+      events.querySelector(".welcome")?.remove();
+      for (const event of data.events) addEvent(event);
+      setBusy(data.busy);
+    } catch { /* the next open tries again */ }
   });
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", showTheme);
+  const on = (name, handler) => source.addEventListener(name, (message) => handler(JSON.parse(message.data)));
+  for (const kind of ["message", "card", "proposal", "notice"]) {
+    on(kind, (event) => {
+      events.querySelector(".welcome")?.remove();
+      if (kind === "message" && event.role === "coach" && state.typing) { state.typing.raw = ""; state.typing.text.replaceChildren(); }
+      addEvent(event);
+    });
+  }
+  on("turn", (event) => {
+    if (event.state === "started") setBusy(true);
+    else { addEvent(event); clearTyping(); }
+  });
+  on("busy", (event) => setBusy(event.busy));
+  on("status", (event) => showTyping(event.text));
+  on("delta", (event) => {
+    showTyping();
+    state.typing.raw += event.text;
+    state.typing.text.textContent = state.typing.raw.trim() === "SILENT" ? "" : state.typing.raw.trimStart();
+    scrollDown();
+  });
+  on("reset", () => { if (state.typing) { state.typing.raw = ""; state.typing.text.replaceChildren(); } });
+  on("plan_changed", () => ctx.refresh());
+  on("data_changed", () => { ctx.refresh(); if (!drawer.hidden) loadDrawer(); });
+  source.addEventListener("error", () => {
+    source.close();
+    setTimeout(connect, state.retry);
+    state.retry = Math.min(state.retry * 2, 30000);
+  });
+}
+
+// --- the composer ------------------------------------------------------------------------------
+const message = $("message");
+
+function grow() {
+  message.style.height = "auto";
+  message.style.height = `${Math.min(message.scrollHeight, 200)}px`;
+}
+
+function showAttachments() {
+  const box = $("attachments");
+  box.hidden = !state.files.length;
+  box.replaceChildren(...state.files.map((file, index) => {
+    const item = chip(`${file.name} ×`);
+    item.role = "button";
+    item.tabIndex = 0;
+    item.title = "Remove";
+    item.addEventListener("click", () => { state.files.splice(index, 1); showAttachments(); });
+    return item;
+  }));
+}
+
+async function sendMessage(text) {
+  const body = new FormData();
+  body.append("text", text || "");
+  for (const file of state.files) body.append("files", file);
+  const sent = state.files;
+  state.files = [];
+  showAttachments();
+  try {
+    await api("/api/messages", { method: "POST", body });
+    setBusy(true);
+    scrollDown(true);
+    return true;
+  } catch (error) {
+    state.files = sent;
+    showAttachments();
+    toast(error.message);
+    return false;
+  }
+}
+
+$("composer").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const text = message.value.trim();
+  if (!text && !state.files.length) return;
+  message.value = "";
+  grow();
+  if (!(await sendMessage(text))) { message.value = text; grow(); }
+});
+message.addEventListener("input", grow);
+message.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing && window.matchMedia("(pointer: fine)").matches) {
+    event.preventDefault();
+    $("composer").requestSubmit();
+  }
+});
+$("attach").addEventListener("click", () => $("file-input").click());
+$("file-input").addEventListener("change", (event) => {
+  state.files.push(...event.target.files);
+  event.target.value = "";
+  showAttachments();
+});
+document.addEventListener("dragover", (event) => event.preventDefault());
+document.addEventListener("drop", (event) => {
+  event.preventDefault();
+  if (event.dataTransfer?.files?.length) { state.files.push(...event.dataTransfer.files); showAttachments(); }
+});
+$("stop").addEventListener("click", () => post("/api/turn/stop").catch((error) => toast(error.message)));
+
+// --- the glance header -------------------------------------------------------------------------
+function tile(label, value, sub, onClick) {
+  const button = el("button", null, "tile");
+  button.type = "button";
+  button.append(el("span", label, "k"), el("span", value, "v"));
+  if (sub) button.append(el("span", sub, "s"));
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+async function loadGlance() {
+  let data;
+  try { data = await api("/api/glance"); } catch { return; }
+  const box = $("glance");
+  const tiles = [];
+  if (data.has_plan) {
+    const today = data.sessions_today;
+    const first = today[0];
+    const label = !today.length ? "Rest day" : today.map((s) => s.title).join(" + ");
+    const state_ = first ? { done: "done", skipped: "skipped", replaced: "did something else" }[first.state] || amount(first) : "";
+    tiles.push(tile("Today", label, state_, () => ctx.peek("week", { week: "this" })));
+    if (data.next_hard) tiles.push(tile("Next key session", data.next_hard.title, dateText(data.next_hard.date), () => ctx.peek("session", { id: data.next_hard.id })));
+    if (data.week) tiles.push(tile(`Week ${data.week.week_number} of ${data.week.of}`, `${data.week.done_km} / ${data.week.planned_km} km`, `${data.week.sessions_done} of ${data.week.sessions_planned} sessions`, () => ctx.peek("volume", {})));
+  }
+  if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("fitness", {})));
+  if (data.has_plan) tiles.push(tile("Race", data.days_to_race >= 0 ? `${data.days_to_race} days` : "Done", data.goal, () => ctx.peek("plan", {})));
+  if (data.pending_proposals?.length) tiles.push(tile("Waiting for you", `${data.pending_proposals.length} proposal${data.pending_proposals.length > 1 ? "s" : ""}`, "to approve or reject", () => ctx.peek("proposal", { id: data.pending_proposals[0] })));
+  box.hidden = !tiles.length;
+  box.replaceChildren(...tiles);
+}
+
+// --- the data drawer: read-only, for trust -----------------------------------------------------
+const TIER = { gated: ["Needs your approval", "warning"], recorded: ["Record", ""], server: ["App", ""], authored: ["Coach", "good"] };
+
+async function openFile(path) {
+  const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
+  const view = el("div", null, "card-body");
+  const [label, tone] = TIER[data.tier] || ["", ""];
+  const title = el("div", null, "card-head");
+  title.append(el("h3", data.path), chip(label, tone));
+  view.append(title);
+  if (data.image) {
+    const image = el("img");
+    image.src = `/api/raw?path=${encodeURIComponent(data.path)}`;
+    image.alt = data.path;
+    view.append(image);
+  } else if (data.path.endsWith(".md")) {
+    view.append(markdown(data.text, { headings: true, imageBase: data.path.split("/").slice(0, -1).join("/") }));
+  } else {
+    let text = data.text;
+    if (data.path.endsWith(".json")) { try { text = JSON.stringify(JSON.parse(text), null, 1); } catch { /* as it is */ } }
+    view.append(el("pre", text));
+  }
+  if (data.truncated) view.append(el("p", "The file is longer; this is its start.", "muted"));
+  if (data.log?.length) {
+    const fold = el("details");
+    fold.append(el("summary", `History (${data.log.length})`));
+    const list = el("ul");
+    for (const entry of data.log) list.append(el("li", `${timeText(entry.at)}: ${entry.message}`));
+    fold.append(list);
+    view.append(fold);
+  }
+  const close = el("button", "Close", "quiet close");
+  close.type = "button";
+  close.addEventListener("click", () => peek.close());
+  peek.replaceChildren(close, view);
+  if (!peek.open) peek.showModal();
+}
+
+async function loadDrawer() {
+  const [status, listing, log] = await Promise.all([api("/api/status"), api("/api/files"), api("/api/log?limit=15")]);
+  const box = el("div", null, "drawer-body");
+  box.append(el("h2", "Your data"));
+  const provider = status.provider;
+  const facts = el("ul", null, "facts");
+  facts.append(el("li", provider.connected ? `Provider: ${provider.name}${provider.last_sync_at ? `, synced ${timeText(provider.last_sync_at)}` : ""}` : "No provider connected yet (see docs/SETUP.md)"));
+  if (provider.error) facts.append(el("li", `Last sync failed: ${provider.error}`));
+  facts.append(el("li", `Agent: ${status.runtime}; shell sandbox ${status.sandbox}`));
+  const usage = status.usage;
+  facts.append(el("li", `This month: $${usage.cost_usd.toFixed(2)} over ${usage.turns} turns${usage.monthly_cap_usd ? ` (cap $${usage.monthly_cap_usd})` : ""}`));
+  box.append(facts);
+  const actions = el("div", null, "actions");
+  if (provider.connected) {
+    const sync = el("button", "Sync now");
+    sync.type = "button";
+    sync.addEventListener("click", async () => {
+      sync.disabled = true;
+      try { const result = await post("/api/sync"); toast(`Synced: ${result.new.length} new, ${result.updated.length} updated.`); } catch (error) { toast(error.message); }
+      sync.disabled = false;
+      loadDrawer();
+    });
+    actions.append(sync);
+  }
+  const backup = el("a", "Download backup", "button");
+  backup.href = "/api/backup";
+  actions.append(backup);
+  box.append(actions);
+
+  const groups = new Map();
+  for (const file of listing.files) {
+    const top = file.path.includes("/") ? file.path.split("/")[0] : "(top)";
+    if (!groups.has(top)) groups.set(top, []);
+    groups.get(top).push(file);
+  }
+  for (const [name, files] of groups) {
+    const fold = el("details");
+    const [label, tone] = TIER[files[0].tier] || ["", ""];
+    const summary = el("summary", `${name} (${files.length}) `);
+    summary.append(chip(label, tone));
+    fold.append(summary);
+    const list = el("ul", null, "files");
+    for (const file of files.slice(-200).reverse()) {
+      const link = el("button", file.path.split("/").slice(name === "(top)" ? 0 : 1).join("/"), "link");
+      link.type = "button";
+      link.addEventListener("click", () => openFile(file.path).catch((error) => toast(error.message)));
+      const item = el("li");
+      item.append(link);
+      list.append(item);
+    }
+    fold.append(list);
+    box.append(fold);
+  }
+  const history = el("details");
+  history.append(el("summary", "Latest changes"));
+  const list = el("ul");
+  for (const entry of log.log) list.append(el("li", `${timeText(entry.at)}: ${entry.message}`));
+  history.append(list);
+  box.append(history);
+  box.append(el("p", `OpenStride ${status.version}. Everything here is a file on your own machine, in a git repository.`, "muted"));
+  drawer.replaceChildren(box);
+}
+
+$("data-button").addEventListener("click", () => {
+  drawer.hidden = !drawer.hidden;
+  $("data-button").setAttribute("aria-expanded", String(!drawer.hidden));
+  document.body.classList.toggle("drawer-open", !drawer.hidden);
+  if (!drawer.hidden) loadDrawer().catch((error) => drawer.replaceChildren(el("p", error.message, "notice")));
+});
+
+// --- theme, service worker, start --------------------------------------------------------------
+const themeButton = $("theme-toggle");
+function showTheme() {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  themeButton.textContent = dark ? "Light" : "Dark";
+  document.querySelector('meta[name="theme-color"]').content = dark ? "#0e1418" : "#f4f6f7";
+}
+themeButton.addEventListener("click", () => {
+  const dark = themeButton.textContent === "Dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  try { localStorage.setItem("openstride:theme", dark ? "dark" : "light"); } catch { /* private mode */ }
   showTheme();
-}
+  refreshLive();  // charts take their colours when drawn
+});
+showTheme();
 
-async function renderFooter() {
-  const footer = document.getElementById("footer");
-  const backup = link("Download backup", "/api/backup");
-  backup.dataset.online = "";
-  footer.append(backup, link("Garmin settings", "#/garmin"));
-  if (!await garminStatus()) return;
-  const secrets = input("checkbox");
-  secrets.addEventListener("change", () => {
-    backup.href = secrets.checked ? "/api/backup?include_secrets=1" : "/api/backup";
-  });
-  const tick = el("label");
-  tick.className = "tick";
-  tick.append(secrets, "Include secrets");
-  footer.append(tick);
-}
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+window.addEventListener("online", () => setOffline(false));
 
-// Fills the cache, so the active plan opens offline even if this device never visited its pages.
-async function warmCache() {
-  if (!navigator.onLine) return;
-  await navigator.serviceWorker.ready;
-  if (!navigator.serviceWorker.controller) {
-    await new Promise((resolve) => { navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }); });
-  }
-  const active = await activePlan();
-  const paths = ["/api/activities", "/api/plans", "/api/today", "/api/memory"];
-  if (active) {
-    const plan = `/api/plans/${encodeURIComponent(active.meta.id)}`;
-    paths.push(`/api/activities?plan_id=${encodeURIComponent(active.meta.id)}`, plan);
-    for (const part of ["status", "metrics", "usage", "proposals", "chat", "progress"]) paths.push(`${plan}/${part}`);
-  }
-  await Promise.all(paths.map((path) => fetch(path).catch(() => null)));
-}
-
-window.addEventListener("hashchange", () => { markTab(); route(); });
-setUpTheme();
-renderFooter();
-markTab();
-route();
-// Not there on plain http: the app still works, it just can't be installed.
-if ("serviceWorker" in navigator) {
-  // After a deploy the first load still runs the cached modules while the new worker installs. Once it takes over,
-  // reload, so the page never mixes a new module with an old one from the cache.
-  const updating = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (updating) location.reload(); });
-  navigator.serviceWorker.register("/sw.js").then(warmCache).catch(() => null);
-}
+loadHistory().catch((error) => events.replaceChildren(el("p", error.message, "notice"))).finally(connect);
+loadGlance();
