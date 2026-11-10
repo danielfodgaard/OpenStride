@@ -1,7 +1,8 @@
 """The server's door for agents: what the `openstride` CLI calls from inside an agent's shell.
 
-It listens on a Unix socket, which the sandbox lets through when it lets no network through, and it
-has no route that approves or applies a plan. Each call carries the token its agent was started with.
+It is not on the network: requests arrive as files in the running turn's spool folder (app/spool.py),
+so it works when the shell is sandboxed with no network and no sockets. It has no route that approves
+or applies a plan. Each call carries the token its agent was started with.
 """
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool

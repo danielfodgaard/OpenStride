@@ -10,7 +10,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from app import clock, config, hub as hub_module, workspace
+from app import clock, config, hub as hub_module, spool, workspace
 from app.runtime.base import TurnRequest, describe
 from app.runtime.hooks import Policy
 
@@ -27,11 +27,17 @@ class Item:
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     effort: str = ""
     created_at: str = field(default_factory=workspace.now_iso)
+    attempts: int = 0  # times a turn for it was started; an item that keeps killing the server is dropped
 
 
 def coach_policy() -> Policy:
     state = workspace.state()
     return Policy(role="coach", workspace=workspace.root(), cwd=workspace.root(), secrets=(str(state), "approval_key", "session_secret"))
+
+
+def coach_spool() -> Path:
+    """Where the coach's CLI leaves its requests for the server: inside the workspace, where it may write."""
+    return workspace.root() / "scratch" / ".rpc"
 
 
 def system_prompt(role: str) -> str:
@@ -51,7 +57,12 @@ class Agent:
         self.idle = asyncio.Event()
         self.idle.set()
         self.pending = [Item(**row) for row in self._read("queue.json", [])]
+        dropped = [item for item in self.pending if item.attempts >= 2]
+        self.pending = [item for item in self.pending if item.attempts < 2]
+        for item in dropped:
+            hub.stream.append("turn", state="failed", turn=item.id, origin=item.origin, error="This was tried twice and the server stopped both times, so it was set aside.")
         if self.pending:
+            self.idle.clear()
             self.wake.set()
 
     # --- small state files -------------------------------------------------------------------
@@ -66,7 +77,9 @@ class Agent:
         workspace.write_file(workspace.state() / name, json.dumps(value, indent=1))
 
     def _save_queue(self) -> None:
-        self._write("queue.json", [asdict(item) for item in self.pending])
+        """The turn in progress stays on file until it is finished, so a restart runs it again."""
+        waiting = ([self.current] if self.current else []) + self.pending
+        self._write("queue.json", [asdict(item) for item in waiting])
 
     def add_notice(self, text: str) -> None:
         """Something the agent should know at the start of its next turn."""
@@ -112,6 +125,7 @@ class Agent:
             await self.wake.wait()
             while self.pending:
                 self.current = self.pending.pop(0)
+                self.current.attempts += 1
                 self._save_queue()
                 self.turn_task = asyncio.create_task(self.turn(self.current))
                 try:
@@ -126,6 +140,7 @@ class Agent:
                 finally:
                     await asyncio.to_thread(self.finish, self.current)
                     self.current = None
+                    self._save_queue()
                     self.hub.stream.publish("busy", busy=bool(self.pending))
             self.wake.clear()
             self.idle.set()
@@ -154,7 +169,7 @@ class Agent:
             helper_model=settings["models"]["helper"],
             effort=effort,
             token=token,
-            env={"OPENSTRIDE_AGENT_SOCKET": self.hub.socket},
+            env={"OPENSTRIDE_SPOOL": str(coach_spool())},
         )
 
     async def turn(self, item: Item) -> None:
@@ -164,6 +179,7 @@ class Agent:
         self.commit_message = ""
         request = self.request(item)
         texts, result = [], {}
+        spool.register(coach_spool())
         try:
             for attempt in (1, 2):
                 texts, result = [], {}
@@ -185,6 +201,7 @@ class Agent:
                     continue
                 break
         finally:
+            spool.unregister(coach_spool())
             self.hub.tokens.pop(request.token, None)
         if result.get("session_id"):
             self._write("session.json", self._read("session.json", {}) | {"coach": result["session_id"]})

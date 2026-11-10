@@ -11,7 +11,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import clock, hub as hub_module, workspace
+from app import clock, hub as hub_module, spool, workspace
 from app.agent import system_prompt
 from app.runtime.base import TurnRequest
 from app.runtime.hooks import Policy
@@ -95,10 +95,11 @@ async def execute(hub, run: dict) -> dict:
     request = TurnRequest(
         prompt=prompt, system_prompt=system_prompt("analyst"), policy=policy, model=settings["models"]["analyst"],
         helper_model=settings["models"]["helper"], effort=run["effort"] or settings["effort"]["analyst"], token=token,
-        env={"OPENSTRIDE_AGENT_SOCKET": hub.socket}, max_seconds=MAX_SECONDS,
+        env={"OPENSTRIDE_SPOOL": str(scratch / ".rpc")}, max_seconds=MAX_SECONDS,
     )
     texts, result = [], {}
     async with _one_at_a_time:
+        spool.register(scratch / ".rpc")
         try:
             async for kind, payload in hub.runtime.run(request):
                 if kind == "text":
@@ -108,6 +109,7 @@ async def execute(hub, run: dict) -> dict:
                 elif kind == "result":
                     result = payload
         finally:
+            spool.unregister(scratch / ".rpc")
             hub.tokens.pop(token, None)
     hub_module.record_usage(role="analyst", turn=run["id"], origin="analyst", model=request.model, cost_usd=result.get("cost_usd") or 0, usage=result.get("usage") or {})
     run = status(run["id"]) | {"finished_at": workspace.now_iso(), "summary": texts[-1] if texts else "", "error": result.get("error") or ""}

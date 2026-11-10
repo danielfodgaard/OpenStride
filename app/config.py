@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Inside an agent's shell the CLI must not read the server's .env: the keys stay with the server.
-IN_AGENT_SHELL = bool(os.environ.get("OPENSTRIDE_AGENT_TOKEN"))
+IN_AGENT_SHELL = bool(os.environ.get("OPENSTRIDE_TURN"))
 if not IN_AGENT_SHELL:
     try:
         load_dotenv()
@@ -29,7 +29,7 @@ class Settings:
     icu_athlete_id: str
     icu_api_key: str
     runtime: str  # claude, or scripted for the offline demo and tests
-    sandbox: str  # auto, on or off: OS sandboxing of the agents' shells
+    sandbox: str  # auto, on, weak or off: OS sandboxing of the agents' shells
 
     @property
     def workspace(self) -> Path:
@@ -48,8 +48,8 @@ def load() -> Settings:
     if provider not in ("intervals_icu", "demo", "none"):
         raise ValueError(f"OPENSTRIDE_PROVIDER must be intervals_icu, demo or none, not {provider!r}")
     sandbox = os.environ.get("OPENSTRIDE_SANDBOX") or "auto"
-    if sandbox not in ("auto", "on", "off"):
-        raise ValueError(f"OPENSTRIDE_SANDBOX must be auto, on or off, not {sandbox!r}")
+    if sandbox not in ("auto", "on", "weak", "off"):
+        raise ValueError(f"OPENSTRIDE_SANDBOX must be auto, on, weak or off, not {sandbox!r}")
     return Settings(
         host=os.environ.get("OPENSTRIDE_HOST") or "127.0.0.1",
         port=int(os.environ.get("OPENSTRIDE_PORT") or 8000),

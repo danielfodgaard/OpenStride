@@ -140,16 +140,33 @@ def git(*args: str, check: bool = True, cwd: Path | None = None) -> str:
     return result.stdout
 
 
+_held = threading.local()
+
+
 @contextmanager
 def lock():
-    """One writer of server-owned files at a time, across threads and processes (the CLI and the server)."""
+    """One writer of server-owned files at a time, across threads and processes (the CLI and the server).
+
+    Re-entrant: a second flock on the same file from the same process would wait for itself forever.
+    """
     state().mkdir(parents=True, exist_ok=True)
-    with _git_lock, open(state() / ".lock", "w") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+    with _git_lock:
+        depth = getattr(_held, "depth", 0)
+        if depth:
+            _held.depth = depth + 1
+            try:
+                yield
+            finally:
+                _held.depth -= 1
+            return
+        with open(state() / ".lock", "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            _held.depth = 1
+            try:
+                yield
+            finally:
+                _held.depth = 0
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def head() -> str:
@@ -161,9 +178,8 @@ def last_commit(*paths: str) -> str:
 
 
 def _existing(paths) -> list[str]:
-    """Paths git can take: present on disk, or tracked."""
-    tracked = set(git("ls-files", "--", *paths, check=False).splitlines())
-    return [p for p in paths if (root() / p).exists() or any(t == p or t.startswith(p + "/") for t in tracked)]
+    """Paths git can take: ones with a file it tracks or could. An empty folder is not one."""
+    return [p for p in paths if git("ls-files", "--cached", "--others", "--exclude-standard", "--", p, check=False).strip()]
 
 
 def commit(message: str, paths=None) -> str | None:
@@ -285,9 +301,22 @@ def merged(defaults: dict, given) -> dict:
     return result
 
 
+def clock_text(value) -> str | None:
+    """YAML reads an unquoted 07:30 as the number 450. Give it back as a time."""
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 24 * 60:
+        return f"{value // 60:02d}:{value % 60:02d}"
+    return None
+
+
 def settings() -> dict:
     """The athlete's settings over the defaults. A broken file reads as the defaults, never as a crash."""
-    return merged(DEFAULT_SETTINGS, load_yaml(root() / "settings.yaml", {}))
+    given = load_yaml(root() / "settings.yaml", {})
+    if isinstance(given, dict):
+        for section, keys in (("quiet_hours", ("from", "to")), ("triggers", ("morning_brief_time",))):
+            if isinstance(given.get(section), dict):
+                for key in keys:
+                    given[section][key] = clock_text(given[section].get(key)) or given[section].get(key)
+    return merged(DEFAULT_SETTINGS, given)
 
 
 def now_iso() -> str:

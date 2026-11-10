@@ -4,7 +4,6 @@ It holds what must be right whatever the model does: the gate, the write boundar
 the provider connection and the triggers. The page it serves computes nothing.
 """
 import asyncio
-import contextlib
 import hashlib
 import hmac
 import json
@@ -20,7 +19,6 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-import uvicorn
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -28,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app import agent_api, analyst, cards, clock, config, hub as hub_module, logsafe, mirror, ops, plan, providers, triggers, workspace
+from app import agent_api, analyst, cards, clock, config, hub as hub_module, logsafe, mirror, ops, plan, providers, spool, triggers, workspace
 from app.agent import Agent, make_runtime
 from app.hub import hub
 from app.providers import ProviderError
@@ -48,27 +46,6 @@ KEEPALIVE_S = 20
 IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp")
 
 logger = logging.getLogger("app")
-
-
-class QuietServer(uvicorn.Server):
-    """The agent API's server, run inside the web server's loop: signals belong to the outer one."""
-
-    def install_signal_handlers(self) -> None:
-        pass
-
-    @contextlib.contextmanager
-    def capture_signals(self):
-        yield
-
-
-def socket_path() -> str:
-    given = os.environ.get("OPENSTRIDE_AGENT_SOCKET")
-    if given:
-        return given
-    path = workspace.state() / "agent.sock"
-    if len(str(path)) < 100:  # the kernel's limit on a socket path is 108 bytes
-        return str(path)
-    return str(Path(tempfile.gettempdir()) / f"openstride-{hashlib.sha1(str(path).encode()).hexdigest()[:12]}.sock")
 
 
 @asynccontextmanager
@@ -93,24 +70,21 @@ async def lifespan(app: FastAPI):
 
         demo.seed(hub)
     background = []
-    agent_server = None
-    if not os.environ.get("OPENSTRIDE_NO_AGENT_SOCKET"):
-        hub.socket = socket_path()
-        Path(hub.socket).unlink(missing_ok=True)
-        agent_server = QuietServer(uvicorn.Config(agent_api.create(), uds=hub.socket, log_level="warning", lifespan="off"))
-        background.append(asyncio.create_task(agent_server.serve()))
+    if not os.environ.get("OPENSTRIDE_NO_AGENT_SPOOL"):
+        background.append(asyncio.create_task(spool.watch(agent_api.create())))
     if not os.environ.get("OPENSTRIDE_NO_TRIGGERS"):
         background.append(asyncio.create_task(triggers.run(hub)))
     logger.info("OpenStride %s: provider %s, runtime %s, sandbox %s", APP_VERSION, config.settings.provider, hub.runtime.name, "on" if claude_sdk.sandbox_on() else "off")
+    if hub.runtime.name == "claude" and not os.environ.get("ANTHROPIC_API_KEY"):
+        logger.warning("ANTHROPIC_API_KEY is not set: the page will load, but the agent can't answer until it is. Copy .env.example to .env and add your key.")
+    if hub.runtime.name == "claude" and not claude_sdk.sandbox_on():
+        logger.warning("The OS sandbox is off (`openstride doctor` says why). The plan and the record are still guarded by the tool-call check and the check after each turn.")
     try:
         yield
     finally:
-        if agent_server:
-            agent_server.should_exit = True
         await hub.agent.stop()
         for task in background:
-            if agent_server is None or task is not background[0]:
-                task.cancel()
+            task.cancel()
         await asyncio.gather(*background, return_exceptions=True)
         if demo_folder:
             shutil.rmtree(demo_folder, ignore_errors=True)

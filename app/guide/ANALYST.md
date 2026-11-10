@@ -8,6 +8,7 @@ Python is available with pandas, numpy, scipy and matplotlib when the athlete ha
 
 ## How to work
 
+- For reading that would fill your context (many activity files, many recordings), hand it to the `reader` subagent with exactly what numbers you want back; keep your own context for the analysis.
 - Compute, don't estimate. Load `activities/index.jsonl` and the activity files you need; fetch a recording with `openstride source streams <key>` and read the file it names. Do arithmetic in code, never in your head.
 - Check a result a second way before you rely on it (a different window, a plot, a few rows by hand). Say what the data can and cannot support: few runs, a missing heart-rate strap, a Strava stub with no data are limits to state, not to hide.
 - Keep the work rerunnable: every script and every derived table goes in `report/` next to the report.

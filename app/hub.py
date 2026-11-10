@@ -15,7 +15,6 @@ class Hub:
         self.agent = None  # app.agent.Agent
         self.runtime = None
         self.tokens: dict[str, str] = {}  # token -> role
-        self.socket = ""
 
     def bind(self, loop: asyncio.AbstractEventLoop) -> None:
         self.loop = loop

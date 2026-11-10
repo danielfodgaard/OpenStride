@@ -5,11 +5,14 @@ The boundary is set three ways: permission rules and the OS sandbox (when the ma
 harness's settings, and a PreToolUse hook that runs hooks.check before every tool call.
 """
 import asyncio
+import functools
 import json
 import logging
 import os
 import platform
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,15 +26,24 @@ COACH_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
 WEB_TOOLS = ["WebSearch", "WebFetch"]
 
 
+@functools.cache
 def sandbox_available() -> bool:
+    """Whether the OS sandbox can actually run here: Seatbelt on a Mac; on Linux, bubblewrap and socat,
+    and permission to make a namespace (a default Docker container has none)."""
     if platform.system() == "Darwin":
         return True
-    return platform.system() == "Linux" and bool(shutil.which("bwrap")) and bool(shutil.which("socat"))
+    if platform.system() != "Linux" or not shutil.which("bwrap") or not shutil.which("socat"):
+        return False
+    try:
+        probe = subprocess.run(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
 
 
 def sandbox_on() -> bool:
     mode = config.settings.sandbox
-    return mode == "on" or (mode == "auto" and sandbox_available())
+    return mode in ("on", "weak") or (mode == "auto" and sandbox_available())
 
 
 def absolute(path: Path) -> str:
@@ -39,7 +51,7 @@ def absolute(path: Path) -> str:
     return "/" + str(path.resolve())
 
 
-def harness_settings(request: TurnRequest, socket: str) -> dict:
+def harness_settings(request: TurnRequest) -> dict:
     """Permission rules for the file tools, and the sandbox for the shell."""
     policy = request.policy
     state = workspace.state()
@@ -54,8 +66,10 @@ def harness_settings(request: TurnRequest, socket: str) -> dict:
             "enabled": True,
             "autoAllowBashIfSandboxed": True,
             "allowUnsandboxedCommands": False,
-            "failIfUnavailable": config.settings.sandbox == "on",
-            "network": {"allowedDomains": [], "allowUnixSockets": [socket] if socket else []},
+            "failIfUnavailable": config.settings.sandbox in ("on", "weak"),
+            # For a container that may not make namespaces: weaker, and better than none.
+            "enableWeakerNestedSandbox": config.settings.sandbox == "weak",
+            "network": {"allowedDomains": []},  # none: the CLI reaches the server through files (app/spool.py)
             "filesystem": {
                 "allowWrite": [absolute(policy.scratch or policy.workspace)],
                 "denyWrite": deny_write,
@@ -66,19 +80,22 @@ def harness_settings(request: TurnRequest, socket: str) -> dict:
 
 
 def environment(request: TurnRequest) -> dict:
-    """What the harness and the agent's shell see. Secrets are blanked; the CLI finds the server by socket and token."""
+    """What the harness and the agent's shell see. Secrets are blanked; the CLI finds the server by its spool folder and the turn's token."""
     bin_dir = str(Path(sys.executable).parent)
     env = {name: "" for name in config.SECRET_ENV}
     env |= {
         "PATH": bin_dir + os.pathsep + os.environ.get("PATH", ""),
         "OPENSTRIDE_WORKSPACE": str(request.policy.workspace),
-        "OPENSTRIDE_AGENT_TOKEN": request.token,
+        "OPENSTRIDE_TURN": request.token,
         "OPENSTRIDE_DATA_DIR": "",
-        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",  # keeps the Anthropic key out of the shell
         "CLAUDE_CONFIG_DIR": str(workspace.state() / "claude"),  # sessions live with the data, so they survive a container
         "DISABLE_AUTOUPDATER": "1",
         "DISABLE_TELEMETRY": "1",
     }
+    if sandbox_on():
+        # Keeps the Anthropic key out of the shell's environment. The harness needs the OS sandbox to do it;
+        # without one, the tool-call check refuses commands that read the environment (hooks.ENVIRONMENT).
+        env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
     return env | request.env
 
 
@@ -87,12 +104,18 @@ class ClaudeSdk:
 
     async def run(self, request: TurnRequest):
         from claude_agent_sdk import (
-            AssistantMessage, ClaudeAgentOptions, HookMatcher, ResultMessage, TextBlock, ToolUseBlock, query,
+            AgentDefinition, AssistantMessage, ClaudeAgentOptions, HookMatcher, ResultMessage, TextBlock, ToolUseBlock, query,
         )
         from claude_agent_sdk.types import StreamEvent
 
         policy = request.policy
         denied: list[str] = []
+        stderr: list[str] = []
+
+        def keep(line: str) -> None:
+            log.debug("harness: %s", line)
+            stderr.append(line.rstrip())
+            del stderr[:-12]
 
         async def pre_tool(hook_input, tool_use_id, context):
             reason = hooks.check(policy, hook_input.get("tool_name", ""), hook_input.get("tool_input") or {})
@@ -103,6 +126,15 @@ class ClaudeSdk:
 
         env = environment(request)
         tools = COACH_TOOLS + (WEB_TOOLS if policy.web else [])
+        agents = None
+        if policy.role == "analyst":
+            # Bulk reading on the cheaper model, so the analyst's own context holds conclusions, not file dumps.
+            tools = tools + ["Agent"]
+            agents = {"reader": AgentDefinition(
+                description="Reads many activity files or recordings and returns the numbers asked for. Use it for bulk reading that would fill your context.",
+                prompt="You read a runner's training data files and return exactly the numbers you were asked for, computed with code, with the file each came from. You write only in the current folder.",
+                tools=COACH_TOOLS, model=request.helper_model,
+            )}
         options = ClaudeAgentOptions(
             cwd=str(policy.cwd),
             system_prompt=request.system_prompt,
@@ -116,10 +148,11 @@ class ClaudeSdk:
             effort=request.effort,
             include_partial_messages=True,
             hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[pre_tool], on_failure="block")]},
+            agents=agents,
             env=env,
             add_dirs=[str(policy.workspace)] if policy.role == "analyst" else [],
-            settings=json.dumps(harness_settings(request, env.get("OPENSTRIDE_AGENT_SOCKET", ""))),
-            stderr=lambda line: log.debug("harness: %s", line),
+            settings=json.dumps(harness_settings(request)),
+            stderr=keep,
         )
         result = {"session_id": request.session_id, "usage": {}, "cost_usd": 0.0, "error": "", "turns": 0}
         try:
@@ -152,5 +185,8 @@ class ClaudeSdk:
             result["error"] = f"The turn was stopped after {request.max_seconds // 60} minutes."
         except Exception as error:  # the harness failed to start or died: report it, don't take the server down
             log.exception("The agent runtime failed")
-            result["error"] = f"The agent could not run: {type(error).__name__}: {error}"
+            detail = " | ".join(line for line in stderr if line.strip())[-600:]
+            result["error"] = f"The agent could not run: {type(error).__name__}: {str(error).splitlines()[0]}" + (f" ({detail})" if detail else "")
+        if result["error"] and re.search(r"api key|authenticat|unauthori[sz]ed|\b401\b|/login", result["error"], re.I):
+            result["error"] = "The agent has no working Anthropic credentials. Set ANTHROPIC_API_KEY in .env and restart. (" + result["error"][:200] + ")"
         yield ("result", result)

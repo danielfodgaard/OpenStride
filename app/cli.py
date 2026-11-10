@@ -2,7 +2,7 @@
 
 Facts (paces, dates, validate, diff, status) are computed right here from the workspace files.
 Anything that leaves the workspace (a card, a draft for the athlete, the provider, the analyst) is asked
-of the server, over the socket and token an agent's turn is started with.
+of the server, through the spool folder and token an agent's turn is started with.
 """
 import argparse
 import json
@@ -37,23 +37,20 @@ def read_json(path: str):
 
 def server(method: str, path: str, body: dict | None = None, timeout: float = 120) -> dict:
     """Ask the server, as the agent whose turn this shell belongs to."""
-    import httpx
+    from app import spool
 
-    socket, token = os.environ.get("OPENSTRIDE_AGENT_SOCKET"), os.environ.get("OPENSTRIDE_AGENT_TOKEN")
-    if not socket or not token:
+    folder, token = os.environ.get("OPENSTRIDE_SPOOL"), os.environ.get("OPENSTRIDE_TURN")
+    if not folder or not token:
         fail("This command runs inside an agent's turn: it puts something in front of the athlete or reaches the provider. Outside one, use the app.")
     try:
-        with httpx.Client(transport=httpx.HTTPTransport(uds=socket), base_url="http://openstride", timeout=timeout) as client:
-            response = client.request(method, path, json=body, headers={"X-OpenStride-Token": token})
-    except httpx.HTTPError as error:
-        fail(f"The OpenStride server did not answer ({type(error).__name__}). Try once more; if it persists, tell the athlete.")
-    if response.status_code >= 400:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = {}
-        fail(detail.get("error") or detail.get("detail") or f"The server answered {response.status_code}.", detail.get("problems"))
-    return response.json()
+        status, detail = spool.ask(Path(folder), token, method, path, body, timeout)
+    except TimeoutError:
+        fail("The OpenStride server did not answer in time. Try once more; if it persists, tell the athlete.")
+    except OSError as error:
+        fail(f"The request could not be written ({error.strerror}). Tell the athlete.")
+    if status >= 400:
+        fail(detail.get("error") or detail.get("detail") or f"The server answered {status}.", detail.get("problems"))
+    return detail
 
 
 def call(name: str, **args) -> dict:
@@ -122,15 +119,15 @@ def cmd_settings(a) -> None:
         fail("There is no workspace yet. Start the server once.")
     import yaml
 
-    try:
-        value = yaml.safe_load(a.value)
-    except yaml.YAMLError:
-        value = a.value
     node, parts = workspace.DEFAULT_SETTINGS, a.key.split(".")
     for part in parts:
         if not isinstance(node, dict) or part not in node:
             fail(f"There is no setting {a.key}. `openstride settings get` shows them all.")
         node = node[part]
+    try:
+        value = a.value if isinstance(node, str) else yaml.safe_load(a.value)  # a time such as 22:00 stays text
+    except yaml.YAMLError:
+        value = a.value
     if not isinstance(value, type(node)) and not (isinstance(node, float) and isinstance(value, int)):
         fail(f"{a.key} takes a {type(node).__name__}, like {node!r}.")
     stored = workspace.load_yaml(path, {})
@@ -312,7 +309,11 @@ def cmd_doctor(a) -> None:
     if claude_sdk.sandbox_on():
         lines.append("sandbox: on. The agents' shells can write only what they author and reach no network.")
     else:
-        lines.append("sandbox: OFF. The boundary is held by the tool-call check and the check after each turn. For the OS sandbox on Linux install bubblewrap and socat.")
+        lines.append(
+            "sandbox: OFF. The plan and the record are still guarded by the tool-call check and the check after each turn, "
+            "but the agent's shell is not confined by the OS. On Linux install bubblewrap and socat; in Docker the container "
+            "must be allowed to make namespaces (see docs/SETUP.md), or set OPENSTRIDE_SANDBOX=weak."
+        )
     out("\n".join(lines))
 
 
@@ -345,22 +346,22 @@ def build() -> argparse.ArgumentParser:
     p.add_argument("--time", required=True, help="its time, h:mm:ss or mm:ss")
     p.add_argument("--goal-race", help="the goal race distance, if different")
     p.add_argument("--goal-time", help="the goal time, for goal VDOT and race pace")
-    p.set_defaults(run=cmd_paces)
+    p.set_defaults(handler=cmd_paces)
 
     p = sub.add_parser("dates", help="the plan's weeks for a race date: Mondays, weekday of the race, days to go")
     p.add_argument("--race", required=True, help="race date, YYYY-MM-DD")
     p.add_argument("--start", help="first day of the plan (default today)")
-    p.set_defaults(run=cmd_dates)
+    p.set_defaults(handler=cmd_dates)
 
     p = sub.add_parser("status", help="one week of the plan against what was done (default: this week)")
     p.add_argument("week", nargs="?", help="a week number, this, next or last")
-    p.set_defaults(run=cmd_status)
+    p.set_defaults(handler=cmd_status)
 
     p = sub.add_parser("activities", help="the activity index, with the planned session each counts as")
     p.add_argument("--since", help="YYYY-MM-DD")
     p.add_argument("--sport", help="run, ride, swim, strength, …")
     p.add_argument("--limit", type=int, default=30)
-    p.set_defaults(run=cmd_activities)
+    p.set_defaults(handler=cmd_activities)
 
     p = sub.add_parser("plan", help="export, validate, diff and draft plan changes; history")
     p.add_argument("action", choices=["export", "validate", "diff", "draft", "history", "apply"])
@@ -372,7 +373,7 @@ def build() -> argparse.ArgumentParser:
     p.add_argument("--version", help="for export: a commit from `plan history`, to start from an old version")
     p.add_argument("-o", "--output", help="for export: write to this file instead of stdout")
     p.add_argument("--approval", help="for apply: the athlete's approval token")
-    p.set_defaults(run=cmd_plan)
+    p.set_defaults(handler=cmd_plan)
 
     p = sub.add_parser("show", help="put a card in front of the athlete")
     p.add_argument("card", choices=["week", "session", "activity", "activities", "fitness", "volume", "plan", "report", "proposal", "table", "chart"])
@@ -381,12 +382,12 @@ def build() -> argparse.ArgumentParser:
     p.add_argument("--since", help="fitness: first day")
     p.add_argument("--until", help="fitness: last day")
     p.add_argument("--limit", type=int, default=10, help="activities: how many")
-    p.set_defaults(run=cmd_show)
+    p.set_defaults(handler=cmd_show)
 
     p = sub.add_parser("ask", help="ask the athlete a question they answer with a tap")
     p.add_argument("question")
     p.add_argument("--options", nargs="+", required=True)
-    p.set_defaults(run=cmd_ask)
+    p.set_defaults(handler=cmd_ask)
 
     p = sub.add_parser("source", help="the provider: sync, recordings, calendar, wellness, hand-logged sessions")
     p.add_argument("action", choices=["capabilities", "check", "sync", "streams", "push", "upload", "wellness", "log"])
@@ -402,7 +403,7 @@ def build() -> argparse.ArgumentParser:
     p.add_argument("--title", help="log: what it was")
     p.add_argument("--note", help="log: anything the athlete said about it")
     p.add_argument("--time", help="log: start time, HH:MM")
-    p.set_defaults(run=cmd_source)
+    p.set_defaults(handler=cmd_source)
 
     p = sub.add_parser("analyse", help="hand a question to the analyst, which computes over the data in a sandbox")
     p.add_argument("question", nargs="?")
@@ -411,38 +412,38 @@ def build() -> argparse.ArgumentParser:
     p.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"])
     p.add_argument("--run", help="keep waiting for an earlier run")
     p.add_argument("--wait", type=float, default=540, help="seconds to wait before reporting it is still running")
-    p.set_defaults(run=cmd_analyse)
+    p.set_defaults(handler=cmd_analyse)
 
-    sub.add_parser("reports", help="what the analyst has produced").set_defaults(run=lambda a: out(call("reports")))
-    sub.add_parser("usage", help="what the agents have cost this month").set_defaults(run=lambda a: out(call("usage")))
+    sub.add_parser("reports", help="what the analyst has produced").set_defaults(handler=lambda a: out(call("reports")))
+    sub.add_parser("usage", help="what the agents have cost this month").set_defaults(handler=lambda a: out(call("usage")))
 
     p = sub.add_parser("commit", help="name this turn's commit: one line on what you changed and why")
     p.add_argument("-m", "--message", required=True)
-    p.set_defaults(run=lambda a: out(call("commit", message=a.message)))
+    p.set_defaults(handler=lambda a: out(call("commit", message=a.message)))
 
     p = sub.add_parser("restore", help="put a file you authored back as it was in an earlier commit")
     p.add_argument("path")
     p.add_argument("--from", dest="revision", required=True, help="a commit from git log")
-    p.set_defaults(run=lambda a: out(call("restore", path=str(Path(a.path).resolve()), revision=a.revision)))
+    p.set_defaults(handler=lambda a: out(call("restore", path=str(Path(a.path).resolve()), revision=a.revision)))
 
     p = sub.add_parser("settings", help="read or change settings.yaml")
     p.add_argument("action", nargs="?", choices=["get", "set"])
     p.add_argument("key", nargs="?")
     p.add_argument("value", nargs="?")
-    p.set_defaults(run=cmd_settings)
+    p.set_defaults(handler=cmd_settings)
 
-    sub.add_parser("serve", help="run the server (the default)").set_defaults(run=cmd_serve)
+    sub.add_parser("serve", help="run the server (the default)").set_defaults(handler=cmd_serve)
     p = sub.add_parser("backup", help="write a zip of the data folder")
     p.add_argument("folder", type=Path)
-    p.set_defaults(run=cmd_backup)
+    p.set_defaults(handler=cmd_backup)
     p = sub.add_parser("migrate", help="bring a pre-0.2 data folder into the workspace; the old files are left as they are")
     p.add_argument("--from", dest="source", help="the old data folder (default: the data folder itself)")
     p.add_argument("--upload", action="store_true", help="also send the old raw .fit/.gpx files and hand-logged sessions to the provider")
     p.add_argument("--force", action="store_true", help="replace a plan the workspace already has")
-    p.set_defaults(run=cmd_migrate)
+    p.set_defaults(handler=cmd_migrate)
     p = sub.add_parser("doctor", help="check the provider, the key, the harness and the sandbox")
     p.add_argument("--write", action="store_true", help="also create and remove a test workout on the provider's calendar")
-    p.set_defaults(run=cmd_doctor)
+    p.set_defaults(handler=cmd_doctor)
     return parser
 
 
@@ -451,7 +452,7 @@ def main() -> None:
     arguments = parser.parse_args()
     if arguments.command is None:
         return cmd_serve(arguments)
-    arguments.run(arguments)
+    arguments.handler(arguments)
 
 
 if __name__ == "__main__":

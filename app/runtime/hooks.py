@@ -24,6 +24,7 @@ WRAPPERS = {"sudo", "command", "exec", "time", "nohup", "nice", "env", "xargs", 
 SEPARATORS = re.compile(r"\|\||&&|[;|\n&]|\$\(|`|\)")
 REDIRECT = re.compile(r"(?:\d|&)?>{1,2}\|?\s*(\"[^\"]+\"|'[^']+'|[^\s;|&<>()]+)")
 HARMLESS_TARGETS = ("/dev/null", "/dev/stdout", "/dev/stderr", "&1", "&2")
+ENVIRONMENT = re.compile(r"ANTHROPIC|API_KEY|\benviron\b|\bprintenv\b|\bexport\s+-p\b|\bdeclare\s+-x\b|\bcompgen\s+-[ev]", re.I)
 TIER_REASON = {
     "gated": "plan/ changes only when the athlete approves a proposal. Write the new weeks to a file in scratch/ and run `openstride plan draft --from <file>`.",
     "recorded": "This is the record from the provider; no agent writes it. A correction goes in notes/<activity>/, or is made on the provider and comes back with the next sync.",
@@ -111,13 +112,17 @@ def bash_problem(policy: Policy, command: str) -> str | None:
     for fragment in policy.secrets:
         if fragment and fragment.lower() in lowered:
             return "That reaches for the server's own files or secrets, which are not part of the workspace."
-    if re.search(r"(^|[\s/\"'=])\.env(\b|$)", command) or "/proc/" in command:
+    if re.search(r"(^|[\s/\"'=])\.env(\b|$)", command) or "/proc/" in command or ENVIRONMENT.search(command):
         return "That reaches for the server's own files or secrets, which are not part of the workspace."
     cwd = policy.cwd
     for segment in segments(command):
         tokens = bare(words(segment))
         if not tokens:
+            if Path((words(segment) or ["x"])[0]).name in ("env", "set"):  # a bare `env` or `set` prints the environment
+                return "That reaches for the server's own files or secrets, which are not part of the workspace."
             continue
+        if tokens == ["set"]:
+            return "That reaches for the server's own files or secrets, which are not part of the workspace."
         name = Path(tokens[0]).name
         arguments = [t for t in tokens[1:] if not t.startswith("-")]
         if name == "cd" and arguments:
