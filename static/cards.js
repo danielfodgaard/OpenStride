@@ -50,10 +50,8 @@ function sessionRow(session, ctx) {
   return row;
 }
 
-function week(data, ctx) {
-  const box = el("div", null, "card-body");
-  box.append(head(`Week ${data.week_number} of ${data.of} · ${data.phase}`, `${dateText(data.start_date)} to ${dateText(data.end_date)}${data.focus ? ` · ${data.focus}` : ""}`));
-  box.append(strip(stat("Running", `${data.done_km} / ${data.planned_km}`, "km"), stat("Sessions", `${data.sessions_done} / ${data.sessions_planned}`)));
+// The sessions of one week, each row opening the session or the workout done for it.
+function weekRows(data, ctx) {
   const list = el("div", null, "rows");
   for (const session of data.sessions) list.append(sessionRow(session, ctx));
   for (const extra of data.unplanned) {
@@ -67,7 +65,35 @@ function week(data, ctx) {
     row.addEventListener("click", () => ctx.peek("activity", { key: extra.key }));
     list.append(row);
   }
-  box.append(list);
+  return list;
+}
+
+function week(data, ctx) {
+  const box = el("div", null, "card-body");
+  box.append(head(`Week ${data.week_number} of ${data.of} · ${data.phase}`, `${dateText(data.start_date)} to ${dateText(data.end_date)}${data.focus ? ` · ${data.focus}` : ""}`));
+  box.append(strip(stat("Running", `${data.done_km} / ${data.planned_km}`, "km"), stat("Sessions", `${data.sessions_done} / ${data.sessions_planned}`)));
+  box.append(weekRows(data, ctx));
+  return box;
+}
+
+// Every week of the plan as a fold, with only the current one open.
+function allWeeks(weeks, ctx) {
+  const box = el("div", null, "weeks");
+  for (const data of weeks) {
+    const fold = el("details", null, `week-fold${data.current ? " current" : ""}`);
+    fold.open = data.current;
+    const past = data.end_date < new Date().toISOString().slice(0, 10) || data.sessions_done > 0;
+    const volume = past || data.current ? `${data.done_km} / ${data.planned_km} km` : `${data.planned_km} km`;
+    const summary = el("summary");
+    const title = el("span", `Week ${data.week_number} · ${data.phase}`, "week-title");
+    const meta = el("span", `${dateText(data.start_date, { day: "numeric", month: "short" })} · ${volume} · ${past || data.current ? `${data.sessions_done} of ` : ""}${data.sessions_planned} sessions`, "week-meta");
+    summary.append(title, meta);
+    if (data.current) summary.append(chip("Now", "warning"));
+    fold.append(summary);
+    if (data.focus) fold.append(el("p", data.focus, "muted"));
+    fold.append(weekRows(data, ctx));
+    box.append(fold);
+  }
   return box;
 }
 
@@ -213,8 +239,13 @@ function plan(data, ctx) {
   for (const warning of data.warnings || []) box.append(el("p", warning, "notice"));
   box.append(el("p", data.phases.map((p) => `${p.phase} ${p.from_week === p.to_week ? `w${p.from_week}` : `w${p.from_week}–${p.to_week}`}`).join("  ·  "), "phases"));
   box.append(el("h4", "Reference paces"), paces(data.paces));
-  box.append(el("h4", "This week"));
-  box.append(week(data.this_week, ctx));
+  if (data.all_weeks?.length) {
+    box.append(el("h4", `All ${data.all_weeks.length} weeks`));
+    box.append(allWeeks(data.all_weeks, ctx));
+  } else {
+    box.append(el("h4", "This week"));
+    box.append(week(data.this_week, ctx));
+  }
   if (data.versions?.length > 1) {
     const fold = el("details");
     fold.append(el("summary", `Plan history (${data.versions.length})`));

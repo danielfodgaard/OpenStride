@@ -189,6 +189,16 @@ details > :not(summary) { margin-top: 8px; }
 .row.today { border-color: var(--accent); }
 .row.unplanned { border-style: dashed; }
 
+/* The whole plan: a fold per week */
+.weeks { display: grid; gap: 6px; }
+.week-fold { border: 1px solid var(--rule); border-radius: 8px; padding: 0 12px; }
+.week-fold[open] { padding-bottom: 12px; }
+.week-fold.current { border-color: var(--accent); }
+.week-fold > summary { flex-wrap: wrap; gap: 2px 10px; padding: 6px 0; }
+.week-title { color: var(--ink); min-width: 128px; }
+.week-meta { font: 400 13px/1.4 var(--font-data); color: var(--ink-3); flex: 1; }
+@media (max-width: 600px) { .week-title { flex: 1; min-width: 0; } .week-meta { order: 3; flex-basis: 100%; padding-left: 20px; } }
+
 /* Tables */
 .table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--rule); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }

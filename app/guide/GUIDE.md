@@ -72,7 +72,7 @@ Facts, computed in code:
 - `openstride plan export|validate|diff|draft|history`: as above.
 
 Showing the athlete something (a card in the conversation):
-- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show fitness [--since --until]`, `show volume`, `show plan`, `show report <id>`
+- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show fitness [--since --until]`, `show volume`, `show plan` (the goal, the paces and every week as a fold, the current one open), `show report <id>`
 - `openstride show table --from file.json` with `{"title", "columns": [...], "rows": [[...]], "note"}`
 - `openstride show chart --from file.json` with `{"title", "kind": "line"|"bar", "x": [...], "x_label", "y_label", "series": [{"name", "values": [...]}], "note"}`
 - `openstride ask "Which day suits you?" --options Tue Wed Thu`: a question answered with a tap.

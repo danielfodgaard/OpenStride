@@ -321,6 +321,7 @@ async function loadGlance() {
   if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("fitness", {})));
   if (data.has_plan) tiles.push(tile("Race", data.days_to_race >= 0 ? `${data.days_to_race} days` : "Done", data.goal, () => ctx.peek("plan", {})));
   if (data.pending_proposals?.length) tiles.push(tile("Waiting for you", `${data.pending_proposals.length} proposal${data.pending_proposals.length > 1 ? "s" : ""}`, "to approve or reject", () => ctx.peek("proposal", { id: data.pending_proposals[0] })));
+  $("plan-button").hidden = !data.has_plan;
   box.hidden = !tiles.length;
   box.replaceChildren(...tiles);
 }
@@ -425,6 +426,8 @@ async function loadDrawer() {
   box.append(el("p", `OpenStride ${status.version}. Everything here is a file on your own machine, in a git repository.`, "muted"));
   drawer.replaceChildren(box);
 }
+
+$("plan-button").addEventListener("click", () => ctx.peek("plan", {}));
 
 $("data-button").addEventListener("click", () => {
   drawer.hidden = !drawer.hidden;
