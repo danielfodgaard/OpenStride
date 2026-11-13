@@ -201,7 +201,7 @@ def status() -> dict:
                      "capabilities": provider.capabilities.as_dict() if provider else {},
                      "last_sync_at": synced.isoformat() if synced else None, "error": triggers.state().get("sync_error") or ""},
         "runtime": hub.runtime.name if hub.runtime else None,
-        "sandbox": "on" if claude_sdk.sandbox_on() else "off",
+        "sandbox": {"strong": "on", "weak": "on (container form)"}.get(claude_sdk.sandbox_level(), "off"),
         "busy": hub.agent.busy() if hub.agent else False,
         "usage": hub_module.usage() | {"monthly_cap_usd": workspace.settings()["budget"]["monthly_usd"]},
         "today": clock.today().isoformat(),

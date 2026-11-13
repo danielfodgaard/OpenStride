@@ -14,7 +14,8 @@ Built on the `agent-first` branch as version 0.2.0. The design below is what was
 - **Hand-logged sessions and wellness notes are written to the provider**, at the athlete's word, and come back through the sync. They are the athlete's own input, not a change to what the watch recorded.
 - **New activities are briefed as one turn per sync**, and the first sync is history, not news.
 - **The local provider from the old parsers is not built.** The second implementation of the contract is a fixture provider that reads neutral-shape files, which is also the offline demo.
-- **Not yet verified:** the intervals.icu connector against the live API, and the Docker image.
+- **In Docker the sandbox needs `seccomp=unconfined` on the container**, and then runs in a weaker form unless `systempaths=unconfined` is added too. Both were run with the real agent.
+- **Not yet verified:** a full first sync against a long history, and pace targets on a real watch.
 
 ## The idea
 

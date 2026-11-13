@@ -26,24 +26,51 @@ COACH_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
 WEB_TOOLS = ["WebSearch", "WebFetch"]
 
 
+# The harness runs each shell command under bubblewrap in a user namespace. These are that call in small:
+# the strong form gives the shell its own /proc; the weak form, for a container that may not mount one, does not.
+PROBE = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "--unshare-pid"]
+
+
 @functools.cache
-def sandbox_available() -> bool:
-    """Whether the OS sandbox can actually run here: Seatbelt on a Mac; on Linux, bubblewrap and socat,
-    and permission to make a namespace (a default Docker container has none)."""
+def sandbox_probe() -> tuple[str, str]:
+    """What the OS sandbox can do here: ("strong" | "weak" | "", why not).
+
+    Seatbelt on a Mac is always there. On Linux it takes bubblewrap, socat and leave to make a namespace,
+    which a default Docker container does not have.
+    """
     if platform.system() == "Darwin":
-        return True
-    if platform.system() != "Linux" or not shutil.which("bwrap") or not shutil.which("socat"):
-        return False
-    try:
-        probe = subprocess.run(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], capture_output=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return probe.returncode == 0
+        return "strong", ""
+    if platform.system() != "Linux":
+        return "", f"there is no OS sandbox for {platform.system()}"
+    missing = [name for name in ("bwrap", "socat") if not shutil.which(name)]
+    if missing:
+        return "", f"{' and '.join(missing)} not installed"
+    reason = ""
+    for level, extra in (("strong", ["--proc", "/proc"]), ("weak", [])):
+        try:
+            probe = subprocess.run([*PROBE, *extra, "true"], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return "", f"bubblewrap could not run: {error}"
+        if probe.returncode == 0:
+            return level, ""
+        reason = reason or (probe.stderr.strip().splitlines() or ["bubblewrap failed"])[-1]
+    return "", reason
+
+
+def sandbox_level() -> str:
+    """The form of sandbox the agents' shells run under: strong, weak, or "" for none."""
+    mode = config.settings.sandbox
+    if mode == "off":
+        return ""
+    if mode == "on":
+        return "strong"
+    if mode == "weak":
+        return "weak"
+    return sandbox_probe()[0]
 
 
 def sandbox_on() -> bool:
-    mode = config.settings.sandbox
-    return mode in ("on", "weak") or (mode == "auto" and sandbox_available())
+    return bool(sandbox_level())
 
 
 def absolute(path: Path) -> str:
@@ -67,8 +94,8 @@ def harness_settings(request: TurnRequest) -> dict:
             "autoAllowBashIfSandboxed": True,
             "allowUnsandboxedCommands": False,
             "failIfUnavailable": config.settings.sandbox in ("on", "weak"),
-            # For a container that may not make namespaces: weaker, and better than none.
-            "enableWeakerNestedSandbox": config.settings.sandbox == "weak",
+            # In a container the shell can't be given its own /proc: weaker, and far better than none.
+            "enableWeakerNestedSandbox": sandbox_level() == "weak",
             "network": {"allowedDomains": []},  # none: the CLI reaches the server through files (app/spool.py)
             "filesystem": {
                 "allowWrite": [absolute(policy.scratch or policy.workspace)],
@@ -93,9 +120,11 @@ def environment(request: TurnRequest) -> dict:
         "DISABLE_AUTOUPDATER": "1",
         "DISABLE_TELEMETRY": "1",
     }
-    if sandbox_on():
-        # Keeps the Anthropic key out of the shell's environment. The harness needs the OS sandbox to do it;
-        # without one, the tool-call check refuses commands that read the environment (hooks.ENVIRONMENT).
+    if sandbox_level() == "strong":
+        # Keeps the Anthropic key out of the shell's environment. The harness does this only under the full sandbox:
+        # in the container form the shell can read /proc, where the key is visible anyway. There, and with no sandbox,
+        # the tool-call check refuses commands that read the environment (hooks.ENVIRONMENT), and there is no network
+        # in the container form to send a key anywhere.
         env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
     return env | request.env
 

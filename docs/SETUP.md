@@ -32,12 +32,38 @@ The agent has a shell. Three things keep it inside the lines: a check before eac
 |---|---|
 | macOS | Nothing; Seatbelt is built in |
 | Linux | `bubblewrap` and `socat` (`sudo apt install bubblewrap socat`) |
-| Docker | The container must be allowed to make namespaces: uncomment `cap_add` and `security_opt` in `compose.yaml`, or set `OPENSTRIDE_SANDBOX=weak` for the harness's weaker nested sandbox. Neither has been tested by me; `doctor` tells you the result |
+| Docker | One line in a `compose.override.yaml`; see below |
 | Windows | Run under WSL |
 
-`uv run openstride doctor` says whether it is on, and the Data drawer shows it. With it on, the agent's shell can write only what the agent authors, cannot read the server's state or `.env`, and has no network. With it off, a script the agent runs in its shell is not confined by the OS: the plan and the record are still restored after the turn if touched, and commands that name the server, the environment or the network are refused, but a script written to get around that could reach your API key in the shell's environment, the network, and the server's own approve route. A model following its instructions does none of this; the sandbox is what makes it impossible rather than unlikely. On a machine you care about, install the two packages.
+`uv run openstride doctor` says whether it is on and, when it is not, why. The Data drawer shows it too. With it on, the agent's shell can write only what the agent authors, cannot read the server's state or `.env`, and has no network. With it off, a script the agent runs in its shell is not confined by the OS: the plan and the record are still restored after the turn if touched, and commands that name the server, the environment or the network are refused, but a script written to get around that could reach your API key in the shell's environment, the network, and the server's own approve route. A model following its instructions does none of this; the sandbox is what makes it impossible rather than unlikely.
 
-`OPENSTRIDE_SANDBOX` in `.env`: `auto` (the default: on when the machine can), `on` (refuse to run a shell without it), `weak`, or `off`.
+### In Docker
+
+A default container may not make the namespaces the sandbox is built from, because Docker's syscall filter refuses them. Create `compose.override.yaml` beside `compose.yaml` (Compose reads it by itself, git ignores it, and a deploy does not reset it):
+
+    services:
+      openstride:
+        security_opt:
+          - seccomp=unconfined
+
+Then:
+
+    docker compose up -d --force-recreate
+    docker compose exec openstride openstride doctor
+
+`doctor` should now say `sandbox: on, in the form a container allows`. In that form the shell is confined to what the agent authors and has no network, but it can still see the other processes in the container, your API key in the server's environment among them. With no network it has nowhere to send it.
+
+If `doctor` still says OFF, its line gives bubblewrap's reason. On a host with AppArmor, add `- apparmor=unconfined` under `security_opt` and recreate.
+
+For the full form, where the shell also gets its own process list and the key is scrubbed from its environment, add one more line:
+
+          - systempaths=unconfined
+
+and `doctor` says plainly `sandbox: on`.
+
+What you trade: `seccomp=unconfined` removes Docker's syscall filter from this container, and `systempaths=unconfined` shows it kernel paths Docker normally hides. Both make the container wall thinner in exchange for a wall around the agent's shell inside it. On a server that runs only OpenStride that is the better trade. I ran both forms in a container with the real agent: plan and record read-only, network closed, the server's state unreadable. I have not run them on a host with AppArmor.
+
+`OPENSTRIDE_SANDBOX` in `.env`: `auto` (the default: the strongest form the machine can run), `on` (the full form, or no shell at all), `weak` (the container form), or `off`. Leave it on `auto`.
 
 ## Phone access
 
@@ -106,4 +132,4 @@ The plan is not sent to your intervals.icu calendar by the migration. Ask your c
     docker compose up -d --build
     docker compose exec openstride openstride doctor
 
-The image has git, bubblewrap, socat and the analyst's Python packages. Read the sandbox section above: in a default container the sandbox is off unless you allow namespaces or set `OPENSTRIDE_SANDBOX=weak`. The image has not been run by me; treat the first start as a test.
+The image has git, bubblewrap, socat and the analyst's Python packages. In a default container the sandbox is off; the sandbox section above has the one line that turns it on.

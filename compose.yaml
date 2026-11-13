@@ -16,12 +16,15 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
-    # The OS sandbox for the agents' shells needs to make namespaces, which a default container may not.
-    # `openstride doctor` (docker compose exec openstride openstride doctor) says whether it is on.
-    # To turn it on, either allow namespaces for this container:
-    # cap_add: [SYS_ADMIN]
-    # security_opt: ["seccomp=unconfined", "apparmor=unconfined"]
-    # or set OPENSTRIDE_SANDBOX=weak in .env for the harness's weaker nested sandbox. See docs/SETUP.md.
+    # The OS sandbox for the agents' shells is off in a default container: Docker's syscall filter stops it.
+    # Turn it on in a file named compose.override.yaml beside this one (this file is reset on every deploy):
+    #
+    #   services:
+    #     openstride:
+    #       security_opt:
+    #         - seccomp=unconfined
+    #
+    # `docker compose exec openstride openstride doctor` then says "sandbox: on". docs/SETUP.md has the details.
     # For the tailscale sidecar below: delete `ports:` and uncomment this line.
     # network_mode: service:tailscale
 
