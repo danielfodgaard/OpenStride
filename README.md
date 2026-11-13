@@ -46,6 +46,19 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 **You can look underneath.** The Data drawer lists every file with who may write it, its history, and what the agents have cost this month.
 
+### The analyst
+
+Behind the coach sits a second agent that computes instead of estimating. You never talk to it and there is nothing to set up.
+
+- **When it runs.** The coach hands it a question when the answer rests on numbers across many runs: a trend, anything from the recordings of more than a few activities, a block review. It also builds a new plan after the coach has asked you its questions, and writes the race report. Reviewing one run or moving a session the coach does itself.
+- **Where it runs.** In its own folder, `data/analyst/<run>/`, with your workspace readable and not writable. It writes Python, runs it over your activity files, and checks its result a second way.
+- **What comes back.** A report with the scripts that made it, kept under `reports/`. Charts or tables in your conversation. A plan proposal when the question was about the plan, which reaches you as the same approval card as any other change. The coach then tells you what was found.
+- **When it takes long.** If a run outlasts the coach's turn, the coach is briefed when it finishes and comes back to you.
+- **What it needs.** Data: with a few weeks of runs it will rightly say there is no trend yet. And memory: the coach and the analyst run at the same time, about 520 MB together, so a 1 GB server wants swap ([docs/SETUP.md](docs/SETUP.md#memory)).
+- **What it costs.** It is the most expensive single thing the app does, because a run is many steps on the same model as the coach. Ask the coach to give the analyst a cheaper model if you want.
+
+To use it, ask something that needs it: "has my pace at easy heart rate changed over the last two months?"
+
 <p>
 <img src="docs/screenshots/activity-laptop.png" alt="An activity card: distance, time, pace, heart rate, and pace and heart-rate charts against the planned range" width="560">
 </p>

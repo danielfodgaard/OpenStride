@@ -65,6 +65,24 @@ What you trade: `seccomp=unconfined` removes Docker's syscall filter from this c
 
 `OPENSTRIDE_SANDBOX` in `.env`: `auto` (the default: the strongest form the machine can run), `on` (the full form, or no shell at all), `weak` (the container form), or `off`. Leave it on `auto`.
 
+## Memory
+
+Each agent turn starts the harness as a separate process. Measured on the demo data:
+
+| What is running | Memory |
+|---|---|
+| Server idle | about 100 MB |
+| One coach turn | about 300 MB |
+| A coach turn that starts an analyst run | about 520 MB, plus the analyst's own Python |
+
+On a 1 GB server a normal turn fits and an analyst run is at the limit. Without swap, Linux kills a process when memory runs out, and a turn dies with no explanation. Add swap once:
+
+    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+    sudo mkswap /swapfile && sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+`free -m` should then show about 2047 on the Swap line.
+
 ## Phone access
 
 Phone and laptop use one server over HTTPS. Nothing syncs: both talk to the same OpenStride, and the laptop must be on and running it. The recommended way is Tailscale, which needs no public port and gives a valid certificate:
