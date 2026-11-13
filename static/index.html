@@ -20,6 +20,7 @@ try { const t = localStorage.getItem("openstride:theme"); if (t) document.docume
 <header class="appbar">
   <span class="brand"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M62 30 H35 A20 20 0 0 0 35 70 H65 A20 20 0 0 0 85 50" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="35" r="7" fill="#E8501A"/></svg>OpenStride</span>
   <span class="appbar-actions">
+    <button type="button" class="quiet" id="plan-button" hidden>Plan</button>
     <button type="button" class="quiet" id="data-button" aria-controls="drawer" aria-expanded="false">Data</button>
     <button type="button" class="quiet" id="theme-toggle"></button>
   </span>

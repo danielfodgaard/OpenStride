@@ -198,6 +198,7 @@ def plan_card(**_) -> dict:
         "goal_time": doc.request.goal_time, "days_to_go": (doc.request.race_date - today).days, "summary": doc.plan.summary,
         "warnings": doc.plan.warnings, "paces": doc.paces.model_dump(), "phases": phases, "weeks": len(doc.plan.weeks),
         "this_week": week_view(doc, current, today, found, by_key),
+        "all_weeks": [week_view(doc, week, today, found, by_key) for week in doc.plan.weeks],
         "versions": plan.history(limit=10),
     }
 

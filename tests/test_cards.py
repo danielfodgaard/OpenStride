@@ -80,6 +80,9 @@ def test_fitness_volume_and_plan_cards(demo_ws):
     assert len(volume) == 10 and volume[0]["done_km"] > 0 and volume[-1]["future"]
     overview = cards.build("plan")
     assert overview["days_to_go"] == 46 and overview["phases"][0]["phase"] == "base" and overview["paces"]["threshold"]
+    weeks = overview["all_weeks"]
+    assert [w["week_number"] for w in weeks] == list(range(1, 11)) and [w["week_number"] for w in weeks if w["current"]] == [4]
+    assert all(w["sessions"] for w in weeks) and weeks[0]["sessions"][0]["state"] in ("done", "missed") and weeks[9]["sessions"][-1]["type"] == "race"
 
 
 def test_static_cards_are_checked_so_the_agent_gets_a_usable_error():
