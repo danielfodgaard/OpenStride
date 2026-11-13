@@ -50,6 +50,24 @@ def test_the_sandbox_is_set_up_only_where_it_can_run(ws, monkeypatch):
     assert claude_sdk.harness_settings(request(ws))["sandbox"]["enableWeakerNestedSandbox"] is True
 
 
+def test_auto_takes_the_strongest_form_the_machine_can_run(ws, monkeypatch):
+    """In a container the shell can't have its own /proc: the weak form is used, not a sandbox that fails on every command."""
+    monkeypatch.setenv("OPENSTRIDE_SANDBOX", "auto")
+    config.reload()
+    for found, level, on in ((("strong", ""), "strong", True), (("weak", ""), "weak", True), (("", "bwrap: No permissions to create new namespace"), "", False)):
+        monkeypatch.setattr(claude_sdk, "sandbox_probe", lambda found=found: found)
+        assert claude_sdk.sandbox_level() == level and claude_sdk.sandbox_on() is on
+        settings = claude_sdk.harness_settings(request(ws))
+        assert ("sandbox" in settings) is on
+        if on:
+            assert settings["sandbox"]["enableWeakerNestedSandbox"] is (level == "weak") and settings["sandbox"]["failIfUnavailable"] is False
+        assert ("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB" in claude_sdk.environment(request(ws))) is (level == "strong")  # the harness refuses the container form with it
+
+
+def test_the_probe_is_the_harness_call_in_small():
+    assert claude_sdk.PROBE[:2] == ["bwrap", "--unshare-user"] and "--unshare-net" in claude_sdk.PROBE
+
+
 def test_the_analyst_may_write_nothing_in_the_workspace(ws, tmp_path):
     scratch = tmp_path / "run"
     scratch.mkdir()

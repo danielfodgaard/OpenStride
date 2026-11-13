@@ -306,13 +306,19 @@ def cmd_doctor(a) -> None:
         lines.append(f"agent harness: claude-agent-sdk {claude_agent_sdk.__version__}")
     except ImportError:
         lines.append("agent harness: NOT installed (uv sync)")
-    if claude_sdk.sandbox_on():
-        lines.append("sandbox: on. The agents' shells can write only what they author and reach no network.")
-    else:
+    level = claude_sdk.sandbox_level()
+    if level == "strong":
+        lines.append("sandbox: on. The agents' shells can write only what they author, read no secrets and reach no network.")
+    elif level == "weak":
         lines.append(
-            "sandbox: OFF. The plan and the record are still guarded by the tool-call check and the check after each turn, "
-            "but the agent's shell is not confined by the OS. On Linux install bubblewrap and socat; in Docker the container "
-            "must be allowed to make namespaces (see docs/SETUP.md), or set OPENSTRIDE_SANDBOX=weak."
+            "sandbox: on, in the form a container allows. The agents' shells can write only what they author and reach no "
+            "network; they can still see the other processes in the container (docs/SETUP.md says how to close that too)."
+        )
+    else:
+        why = claude_sdk.sandbox_probe()[1] if config.settings.sandbox == "auto" else "OPENSTRIDE_SANDBOX=off"
+        lines.append(
+            f"sandbox: OFF ({why}). The plan and the record are still guarded by the tool-call check and the check after "
+            "each turn, but the agent's shell is not confined by the OS. docs/SETUP.md has the one setting that turns it on."
         )
     out("\n".join(lines))
 

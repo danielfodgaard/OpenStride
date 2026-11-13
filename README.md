@@ -74,7 +74,7 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 | Gated | `plan/` | Only your approval of a proposal |
 | Authored | notes, journal, reviews, settings, the coach's memory | The agent, freely; git keeps every version |
 
-**How the boundary holds.** Before each tool call a check refuses writes to protected paths, git commands that change history, anything that reaches the network or the server's secrets. On a machine that can (macOS; Linux with bubblewrap and socat) the agents' shells also run in an OS sandbox: the protected folders are read-only, there is no network, the server's state is unreadable. After every turn, anything that still differs from the last server commit in a protected path is put back and the agent is told. The Approve button is the only caller of `plan apply`, and it is not reachable from an agent's shell. Without the OS sandbox the first and third layers still hold for files, but the shell itself is not confined; `openstride doctor` says which you have.
+**How the boundary holds.** Before each tool call a check refuses writes to protected paths, git commands that change history, anything that reaches the network or the server's secrets. On a machine that can (macOS; Linux with bubblewrap and socat; Docker with one line of configuration) the agents' shells also run in an OS sandbox: the protected folders are read-only, there is no network, the server's state is unreadable. After every turn, anything that still differs from the last server commit in a protected path is put back and the agent is told. The Approve button is the only caller of `plan apply`, and it is not reachable from an agent's shell. Without the OS sandbox the first and third layers still hold for files, but the shell itself is not confined; `openstride doctor` says which you have.
 
 **The provider contract** is in `app/providers/base.py`: activities with their analysis, recordings, wellness and athlete settings are required; a calendar, uploads, wellness notes, hand-logged sessions and gear are capabilities a provider declares. The mirror keeps a neutral shape with the provider's own record under `source`. There are two implementations, intervals.icu and a fixture provider, and both pass the same conformance test.
 
@@ -82,11 +82,13 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 ## How I know it works
 
-- **217 automated tests** (`uv run pytest`): the validator (each rule triggered by a mutated plan), the gate (every way to apply without approval), the write boundary and the tool-call check, both providers against the contract (intervals.icu through a fake HTTP transport), the mirror and calendar, the cards, the turn loop driven by a scripted agent, the agent API, the CLI, the triggers, the migration and the server.
+- **219 automated tests** (`uv run pytest`): the validator (each rule triggered by a mutated plan), the gate (every way to apply without approval), the write boundary and the tool-call check, both providers against the contract (intervals.icu through a fake HTTP transport), the mirror and calendar, the cards, the turn loop driven by a scripted agent, the agent API, the CLI, the triggers, the migration and the server.
 - **Live runs of the real harness** against the demo workspace, with and without the OS sandbox: a question answered with a card, a plan change drafted as a proposal, a session logged at the provider, the guard rails probed (plan and record read-only, network closed, state unreadable), and an analyst run that computed with a script and filed its report. Those runs found seven bugs that are fixed and now covered by tests.
 - **An offline demo** with no API key: `OPENSTRIDE_DEMO=1 uv run openstride`.
 
-**Not yet verified:** the intervals.icu connector has not been run against the live API. It is written from a maintained client's request and response shapes and tested against a fake. `openstride doctor` checks your connection, and `openstride doctor --write` proves the calendar by creating and removing one test workout a year out. The Docker image builds on the same code but has not been run.
+**Verified on a real server and account:** the Docker image builds and runs, intervals.icu accepts the key, and a test workout was created on the calendar, read as a structured workout, and removed. The OS sandbox was run inside a container with the real agent, in both its forms.
+
+**Not yet verified:** a full first sync against a long history, and the pace targets of a pushed workout on a real watch. `openstride doctor` checks your own setup in a few lines.
 
 ---
 
@@ -124,7 +126,7 @@ There are no measured per-action figures for this version yet. A turn now reads 
 - The intervals.icu connector run against a real account, and the workout syntax checked on a real watch.
 - Measured costs per kind of turn.
 - A second real provider behind the contract.
-- The agent and the server in separate containers, so the boundary in Docker does not depend on the sandbox.
+- The agent and the server in separate containers, so the boundary in Docker needs no loosened container setting.
 
 ---
 
