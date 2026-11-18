@@ -184,3 +184,50 @@ def test_the_queue_survives_a_restart(demo_ws):
     run(second())
     assert hub.runtime.requests[0].prompt.endswith("Before the restart")
     assert json.loads((workspace.state() / "queue.json").read_text()) == []
+
+
+def test_clearing_the_conversation_saves_notes_first_then_starts_a_new_session_and_an_empty_page(demo_ws):
+    def script(request):
+        if "[brief: clear_conversation]" in request.prompt:
+            yield write("athlete/memory.md", "# Profile\nPrefers morning runs.")
+            yield ("say", "Saved that you prefer morning runs.")
+        else:
+            yield ("say", "Noted.")
+
+    async def go():
+        agent = start(script)
+        await turn(agent, "I prefer running in the morning.")
+        agent.clear()
+        await asyncio.wait_for(agent.idle.wait(), 10)
+        await turn(agent, "Hello again.")
+        await agent.stop()
+
+    run(go())
+    first, clearing, after = hub.runtime.requests
+    assert first.session_id is None and clearing.session_id == "scripted" and after.session_id is None  # the new conversation is a new session
+    assert "save what should outlive it" in clearing.prompt
+    assert (workspace.root() / "athlete" / "memory.md").read_text().endswith("Prefers morning runs.")
+    assert kinds() == [("notice", None), ("message", "coach"), ("turn", "ended"), ("turn", "started"), ("message", "coach"), ("turn", "ended")]
+    assert hub.stream.history()[1]["text"] == "Saved that you prefer morning runs."
+    everything = hub.stream.history(everything=True)
+    assert everything[1]["text"] == "Noted." and hub.stream.cleared() == next(e["id"] for e in everything if e["type"] == "clear")
+    assert hub.stream.history(before=hub.stream.cleared()) == [] and hub.stream.history(after=1)[0]["id"] > hub.stream.cleared()
+
+
+def test_a_conversation_is_not_cleared_when_the_notes_could_not_be_saved(demo_ws):
+    def script(request):
+        if "[brief: clear_conversation]" in request.prompt:
+            raise RuntimeError("no model")
+        yield ("say", "Noted.")
+
+    async def go():
+        agent = start(script)
+        await turn(agent, "Remember this.")
+        agent.clear()
+        await asyncio.wait_for(agent.idle.wait(), 10)
+        await turn(agent, "Still there?")
+        await agent.stop()
+
+    run(go())
+    assert hub.stream.cleared() == 0 and hub.runtime.requests[-1].session_id == "scripted"
+    assert any(e["type"] == "notice" and "not cleared" in e["text"] for e in hub.stream.history())

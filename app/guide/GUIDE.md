@@ -21,6 +21,7 @@ Everything about the athlete is in this folder, which is a git repository. Read 
 | `notes/<key>/review.md` | Your review of one activity | you |
 | `notes/<key>/athlete.md` | What the athlete said about it: how it felt, RPE | you |
 | `notes/<key>/match.json` | `{"session_id": "s12"}` when the activity counts as a different session than the automatic match, `{"session_id": ""}` when it was not a planned session | you |
+| `checkins/YYYY-MM-DD.md` | What the athlete told you that day about how they are, in their words: on waking, after a workout, any other time. One line each, starting with the time and the occasion (`- 07:10 morning: slept badly, calf still tight`). The day card shows it | you |
 | `journal/YYYY-MM-DD.md` | What you did and concluded that day | you |
 | `journal/weeks/YYYY-Www.md` | The weekly review | you |
 | `journal/legacy/` | Reviews, logbook and chat from before the workspace existed, if any | read-only history |
@@ -72,9 +73,10 @@ Facts, computed in code:
 - `openstride plan export|validate|diff|draft|history`: as above.
 
 Showing the athlete something (a card in the conversation):
-- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show fitness [--since --until]`, `show volume`, `show plan` (the goal, the paces and every week as a fold, the current one open), `show report <id>`
+- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show fitness` (today's fitness, fatigue and form), `show plan` (the goal, the phases, the paces and every week as a fold, the current one open), `show report <id>`
+- `openstride show day [YYYY-MM-DD|today|yesterday]`: one day in one place: your morning message, what the athlete reported (`checkins/`, the provider's wellness line), what was planned and what was done.
 - `openstride show table --from file.json` with `{"title", "columns": [...], "rows": [[...]], "note"}`
-- `openstride show chart --from file.json` with `{"title", "kind": "line"|"bar", "x": [...], "x_label", "y_label", "series": [{"name", "values": [...]}], "note"}`
+- The app draws no charts. The provider has them, and the activity, fitness and day cards link to its page; say so when a picture is what they want.
 - `openstride ask "Which day suits you?" --options Tue Wed Thu`: a question answered with a tap.
 
 The provider (the only way out of the workspace):

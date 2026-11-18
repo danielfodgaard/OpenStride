@@ -52,7 +52,7 @@ def quiet(now: datetime, settings: dict) -> bool:
 def unanswered(hub) -> bool:
     """The last thing in the conversation is something the coach said unprompted."""
     events = [e for e in hub.stream.history(limit=40) if e["type"] == "message"]
-    return bool(events) and events[-1]["role"] == "coach" and events[-1].get("origin") not in ("athlete", "new_activity")
+    return bool(events) and events[-1]["role"] == "coach" and events[-1].get("origin") not in ("athlete", "new_activity", "clear_conversation")
 
 
 def activity_brief(keys: list[str]) -> str:

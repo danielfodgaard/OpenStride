@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from app import agent_api, analyst, cards, clock, config, hub as hub_module, logsafe, migrate, mirror, ops, plan, providers, spool, triggers, workspace
-from app.agent import Agent, make_runtime
+from app.agent import CLEAR, Agent, make_runtime
 from app.hub import hub
 from app.providers import ProviderError
 from app.runtime import claude_sdk
@@ -212,7 +212,7 @@ def status() -> dict:
 @app.get("/api/stream")
 def stream_history(after: int = 0, before: int | None = None, limit: int = 80) -> dict:
     events = hub.stream.history(after=after, before=before, limit=min(limit, 500))
-    return {"events": events, "busy": hub.agent.busy() if hub.agent else False}
+    return {"events": events, "busy": hub.agent.busy() if hub.agent else False, "cleared": hub.stream.cleared()}
 
 
 def sse(event: dict) -> str:
@@ -288,6 +288,15 @@ async def send_message(text: str = Form(""), files: list[UploadFile] | None = No
 @app.post("/api/turn/stop")
 async def stop_turn() -> dict:
     return {"stopped": hub.agent.interrupt()}
+
+
+@app.post("/api/conversation/clear")
+async def clear_conversation() -> dict:
+    """The coach gets one turn to save what matters; the page empties when that turn has ended well."""
+    if any(item.origin == CLEAR for item in [hub.agent.current, *hub.agent.pending] if item):
+        raise HTTPException(409, "The conversation is already being cleared.")
+    hub.agent.clear()
+    return {"status": "clearing"}
 
 
 @app.get("/api/glance")

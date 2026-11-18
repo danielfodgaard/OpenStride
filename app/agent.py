@@ -17,6 +17,14 @@ from app.runtime.hooks import Policy
 log = logging.getLogger(__name__)
 GUIDE_DIR = Path(__file__).parent / "guide"
 SILENT = "SILENT"
+CLEAR = "clear_conversation"
+CLEAR_BRIEF = (
+    "The athlete is clearing this conversation. After this turn you will remember none of it: the next turn starts a new "
+    "session with only the workspace. Go back over the conversation and save what should outlive it. Lasting things about "
+    "the athlete go in athlete/memory.md (merge, don't append); anything agreed or still open, and what you were in the "
+    "middle of, goes in today's journal; how they said they felt goes in checkins/. Then reply with one or two sentences "
+    "saying what you saved. Do not reply SILENT."
+)
 
 
 @dataclass
@@ -100,6 +108,10 @@ class Agent:
         self.wake.set()
         self.hub.stream.publish("busy", busy=True)
         return item
+
+    def clear(self) -> Item:
+        """Start over, at the athlete's word: one last turn to save what matters, then a new session and an empty page."""
+        return self.enqueue("brief", CLEAR_BRIEF, CLEAR)
 
     def busy(self) -> bool:
         return self.current is not None or bool(self.pending)
@@ -207,6 +219,13 @@ class Agent:
             self._write("session.json", self._read("session.json", {}) | {"coach": result["session_id"]})
         hub_module.record_usage(role="coach", turn=item.id, origin=item.origin, model=request.model, cost_usd=result.get("cost_usd") or 0, usage=result.get("usage") or {})
         body = "\n\n".join(text for text in texts if text)
+        if item.origin == CLEAR:
+            if result.get("error"):  # nothing was saved, so nothing is forgotten
+                stream.append("notice", level="warning", text="The conversation was not cleared: your coach could not save its notes first.")
+            else:
+                self._write("session.json", self._read("session.json", {}) | {"coach": None})
+                stream.append("clear", turn=item.id)
+                stream.append("notice", level="ok", text="New conversation. Your plan, your activities and your coach's notes are as they were.")
         if body and body.strip() != SILENT:
             stream.append("message", role="coach", text=body, turn=item.id, origin=item.origin)
         error = result.get("error") or ""

@@ -206,11 +206,11 @@ def cmd_show(a) -> None:
         args = {"key": a.target}
     elif a.card == "activities":
         args = {"limit": a.limit}
-    elif a.card == "fitness":
-        args = {k: v for k, v in (("from", a.since), ("to", a.until)) if v}
-    elif a.card in ("table", "chart"):
+    elif a.card == "day":
+        args = {"date": a.target or "today"}
+    elif a.card == "table":
         if not a.source:
-            fail(f"`openstride show {a.card} --from <file.json>`: the data to show.")
+            fail("`openstride show table --from <file.json>`: the data to show.")
         data = read_json(a.source)
     out(server("POST", "/show", {"card": a.card, "args": args, "data": data}))
 
@@ -382,11 +382,9 @@ def build() -> argparse.ArgumentParser:
     p.set_defaults(handler=cmd_plan)
 
     p = sub.add_parser("show", help="put a card in front of the athlete")
-    p.add_argument("card", choices=["week", "session", "activity", "activities", "fitness", "volume", "plan", "report", "proposal", "table", "chart"])
-    p.add_argument("target", nargs="?", help="week: number, this, next, last. session/report/proposal: its id. activity: its key")
-    p.add_argument("--from", dest="source", help="table, chart: the JSON file to show")
-    p.add_argument("--since", help="fitness: first day")
-    p.add_argument("--until", help="fitness: last day")
+    p.add_argument("card", choices=["day", "week", "session", "activity", "activities", "fitness", "plan", "report", "proposal", "table"])
+    p.add_argument("target", nargs="?", help="day: YYYY-MM-DD, today, yesterday. week: number, this, next, last. session/report/proposal: its id. activity: its key")
+    p.add_argument("--from", dest="source", help="table: the JSON file to show")
     p.add_argument("--limit", type=int, default=10, help="activities: how many")
     p.set_defaults(handler=cmd_show)
 

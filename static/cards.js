@@ -1,5 +1,4 @@
 // Cards: each type is drawn one way, from data the server built. Nothing here computes training facts.
-import { barChart, lineChart, routeMap, runCharts } from "./charts.js";
 import { amount, chip, dateText, duration, el, km, table, timeText } from "./format.js";
 import { markdown } from "./md.js";
 
@@ -29,6 +28,16 @@ function strip(...stats) {
   const box = el("div", null, "strip");
   box.append(...stats.filter(Boolean));
   return box;
+}
+
+// The provider's own page, where the charts are. The app draws none.
+function outLink(link) {
+  if (!link?.url) return null;
+  const a = el("a", `${link.label} ↗`, "button quiet out");
+  a.href = link.url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  return a;
 }
 
 function activityLine(activity) {
@@ -76,26 +85,39 @@ function week(data, ctx) {
   return box;
 }
 
-// Every week of the plan as a fold, with only the current one open.
-function allWeeks(weeks, ctx) {
+function dayRange(start, end) {
+  const sameMonth = start.slice(0, 7) === end.slice(0, 7);
+  return `${dateText(start, sameMonth ? { day: "numeric" } : { day: "numeric", month: "short" })} – ${dateText(end, { day: "numeric", month: "short" })}`;
+}
+
+function weekFold(data, ctx) {
+  const fold = el("details", null, `week-fold${data.current ? " current" : ""}`);
+  fold.open = data.current;
+  const started = !data.future;
+  const summary = el("summary");
+  const title = el("span", null, "week-title");
+  title.append(el("strong", `Week ${data.week_number}`), el("span", dayRange(data.start_date, data.end_date), "week-dates"));
+  const parts = [started ? `${data.done_km} of ${data.planned_km} km` : `${data.planned_km} km`, started ? `${data.sessions_done} of ${data.sessions_planned} sessions` : `${data.sessions_planned} sessions`];
+  summary.append(title, el("span", parts.join(" · "), "week-meta"));
+  if (data.current) summary.append(chip("Now", "accent"));
+  fold.append(summary);
+  if (data.focus) fold.append(el("p", data.focus, "muted"));
+  fold.append(weekRows(data, ctx));
+  return fold;
+}
+
+// Every week of the plan as a fold under its phase, with only the current one open.
+function allWeeks(weeks, phases, ctx) {
   const box = el("div", null, "weeks");
-  for (const data of weeks) {
-    const fold = el("details", null, `week-fold${data.current ? " current" : ""}`);
-    fold.open = data.current;
-    const past = data.end_date < new Date().toISOString().slice(0, 10) || data.sessions_done > 0;
-    const volume = past || data.current ? `${data.done_km} / ${data.planned_km} km` : `${data.planned_km} km`;
-    const summary = el("summary");
-    const title = el("span", `Week ${data.week_number} · ${data.phase}`, "week-title");
-    const meta = el("span", `${dateText(data.start_date, { day: "numeric", month: "short" })} · ${volume} · ${past || data.current ? `${data.sessions_done} of ` : ""}${data.sessions_planned} sessions`, "week-meta");
-    summary.append(title, meta);
-    if (data.current) summary.append(chip("Now", "warning"));
-    fold.append(summary);
-    if (data.focus) fold.append(el("p", data.focus, "muted"));
-    fold.append(weekRows(data, ctx));
-    box.append(fold);
+  for (const phase of phases) {
+    box.append(el("h4", `${capital(phase.phase)} · ${weeksText(phase)}`, "phase-head"));
+    for (const data of weeks) if (data.week_number >= phase.from_week && data.week_number <= phase.to_week) box.append(weekFold(data, ctx));
   }
   return box;
 }
+
+const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const weeksText = (p) => (p.from_week === p.to_week ? `week ${p.from_week}` : `weeks ${p.from_week}–${p.to_week}`);
 
 function steps(session) {
   if (!session.steps?.length) return null;
@@ -141,15 +163,6 @@ function activity(data) {
   ));
   if (data.planned) box.append(el("p", `Planned: ${data.planned.title}${amount(data.planned) ? ` (${amount(data.planned)})` : ""}`, "muted"));
   else box.append(el("p", "Not a planned session.", "muted"));
-  if (data.series?.points?.length) {
-    const top = el("div", null, "run-top");
-    const route = routeMap(data.series.points);
-    const charts = el("div", null, "run-charts");
-    if (route) top.append(route);
-    top.append(charts);
-    box.append(top);
-    runCharts(charts, data.series.points, data.planned);
-  }
   if (data.intervals?.length) {
     const fold = el("details");
     fold.append(el("summary", `Laps and intervals (${data.intervals.length})`));
@@ -164,6 +177,8 @@ function activity(data) {
     box.append(el("h4", "Your note"));
     box.append(markdown(data.athlete_note));
   }
+  const link = outLink(data.link);
+  if (link) box.append(el("p", "Pace, heart rate and the route are charted there:", "muted"), link);
   return box;
 }
 
@@ -193,59 +208,125 @@ function fitness(data) {
   const latest = data.latest;
   box.append(head("Fitness and fatigue", `As of ${dateText(latest.date)}`));
   box.append(strip(stat("Fitness", String(latest.fitness)), stat("Fatigue", String(latest.fatigue)), stat("Form", String(latest.form)), latest.ramp !== null && latest.ramp !== undefined ? stat("Ramp", String(latest.ramp), "/ week") : null));
-  const chart = el("div");
-  const x = data.days.map((d) => d.date.slice(5));
-  lineChart(chart, {
-    x, label: "Fitness, fatigue and form",
-    series: [
-      { name: "Fitness", values: data.days.map((d) => d.fitness), color: "var(--accent)" },
-      { name: "Fatigue", values: data.days.map((d) => d.fatigue), color: "var(--load-atl)" },
-      { name: "Form", values: data.days.map((d) => d.form), color: "var(--ink-2)", dash: true },
-    ],
-    marks: data.race_date ? [{ x: data.race_date.slice(5), label: "Race" }] : [],
-  });
-  box.append(chart);
+  const link = outLink(data.link);
+  if (link) box.append(link);
   return box;
 }
 
-function volume(data) {
-  const box = el("div", null, "card-body");
-  box.append(head("Weekly volume", "Planned against done, running km"));
-  const chart = el("div");
-  barChart(chart, {
-    x: data.weeks.map((w) => `W${w.week_number}`), label: "Weekly running volume",
-    series: [
-      { name: "Planned", values: data.weeks.map((w) => w.planned_km), color: "var(--bar)" },
-      { name: "Done", values: data.weeks.map((w) => (w.future ? null : w.done_km)), color: "var(--accent)" },
-    ],
-    yFormat: (v) => `${v}`,
-  });
-  box.append(chart);
-  const fold = el("details");
-  fold.append(el("summary", "Table"));
-  fold.append(table(["Week", "Phase", "Planned km", "Done km", "Sessions"], data.weeks.map((w) => [`${w.week_number}${w.current ? " (now)" : ""}`, w.phase, w.planned_km, w.future ? "" : w.done_km, w.future ? `${w.sessions_planned}` : `${w.sessions_done} / ${w.sessions_planned}`])));
-  box.append(fold);
+const WELLNESS = {
+  sleep_h: ["Sleep", "h"], sleep_score: ["Sleep score", ""], resting_hr: ["Resting HR", "bpm"], hrv: ["HRV", "ms"], readiness: ["Readiness", ""],
+  fitness: ["Fitness", ""], fatigue: ["Fatigue", ""], form: ["Form", ""], weight_kg: ["Weight", "kg"],
+  soreness: ["Soreness", ""], tiredness: ["Tiredness", ""], stress: ["Stress", ""], mood: ["Mood", ""], motivation: ["Motivation", ""],
+};
+
+// One day in one place: the coach's morning status, what the athlete reported, what was planned and done.
+function day(data, ctx) {
+  const box = el("div", null, "card-body day");
+  const title = head(data.is_today ? "Today" : dateText(data.date, { weekday: "long" }), dateText(data.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+  box.append(title);
+
+  box.append(el("h4", "Morning status"));
+  if (data.coach.length) for (const said of data.coach) box.append(markdown(said.text));
+  else box.append(el("p", data.is_today ? "No morning status yet. Ask your coach to turn on the morning brief to get one every day." : "No morning status that day.", "muted"));
+
+  box.append(el("h4", "What you reported"));
+  if (data.checkins) box.append(markdown(data.checkins));
+  if (data.wellness_comments) box.append(el("p", data.wellness_comments));
+  if (!data.checkins && !data.wellness_comments) box.append(el("p", "Nothing yet. Tell your coach how you woke up or how a workout felt, and it is kept here.", "muted"));
+
+  const measured = Object.entries(data.wellness);
+  if (measured.length) {
+    box.append(el("h4", "Measured"));
+    box.append(strip(...measured.map(([key, value]) => stat(WELLNESS[key]?.[0] || key, String(Number(Number(value).toFixed(1))), WELLNESS[key]?.[1]))));
+  }
+
+  box.append(el("h4", "Training"));
+  const list = el("div", null, "rows");
+  for (const item of data.sessions) list.append(sessionRow(item, ctx));
+  for (const done of data.activities) {
+    if (done.planned) {
+      if (done.athlete_note) list.append(markdown(done.athlete_note));
+      continue;  // its session row above opens it
+    }
+    const row = el("button", null, "row unplanned");
+    row.type = "button";
+    const left = el("span", null, "row-main");
+    left.append(el("span", done.name || SPORT[done.sport] || "Activity", "row-title"));
+    const meta = el("span", null, "row-meta");
+    meta.append(el("span", activityLine(done)), chip("Not in the plan"));
+    row.append(left, meta);
+    row.addEventListener("click", () => ctx.peek("activity", { key: done.key }));
+    list.append(row);
+    if (done.athlete_note) list.append(markdown(done.athlete_note));
+  }
+  if (!list.childElementCount) list.append(el("p", "Rest day: nothing planned, nothing recorded.", "muted"));
+  box.append(list);
+
+  const nav = el("div", null, "actions day-nav");
+  const go = (label, date) => {
+    const button = el("button", label, "quiet");
+    button.type = "button";
+    button.addEventListener("click", () => ctx.peek("day", { date }));
+    return button;
+  };
+  nav.append(go("← Day before", data.previous));
+  if (data.next) nav.append(go("Day after →", data.next));
+  const link = outLink(data.link);
+  if (link) nav.append(link);
+  box.append(nav);
   return box;
 }
 
 function paces(p) {
-  return table(["Easy", "Marathon", "Threshold", "Interval", "Repetition", "Race"], [[p.easy, p.marathon, p.threshold, p.interval, p.repetition, p.race_pace]]);
+  const list = el("dl", null, "paces");
+  for (const [name, value] of [["Easy", p.easy], ["Marathon", p.marathon], ["Threshold", p.threshold], ["Interval", p.interval], ["Repetition", p.repetition], ["Race", p.race_pace]]) {
+    if (!value) continue;
+    const item = el("div");
+    item.append(el("dt", name), el("dd", value));
+    list.append(item);
+  }
+  return list;
 }
 
 function plan(data, ctx) {
-  const box = el("div", null, "card-body");
-  box.append(head(data.goal, `Race ${dateText(data.race_date, { weekday: "short", day: "numeric", month: "long", year: "numeric" })} · ${data.days_to_go} days to go${data.goal_time ? ` · goal ${data.goal_time}` : ""}`));
-  if (data.summary) box.append(el("p", data.summary));
-  for (const warning of data.warnings || []) box.append(el("p", warning, "notice"));
-  box.append(el("p", data.phases.map((p) => `${p.phase} ${p.from_week === p.to_week ? `w${p.from_week}` : `w${p.from_week}–${p.to_week}`}`).join("  ·  "), "phases"));
-  box.append(el("h4", "Reference paces"), paces(data.paces));
-  if (data.all_weeks?.length) {
-    box.append(el("h4", `All ${data.all_weeks.length} weeks`));
-    box.append(allWeeks(data.all_weeks, ctx));
-  } else {
-    box.append(el("h4", "This week"));
-    box.append(week(data.this_week, ctx));
+  const box = el("div", null, "card-body plan");
+  box.append(head(data.goal));
+  const current = data.all_weeks.find((w) => w.current);
+  const facts = strip(
+    stat("Race day", dateText(data.race_date, { day: "numeric", month: "short", year: "numeric" })),
+    stat("To go", data.days_to_go >= 0 ? String(data.days_to_go) : "Done", data.days_to_go >= 0 ? "days" : ""),
+    data.goal_time ? stat("Goal", data.goal_time) : null,
+    current ? stat("Week", String(current.week_number), `of ${data.weeks}`) : null,
+  );
+  facts.classList.add("wide");
+  box.append(facts);
+
+  box.append(el("h4", "Phases"));
+  const phases = el("ol", null, "phase-list");
+  for (const p of data.phases) {
+    const item = el("li", null, p.current ? "current" : p.past ? "past" : "");
+    item.append(el("strong", capital(p.phase)), el("span", capital(weeksText(p))), el("span", dayRange(p.start_date, p.end_date)), el("span", `${p.planned_km} km`, "num"));
+    if (p.current) item.append(chip("Now", "accent"));
+    phases.append(item);
   }
+  box.append(phases);
+
+  box.append(el("h4", "Reference paces"), paces(data.paces));
+
+  if (data.summary || data.warnings?.length) {
+    const about = el("details");
+    about.append(el("summary", "About this plan"));
+    if (data.summary) about.append(el("p", data.summary));
+    if (data.warnings?.length) {
+      const notes = el("ul", null, "plain-notes");
+      for (const warning of data.warnings) notes.append(el("li", warning));
+      about.append(notes);
+    }
+    box.append(about);
+  }
+
+  box.append(el("h4", `All ${data.all_weeks.length} weeks`));
+  box.append(allWeeks(data.all_weeks, data.phases, ctx));
   if (data.versions?.length > 1) {
     const fold = el("details");
     fold.append(el("summary", `Plan history (${data.versions.length})`));
@@ -355,17 +436,6 @@ function tableCard(data) {
   return box;
 }
 
-function chartCard(data) {
-  const box = el("div", null, "card-body");
-  box.append(head(data.title || "Chart", [data.y_label, data.x_label].filter(Boolean).join(" by ")));
-  const chart = el("div");
-  const draw = data.kind === "bar" ? barChart : lineChart;
-  draw(chart, { x: data.x.map(String), series: data.series, yFormat: (v) => String(Number(Number(v).toFixed(2))), label: data.title });
-  box.append(chart);
-  if (data.note) box.append(el("p", data.note, "muted"));
-  return box;
-}
-
 function choice(data, ctx) {
   const box = el("div", null, "card-body");
   box.append(el("p", data.question, "lead"));
@@ -383,8 +453,10 @@ function choice(data, ctx) {
   return box;
 }
 
-const RENDER = { week, session, activity, activities, fitness, volume, plan, proposal, report, table: tableCard, chart: chartCard, choice };
-export const LIVE = new Set(["week", "plan", "volume", "fitness", "proposal", "activities", "session"]);
+const RENDER = { day, week, session, activity, activities, fitness, plan, proposal, report, table: tableCard, choice };
+export const LIVE = new Set(["day", "week", "plan", "fitness", "proposal", "activities", "session"]);
+
+export const known = (type) => type in RENDER;  // a card from an earlier version that is no longer drawn is left out
 
 export function renderCard(type, data, ctx) {
   const draw = RENDER[type];

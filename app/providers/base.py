@@ -95,6 +95,9 @@ class Provider(Protocol):
     def gear(self) -> list[dict]:
         """{"id", "name", "kind", "distance_km", "retired"}."""
 
+    def web_url(self, kind: str, ident: str = "") -> str:
+        """The provider's own page for an "activity" (by its id), "fitness" or "wellness", where its charts are; "" when it has none."""
+
 
 def activity(**fields) -> dict:
     """A neutral activity with every field present, so a reader never needs to guess which are missing."""

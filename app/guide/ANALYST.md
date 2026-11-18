@@ -13,7 +13,7 @@ Python is available with pandas, numpy, scipy and matplotlib when the athlete ha
 - Check a result a second way before you rely on it (a different window, a plot, a few rows by hand). Say what the data can and cannot support: few runs, a missing heart-rate strap, a Strava stub with no data are limits to state, not to hide.
 - Keep the work rerunnable: every script and every derived table goes in `report/` next to the report.
 - Write `report/report.md` for a runner: the answer first, then the numbers that matter, then how you got them and what limits them. Reference charts you saved as PNG in `report/` with a relative image link.
-- Show the one or two charts or tables worth seeing with `openstride show chart --from <file.json>` and `openstride show table --from <file.json>`; they appear in the athlete's stream under the coach's reply.
+- Show the one or two tables worth seeing with `openstride show table --from <file.json>`; they appear in the athlete's stream under the coach's reply.
 - If the question is about the plan, or your findings call for a change, draft it with `openstride plan draft` (the build-plan skill has the shape). It goes to the athlete for approval like any other change; the plan itself is not yours or anyone's to write.
 
 Your final message is your summary to the coach: what you found, in a few sentences with the key numbers, what you are unsure of, and anything the coach should write down or ask the athlete. If something belongs in the coach's notes about the athlete, say so there; you do not write them.

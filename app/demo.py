@@ -12,8 +12,8 @@ LEGACY = Path(__file__).parent.parent / "examples" / "demo" / "data"
 TODAY = "2026-11-25"
 WELCOME = (
     "This is the offline demo: a sample half-marathon plan, three and a half weeks in, with made-up runs. "
-    "There is no model behind it, so I answer from a script. Try **this week**, **the plan**, **fitness**, "
-    "**volume**, **my last run**, or **move my next easy run** to see a proposal and its approval card."
+    "There is no model behind it, so I answer from a script. Try **today**, **this week**, **the plan**, "
+    "**fitness**, **my last run**, or **move my next easy run** to see a proposal and its approval card."
 )
 
 

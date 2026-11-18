@@ -1,6 +1,6 @@
 # OpenStride
 
-**An open-source running coach where the agent is the interface.** You talk to one coach, on your phone or your laptop, and it does what you ask: sets up your plan, reads your runs, explains a chart, moves a session, logs a sore calf. There are no pages or menus underneath, only your training data as files on your own machine and an agent that works in them.
+**An open-source running coach where the agent is the interface.** You talk to one coach, on your phone or your laptop, and it does what you ask: sets up your plan, reads your runs, sums up your day, moves a session, logs a sore calf. There are no pages or menus underneath, only your training data as files on your own machine and an agent that works in them.
 
 One thing waits for you: **a change to your training plan.** Everything else the agent does on its own authority. MIT licensed.
 
@@ -24,7 +24,7 @@ This version turns that inside out. The app is a **workspace** the agent works i
 | **One gate** | `plan/` is written only when you approve a proposal. Enforced in code, not in a prompt |
 | **The record is not the agent's** | What your watch recorded and the provider computed is written only by the sync. A disagreement goes in a note beside it |
 | **Analysis is a provider's job** | intervals.icu analyses your files, keeps fitness and wellness, and sends workouts to your watch. OpenStride defines the contract; another analyzer can plug in behind it |
-| **An analyst behind the coach** | Questions that need computation go to a second agent that runs code over a read-only copy of your data and returns a report, charts and, when it concerns the plan, a proposal |
+| **An analyst behind the coach** | Questions that need computation go to a second agent that runs code over a read-only copy of your data and returns a report and, when it concerns the plan, a proposal |
 
 A stronger model reads more of the data, writes better throwaway analysis and follows the skills more carefully, with no code change. That is the point.
 
@@ -36,11 +36,17 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 **One screen.** A header with today's session, your next key session, the week, your form and the days to the race. A conversation below it. One box to type in, which also takes a photo or a `.fit` file.
 
-**The coach shows, not tells.** Ask how the week is going and you get the week as a card, drawn by code the same way every time, and two sentences on what to notice. Cards: a week, a session, an activity with pace and heart rate against the plan, fitness and fatigue, weekly volume, the plan, a table, a chart, an analyst's report.
+**The coach shows, not tells.** Ask how the week is going and you get the week as a card, drawn by code the same way every time, and two sentences on what to notice. Cards: a day, a week, a session, an activity, fitness and fatigue, the plan, a table, an analyst's report.
 
 **A plan change is a card with two buttons.** "Move Thursday to Saturday", a new plan, a skipped session, a rebuild after illness: the coach drafts it, the validator checks it, and you see what moves, what it costs and why. Facts are refused (a session moved into the past, something already done altered, two runs on one day). Judgments are shown to you and never block (not one of your usual days, hard days back to back, a jump in volume). Nothing changes unless you approve; when you do, the new sessions go to your watch through the provider's calendar.
 
 **The coach checks in.** A review when a run arrives, a look back when a week ends, a report after the race. Optional: a morning brief, a wellness signal, a four-week block review. Quiet hours and a monthly budget are settings you change by asking.
+
+**Each day has one overview.** The Today tile opens it: the coach's morning status, what you told the coach on waking and after a workout, the numbers your provider measured (sleep, resting heart rate, HRV, form), and what was planned and done. Step back a day at a time to look at earlier ones.
+
+**The app draws no charts of its own.** Your provider already has them, and better: the activity, fitness and day cards show the numbers and link to the provider's page for the pictures.
+
+**You can start the conversation over.** Clear gives the coach one turn to save what matters to its notes and the journal, then empties the page and starts a new session. Nothing in your data is removed, and the earlier conversation stays in the stream file.
 
 **It remembers.** `athlete/memory.md` holds what data can't say: who you are, your history, how you respond to training, what you agreed. It outlives plans and conversations, and you can read and edit it.
 
@@ -52,7 +58,7 @@ Behind the coach sits a second agent that computes instead of estimating. You ne
 
 - **When it runs.** The coach hands it a question when the answer rests on numbers across many runs: a trend, anything from the recordings of more than a few activities, a block review. It also builds a new plan after the coach has asked you its questions, and writes the race report. Reviewing one run or moving a session the coach does itself.
 - **Where it runs.** In its own folder, `data/analyst/<run>/`, with your workspace readable and not writable. It writes Python, runs it over your activity files, and checks its result a second way.
-- **What comes back.** A report with the scripts that made it, kept under `reports/`. Charts or tables in your conversation. A plan proposal when the question was about the plan, which reaches you as the same approval card as any other change. The coach then tells you what was found.
+- **What comes back.** A report with the scripts that made it, kept under `reports/`. Tables in your conversation. A plan proposal when the question was about the plan, which reaches you as the same approval card as any other change. The coach then tells you what was found.
 - **When it takes long.** If a run outlasts the coach's turn, the coach is briefed when it finishes and comes back to you.
 - **What it needs.** Data: with a few weeks of runs it will rightly say there is no trend yet. And memory: the coach and the analyst run at the same time, about 520 MB together, so a 1 GB server wants swap ([docs/SETUP.md](docs/SETUP.md#memory)).
 - **What it costs.** It is the most expensive single thing the app does, because a run is many steps on the same model as the coach. Ask the coach to give the analyst a cheaper model if you want.
@@ -60,7 +66,7 @@ Behind the coach sits a second agent that computes instead of estimating. You ne
 To use it, ask something that needs it: "has my pace at easy heart rate changed over the last two months?"
 
 <p>
-<img src="docs/screenshots/activity-laptop.png" alt="An activity card: distance, time, pace, heart rate, and pace and heart-rate charts against the planned range" width="560">
+<img src="docs/screenshots/activity-laptop.png" alt="An activity card: distance, time, pace, heart rate and load, against what was planned" width="560">
 </p>
 
 ---
