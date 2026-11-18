@@ -201,8 +201,8 @@ A wrong fact in the record is fixed at the source, on the provider, and comes ba
 
 **Showing things** (the only way to put a card in the stream):
 
-- `openstride show week [N|this|next]`, `show session <key>`, `show activity <id>`, `show day [date]`, `show fitness`, `show plan`
-- `openstride show table --from <file.json>` for ad-hoc analysis: a table from data the agent computed. There is no chart card: the app draws no charts of its own, and the activity, fitness and day cards link to the provider's page, which has them
+- `openstride show week [N|this|next]`, `show session <key>`, `show activity <id>`, `show day [date]`, `show plan`
+- `openstride show table --from <file.json>` for ad-hoc analysis: a table from data the agent computed. There is no chart card: the app draws no charts of its own, and the activity and day cards link to the provider's page, which has them
 - `openstride ask "Which day suits you?" --options Tue Wed Thu` : a choice card, when a question is better tapped than typed
 
 **Housekeeping**:
@@ -304,7 +304,7 @@ One screen. The current five tabs, the forms and the menus go.
 
 **What the athlete can still do without the agent:** approve or reject a proposal, read cards, scroll the stream, and open a *Data* drawer that lists the workspace files read-only, with the git log. The drawer is for trust and debugging. It is not navigation.
 
-**Offline:** the glance header, this week's card and the last few cards are cached by the service worker, as this week's plan is today. Sending a message queues it until the server is reachable.
+**Offline:** not supported. The page needs the server; `static/sw.js` only retires the service worker earlier versions installed.
 
 **Phone first.** A conversation with cards is a better phone interface than today's tables. The laptop gets the same screen, wider, with the Data drawer open beside the stream.
 

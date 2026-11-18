@@ -54,7 +54,7 @@ def script(request):
         yield ("tool", "Bash", {"command": "openstride plan draft --from scratch/draft.json"}, None)
         warning = f" One thing to weigh: {result['warnings'][0]}." if result["warnings"] else ""
         yield ("say", f"I've drafted moving **{session.title}** to {day}. Nothing has changed yet: the card above shows the difference, and the plan only changes if you approve it.{warning}")
-    elif re.search(r"today|my day|morning", text):
+    elif re.search(r"today|my day|morning|fitness|form|fatigue|fresh|tired", text):
         yield show("day", date="today")
         yield ("say", "Here is today: what is planned, what you did, and how you came into it.")
     elif "next week" in text:
@@ -64,10 +64,6 @@ def script(request):
         yield show("week", week="this")
         view = cards.status("this")
         yield ("say", f"Week {view['week_number']} of {view['of']}, {view['phase']} phase: **{view['done_km']:g} of {view['planned_km']:g} km** so far, {view['sessions_done']} of {view['sessions_planned']} sessions done.")
-    elif re.search(r"fitness|form|fatigue|fresh|tired", text):
-        yield show("fitness")
-        latest = cards.fitness_card()["latest"]
-        yield ("say", f"Fitness is **{latest['fitness']:g}**, fatigue {latest['fatigue']:g}, so form is {latest['form']:g}. Positive form means you are fresh; a hard block usually sits a little below zero.")
     elif re.search(r"last run|latest|recent|activity|workout|run", text):
         rows = [row for row in cards.activities_card(30)["activities"] if row["sport"] == "run"]
         if rows:
@@ -80,7 +76,7 @@ def script(request):
         view = cards.plan_card()
         yield ("say", f"**{view['goal']}**. {view['days_to_go']} days to the race on {view['race_date']}.")
     else:
-        yield ("say", "In the demo I answer to a few words: **today**, **this week**, **next week**, **the plan**, **fitness**, **my last run**, and **move my next easy run**. With an API key and a provider connected, this box takes anything.")
+        yield ("say", "In the demo I answer to a few words: **today**, **this week**, **next week**, **the plan**, **my last run**, and **move my next easy run**. With an API key and a provider connected, this box takes anything.")
 
 
 def demo_runtime() -> Scripted:

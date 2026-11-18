@@ -382,7 +382,7 @@ def build() -> argparse.ArgumentParser:
     p.set_defaults(handler=cmd_plan)
 
     p = sub.add_parser("show", help="put a card in front of the athlete")
-    p.add_argument("card", choices=["day", "week", "session", "activity", "activities", "fitness", "plan", "report", "proposal", "table"])
+    p.add_argument("card", choices=["day", "week", "session", "activity", "activities", "plan", "report", "proposal", "table"])
     p.add_argument("target", nargs="?", help="day: YYYY-MM-DD, today, yesterday. week: number, this, next, last. session/report/proposal: its id. activity: its key")
     p.add_argument("--from", dest="source", help="table: the JSON file to show")
     p.add_argument("--limit", type=int, default=10, help="activities: how many")

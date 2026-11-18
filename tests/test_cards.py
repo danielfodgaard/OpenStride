@@ -73,9 +73,7 @@ def test_a_proposal_card_shows_the_difference_before_and_after_approval(demo_ws)
     assert after["status"] == "approved" and after["diff"][0]["entries"][0]["kind"] == "moved"  # still what it changed
 
 
-def test_fitness_and_plan_cards(demo_ws):
-    fitness = cards.build("fitness")
-    assert fitness["latest"]["date"] == "2026-11-25" and set(fitness["latest"]) == {"date", "fitness", "fatigue", "form", "ramp"}
+def test_the_plan_card(demo_ws):
     overview = cards.build("plan")
     assert overview["days_to_go"] == 46 and overview["paces"]["threshold"] and overview["current_week"] == 4
     phases = overview["phases"]
@@ -125,6 +123,8 @@ def test_static_cards_are_checked_so_the_agent_gets_a_usable_error():
         cards.build("table", data={"columns": ["a", "b"], "rows": [[1]]})
     with pytest.raises(cards.CardError, match="no 'chart' card"):  # the app draws no charts of its own
         cards.build("chart", data={"kind": "line", "x": [1], "series": [{"values": [1]}]})
+    with pytest.raises(cards.CardError, match="no 'fitness' card"):  # the day card has those numbers
+        cards.build("fitness")
     with pytest.raises(cards.CardError, match="two to six"):
         cards.build("choice", data={"question": "Which day?", "options": ["Tue"]})
     with pytest.raises(cards.CardError, match="no 'pie' card"):

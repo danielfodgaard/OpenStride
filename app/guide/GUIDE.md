@@ -73,10 +73,10 @@ Facts, computed in code:
 - `openstride plan export|validate|diff|draft|history`: as above.
 
 Showing the athlete something (a card in the conversation):
-- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show fitness` (today's fitness, fatigue and form), `show plan` (the goal, the phases, the paces and every week as a fold, the current one open), `show report <id>`
-- `openstride show day [YYYY-MM-DD|today|yesterday]`: one day in one place: your morning message, what the athlete reported (`checkins/`, the provider's wellness line), what was planned and what was done.
+- `openstride show week [N|this|next|last]`, `show session <id>`, `show activity <key>`, `show activities`, `show plan` (the goal, the phases, the paces and every week as a fold, the current one open), `show report <id>`
+- `openstride show day [YYYY-MM-DD|today|yesterday]`: one day in one place: your morning message, what the athlete reported (`checkins/`), the provider's wellness line for that day (sleep, resting HR, HRV, fitness, fatigue, form), what was planned and what was done.
 - `openstride show table --from file.json` with `{"title", "columns": [...], "rows": [[...]], "note"}`
-- The app draws no charts. The provider has them, and the activity, fitness and day cards link to its page; say so when a picture is what they want.
+- The app draws no charts. The provider has them, and the activity and day cards link to its page; say so when a picture is what they want.
 - `openstride ask "Which day suits you?" --options Tue Wed Thu`: a question answered with a tap.
 
 The provider (the only way out of the workspace):

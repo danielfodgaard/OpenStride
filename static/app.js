@@ -16,8 +16,6 @@ async function api(path, options = {}) {
     throw new Error("The server can't be reached.");
   }
   if (response.status === 401) { location.href = "/login"; throw new Error("Log in again."); }
-  const offline = response.headers.get("X-OpenStride-Offline") === "1";
-  setOffline(offline || Boolean(response.headers.get("X-OpenStride-Saved-At")) && !navigator.onLine);
   let body = null;
   try { body = await response.json(); } catch { /* no body */ }
   if (!response.ok) throw new Error(body?.detail || body?.error || `The server answered ${response.status}.`);
@@ -25,12 +23,6 @@ async function api(path, options = {}) {
 }
 
 const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-
-function setOffline(offline) {
-  const banner = $("offline-banner");
-  banner.hidden = !offline;
-  if (offline) banner.textContent = "Offline: showing what this device saved. Messages wait until the server is back.";
-}
 
 function toast(text) {
   const node = el("div", text, "toast");
@@ -188,7 +180,6 @@ function connect() {
   state.source = source;
   source.addEventListener("open", async () => {
     state.retry = 1000;
-    setOffline(false);
     try {  // whatever was missed while the connection was down
       const data = await api(`/api/stream?after=${state.last}&limit=500`);
       if ((data.cleared || 0) !== state.cleared) { await loadHistory(); return; }  // cleared while this page was away
@@ -321,7 +312,7 @@ async function loadGlance() {
     if (data.next_hard) tiles.push(tile("Next key session", data.next_hard.title, dateText(data.next_hard.date), () => ctx.peek("session", { id: data.next_hard.id })));
     if (data.week) tiles.push(tile(`Week ${data.week.week_number} of ${data.week.of}`, `${data.week.done_km} / ${data.week.planned_km} km`, `${data.week.sessions_done} of ${data.week.sessions_planned} sessions`, () => ctx.peek("week", { week: "this" })));
   }
-  if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("fitness", {})));
+  if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("day", { date: "today" })));
   if (data.has_plan) tiles.push(tile("Race", data.days_to_race >= 0 ? `${data.days_to_race} days` : "Done", data.goal, () => ctx.peek("plan", {})));
   if (data.pending_proposals?.length) tiles.push(tile("Waiting for you", `${data.pending_proposals.length} proposal${data.pending_proposals.length > 1 ? "s" : ""}`, "to approve or reject", () => ctx.peek("proposal", { id: data.pending_proposals[0] })));
   $("plan-button").hidden = !data.has_plan;
@@ -458,7 +449,7 @@ $("data-button").addEventListener("click", () => {
   if (!drawer.hidden) loadDrawer().catch((error) => drawer.replaceChildren(el("p", error.message, "notice")));
 });
 
-// --- theme, service worker, start --------------------------------------------------------------
+// --- theme, start --------------------------------------------------------------
 const themeButton = $("theme-toggle");
 function showTheme() {
   const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -473,8 +464,6 @@ themeButton.addEventListener("click", () => {
 });
 showTheme();
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-window.addEventListener("online", () => setOffline(false));
 
 loadHistory().catch((error) => events.replaceChildren(el("p", error.message, "notice"))).finally(connect);
 loadGlance();

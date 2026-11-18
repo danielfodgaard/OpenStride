@@ -144,15 +144,6 @@ def activities_card(limit: int = 10, **_) -> dict:
     return {"activities": [activity_brief(row) | {"session_id": found.by_activity.get(row["key"], "")} for row in rows]}
 
 
-def fitness_card(**_) -> dict:
-    """The provider's own numbers for today, and where its chart of them is. Nothing is drawn here."""
-    days = [day for day in mirror.wellness() if day.get("fitness") is not None]
-    if not days:
-        raise CardError("There is no fitness data in wellness/ yet. Sync first, or the provider has none.")
-    latest = days[-1]
-    return {"latest": {key: latest.get(key) for key in ("date", "fitness", "fatigue", "form", "ramp")}, "link": provider_link("fitness")}
-
-
 def phase_spans(doc: PlanDoc, today: date) -> list[dict]:
     spans = []
     for week in doc.plan.weeks:
@@ -182,7 +173,7 @@ def plan_card(**_) -> dict:
     }
 
 
-WELLNESS_SHOWN = ("sleep_h", "sleep_score", "resting_hr", "hrv", "readiness", "fitness", "fatigue", "form", "weight_kg", "soreness", "tiredness", "stress", "mood", "motivation")
+WELLNESS_SHOWN = ("sleep_h", "sleep_score", "resting_hr", "hrv", "readiness", "fitness", "fatigue", "form", "ramp", "weight_kg", "soreness", "tiredness", "stress", "mood", "motivation")
 COACH_STATUS = ("morning_brief", "wellness_signal")
 
 
@@ -275,7 +266,7 @@ def choice_card(data=None, **_) -> dict:
 
 BUILDERS = {
     "week": week_card, "session": session_card, "activity": activity_card, "activities": activities_card,
-    "day": day_card, "fitness": fitness_card, "plan": plan_card, "proposal": proposal_card, "report": report_card,
+    "day": day_card, "plan": plan_card, "proposal": proposal_card, "report": report_card,
     "table": table_card, "choice": choice_card,
 }
 STATIC = ("table", "choice")  # their data is what the agent computed, kept with the event

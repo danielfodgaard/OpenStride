@@ -97,7 +97,7 @@ The server stays bound to localhost; only devices in your tailnet can reach it. 
 
 On a server without Tailscale installed, uncomment the `tailscale` service in `compose.yaml`, follow the notes there, and put `TS_AUTHKEY` in `.env`.
 
-The glance header, this week and the cards you opened stay readable offline. A message waits for the server.
+The app needs a connection to the server; nothing is kept on the phone.
 
 ## Password
 

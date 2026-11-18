@@ -203,19 +203,9 @@ function activities(data, ctx) {
   return box;
 }
 
-function fitness(data) {
-  const box = el("div", null, "card-body");
-  const latest = data.latest;
-  box.append(head("Fitness and fatigue", `As of ${dateText(latest.date)}`));
-  box.append(strip(stat("Fitness", String(latest.fitness)), stat("Fatigue", String(latest.fatigue)), stat("Form", String(latest.form)), latest.ramp !== null && latest.ramp !== undefined ? stat("Ramp", String(latest.ramp), "/ week") : null));
-  const link = outLink(data.link);
-  if (link) box.append(link);
-  return box;
-}
-
 const WELLNESS = {
   sleep_h: ["Sleep", "h"], sleep_score: ["Sleep score", ""], resting_hr: ["Resting HR", "bpm"], hrv: ["HRV", "ms"], readiness: ["Readiness", ""],
-  fitness: ["Fitness", ""], fatigue: ["Fatigue", ""], form: ["Form", ""], weight_kg: ["Weight", "kg"],
+  fitness: ["Fitness", ""], fatigue: ["Fatigue", ""], form: ["Form", ""], ramp: ["Ramp", "/ week"], weight_kg: ["Weight", "kg"],
   soreness: ["Soreness", ""], tiredness: ["Tiredness", ""], stress: ["Stress", ""], mood: ["Mood", ""], motivation: ["Motivation", ""],
 };
 
@@ -453,8 +443,8 @@ function choice(data, ctx) {
   return box;
 }
 
-const RENDER = { day, week, session, activity, activities, fitness, plan, proposal, report, table: tableCard, choice };
-export const LIVE = new Set(["day", "week", "plan", "fitness", "proposal", "activities", "session"]);
+const RENDER = { day, week, session, activity, activities, plan, proposal, report, table: tableCard, choice };
+export const LIVE = new Set(["day", "week", "plan", "proposal", "activities", "session"]);
 
 export const known = (type) => type in RENDER;  // a card from an earlier version that is no longer drawn is left out
 

@@ -36,7 +36,7 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 **One screen.** A header with today's session, your next key session, the week, your form and the days to the race. A conversation below it. One box to type in, which also takes a photo or a `.fit` file.
 
-**The coach shows, not tells.** Ask how the week is going and you get the week as a card, drawn by code the same way every time, and two sentences on what to notice. Cards: a day, a week, a session, an activity, fitness and fatigue, the plan, a table, an analyst's report.
+**The coach shows, not tells.** Ask how the week is going and you get the week as a card, drawn by code the same way every time, and two sentences on what to notice. Cards: a day, a week, a session, an activity, the plan, a table, an analyst's report.
 
 **A plan change is a card with two buttons.** "Move Thursday to Saturday", a new plan, a skipped session, a rebuild after illness: the coach drafts it, the validator checks it, and you see what moves, what it costs and why. Facts are refused (a session moved into the past, something already done altered, two runs on one day). Judgments are shown to you and never block (not one of your usual days, hard days back to back, a jump in volume). Nothing changes unless you approve; when you do, the new sessions go to your watch through the provider's calendar.
 
@@ -44,7 +44,7 @@ The full reasoning is in [docs/design/agent-first.md](docs/design/agent-first.md
 
 **Each day has one overview.** The Today tile opens it: the coach's morning status, what you told the coach on waking and after a workout, the numbers your provider measured (sleep, resting heart rate, HRV, form), and what was planned and done. Step back a day at a time to look at earlier ones.
 
-**The app draws no charts of its own.** Your provider already has them, and better: the activity, fitness and day cards show the numbers and link to the provider's page for the pictures.
+**The app draws no charts of its own.** Your provider already has them, and better: the activity and day cards show the numbers and link to the provider's page for the pictures.
 
 **You can start the conversation over.** Clear gives the coach one turn to save what matters to its notes and the journal, then empties the page and starts a new session. Nothing in your data is removed, and the earlier conversation stays in the stream file.
 
