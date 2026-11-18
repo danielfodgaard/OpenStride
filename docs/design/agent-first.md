@@ -196,13 +196,13 @@ A wrong fact in the record is fixed at the source, on the provider, and comes ba
 
 **The analyst** (the only way to run computation outside the interface agent's own shell):
 
-- `openstride analyse "<question>" [--web] [--effort high]` : starts an analyst run in the sandbox with the question and the thread's relevant context, waits, and prints the report path and a summary. The analyst's charts go through `show chart`, its proposals through `plan draft`, so they arrive in the stream like anything else. The analyst itself is also a plug-in point: the default is a harness session in the sandbox, but a run can be routed to an external analysis service that takes a question and the workspace and returns a report in the same folder shape
+- `openstride analyse "<question>" [--web] [--effort high]` : starts an analyst run in the sandbox with the question and the thread's relevant context, waits, and prints the report path and a summary. The analyst's tables go through `show table`, its proposals through `plan draft`, so they arrive in the stream like anything else. The analyst itself is also a plug-in point: the default is a harness session in the sandbox, but a run can be routed to an external analysis service that takes a question and the workspace and returns a report in the same folder shape
 - `openstride reports` : what the analyst has produced, newest first
 
 **Showing things** (the only way to put a card in the stream):
 
-- `openstride show week [N|this|next]`, `show session <key>`, `show activity <id>`, `show fitness [--from --to]`, `show volume`, `show plan`
-- `openstride show table --from <file.json>` and `openstride show chart --spec <file.json>` for ad-hoc analysis: a Markdown table, or a small line/bar chart over dates, from data the agent computed
+- `openstride show week [N|this|next]`, `show session <key>`, `show activity <id>`, `show day [date]`, `show plan`
+- `openstride show table --from <file.json>` for ad-hoc analysis: a table from data the agent computed. There is no chart card: the app draws no charts of its own, and the activity and day cards link to the provider's page, which has them
 - `openstride ask "Which day suits you?" --options Tue Wed Thu` : a choice card, when a question is better tapped than typed
 
 **Housekeeping**:
@@ -272,7 +272,7 @@ The interface agent is good at the everyday: reading the last run, explaining a 
 **What it returns.** Only authored things:
 
 - a report folder under `reports/`, with the Markdown report, the charts, the scripts and the derived data
-- cards, through `show chart` and `show table`, which the server renders into the stream under the interface agent's reply
+- cards, through `show table`, which the server renders into the stream under the interface agent's reply
 - a proposal, through `plan draft`, when the question was about the plan or the findings warrant one, which lands as the same approval card as any other
 - additions to `athlete/gear.yaml` or a suggested note for `memory.md`, handed back to the interface agent to write, since the analyst does not write the workspace
 
@@ -304,7 +304,7 @@ One screen. The current five tabs, the forms and the menus go.
 
 **What the athlete can still do without the agent:** approve or reject a proposal, read cards, scroll the stream, and open a *Data* drawer that lists the workspace files read-only, with the git log. The drawer is for trust and debugging. It is not navigation.
 
-**Offline:** the glance header, this week's card and the last few cards are cached by the service worker, as this week's plan is today. Sending a message queues it until the server is reachable.
+**Offline:** not supported. The page needs the server; `static/sw.js` only retires the service worker earlier versions installed.
 
 **Phone first.** A conversation with cards is a better phone interface than today's tables. The laptop gets the same screen, wider, with the Data drawer open beside the stream.
 
@@ -406,7 +406,7 @@ Levers, all settings: the model per role (main, triggers, subagents), effort per
 | `activities.py`, `series.py`, `metrics.py` | Leave the core; they can become the local provider for an athlete who wants no cloud service |
 | `workout_fit.py`, `garmin/*` | Removed; a provider with a calendar delivers workouts. The `.fit` encoder may return as the local provider's download |
 | `memory.py` | Stays as a file convention; git replaces its versioning |
-| `static/` | Rewritten as the stream and the card renderer; `charts.js` survives inside the activity and fitness cards |
+| `static/` | Rewritten as the stream and the card renderer; there is no chart code: the provider's pages are linked instead |
 | Tests | The fact modules keep theirs. New tests: the gate and the write boundary (every way around them), the card renderer, the provider contract against a fake provider that every real one must also pass, the intervals.icu connector against a recorded API, the analyst sandbox (no write, no network, no secrets), the triggers, and the skills against the demo workspace with a recorded model |
 | The offline demo | Stays, as a demo workspace with a recorded session, and is how the surface is developed without an API key |
 

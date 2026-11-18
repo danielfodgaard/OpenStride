@@ -47,14 +47,14 @@ def test_the_glance_header_with_nothing_yet(ws):
         cards.build("week")
 
 
-def test_an_activity_card_has_the_planned_session_the_review_and_a_chart(demo_ws):
+def test_an_activity_card_has_the_planned_session_and_the_review_and_draws_nothing(demo_ws):
     row = next(r for r in mirror.rows() if r["sport"] == "run")
     notes = workspace.root() / "notes" / row["key"]
     notes.mkdir(parents=True)
     (notes / "review.md").write_text("Tempo done to target.")
     card = cards.build("activity", {"key": row["key"]})
     assert card["planned"]["modality"] == "run" and card["review"] == "Tempo done to target." and "source" not in card
-    assert 100 < len(card["series"]["points"]) <= 600 and len(card["series"]["points"][0]) == 8
+    assert "series" not in card and card["link"] is None  # the demo provider has no page of its own to link to
     with pytest.raises(cards.CardError):
         cards.build("activity", {"key": "missing"})
 
@@ -73,16 +73,47 @@ def test_a_proposal_card_shows_the_difference_before_and_after_approval(demo_ws)
     assert after["status"] == "approved" and after["diff"][0]["entries"][0]["kind"] == "moved"  # still what it changed
 
 
-def test_fitness_volume_and_plan_cards(demo_ws):
-    fitness = cards.build("fitness")
-    assert fitness["latest"]["date"] == "2026-11-25" and fitness["race_date"] == "2027-01-10"
-    volume = cards.build("volume")["weeks"]
-    assert len(volume) == 10 and volume[0]["done_km"] > 0 and volume[-1]["future"]
+def test_the_plan_card(demo_ws):
     overview = cards.build("plan")
-    assert overview["days_to_go"] == 46 and overview["phases"][0]["phase"] == "base" and overview["paces"]["threshold"]
+    assert overview["days_to_go"] == 46 and overview["paces"]["threshold"] and overview["current_week"] == 4
+    phases = overview["phases"]
+    assert phases[0]["phase"] == "base" and phases[0]["from_week"] == 1 and phases[0]["start_date"] == overview["all_weeks"][0]["start_date"]
+    assert [p["to_week"] + 1 for p in phases[:-1]] == [p["from_week"] for p in phases[1:]] and phases[-1]["to_week"] == 10
+    assert sum(p["current"] for p in phases) == 1 and round(sum(p["planned_km"] for p in phases), 1) == round(sum(w["planned_km"] for w in overview["all_weeks"]), 1)
     weeks = overview["all_weeks"]
     assert [w["week_number"] for w in weeks] == list(range(1, 11)) and [w["week_number"] for w in weeks if w["current"]] == [4]
     assert all(w["sessions"] for w in weeks) and weeks[0]["sessions"][0]["state"] in ("done", "missed") and weeks[9]["sessions"][-1]["type"] == "race"
+    assert not weeks[3]["future"] and weeks[4]["future"]
+
+
+def test_the_provider_links_to_its_own_charts():
+    from app.providers.intervals_icu import IntervalsIcu
+
+    provider = IntervalsIcu("i1", "key")
+    assert provider.web_url("activity", "i555") == "https://intervals.icu/activities/i555"
+    assert provider.web_url("fitness") == "https://intervals.icu/fitness" and provider.web_url("activity") == "" and provider.web_url("other") == ""
+
+
+def test_a_day_card_gathers_the_morning_status_the_check_ins_and_the_training(demo_ws, monkeypatch):
+    from app.hub import hub
+
+    monkeypatch.setattr(workspace, "now_iso", lambda: "2026-11-25T06:40:00+00:00")
+    hub.stream.append("message", role="coach", text="HRV in range. Easy ride today.", origin="morning_brief")
+    hub.stream.append("message", role="coach", text="Not a status.", origin="athlete")
+    hub.stream.append("clear")  # a cleared conversation still belongs to its day
+    (workspace.root() / "checkins").mkdir(exist_ok=True)
+    (workspace.root() / "checkins" / "2026-11-25.md").write_text("- 07:10 morning: slept well")
+    today = cards.build("day")
+    assert today["is_today"] and today["date"] == "2026-11-25" and today["next"] is None and today["previous"] == "2026-11-24"
+    assert [said["text"] for said in today["coach"]] == ["HRV in range. Easy ride today."] and today["checkins"] == "- 07:10 morning: slept well"
+    assert today["sessions"][0]["title"] == "Easy ride 30 min" and today["wellness"]["form"] == cards.glance()["form"]["value"]
+    done = next(row for row in mirror.rows() if row["sport"] == "run")
+    earlier = cards.build("day", {"date": done["date"]})
+    assert not earlier["is_today"] and earlier["next"] and earlier["coach"] == [] and earlier["checkins"] == ""
+    assert done["key"] in {a["key"] for a in earlier["activities"]}
+    assert cards.build("day", {"date": "yesterday"})["date"] == "2026-11-24"
+    with pytest.raises(cards.CardError, match="YYYY-MM-DD"):
+        cards.build("day", {"date": "soon"})
 
 
 def test_static_cards_are_checked_so_the_agent_gets_a_usable_error():
@@ -90,11 +121,10 @@ def test_static_cards_are_checked_so_the_agent_gets_a_usable_error():
     assert table["columns"] == ["Date", "Pace"]
     with pytest.raises(cards.CardError, match="every row as long as columns"):
         cards.build("table", data={"columns": ["a", "b"], "rows": [[1]]})
-    chart = cards.build("chart", data={"title": "Pace at 140 bpm", "kind": "line", "x": ["w1", "w2"], "series": [{"name": "pace", "values": [340, None]}]})
-    assert chart["series"][0]["values"] == [340, None]
-    for bad in ({"kind": "pie", "x": [1], "series": [{"values": [1]}]}, {"kind": "line", "x": [1, 2], "series": [{"values": [1]}]}, {"kind": "bar", "x": [1], "series": [{"values": ["a"]}]}):
-        with pytest.raises(cards.CardError):
-            cards.build("chart", data=bad)
+    with pytest.raises(cards.CardError, match="no 'chart' card"):  # the app draws no charts of its own
+        cards.build("chart", data={"kind": "line", "x": [1], "series": [{"values": [1]}]})
+    with pytest.raises(cards.CardError, match="no 'fitness' card"):  # the day card has those numbers
+        cards.build("fitness")
     with pytest.raises(cards.CardError, match="two to six"):
         cards.build("choice", data={"question": "Which day?", "options": ["Tue"]})
     with pytest.raises(cards.CardError, match="no 'pie' card"):

@@ -1,5 +1,8 @@
 """The stream: everything the athlete sees, in order. Messages, cards and approvals are kept in an
 append-only file; status lines and the words of a reply as they are written pass through and are gone.
+
+Clearing the conversation appends a `clear` event. The page is shown what comes after the last one;
+what came before stays in the file.
 """
 import asyncio
 import json
@@ -7,7 +10,7 @@ import threading
 
 from app import workspace
 
-PERSISTED = {"message", "card", "proposal", "notice", "turn"}
+PERSISTED = {"message", "card", "proposal", "notice", "turn", "clear"}
 
 
 class Stream:
@@ -63,15 +66,23 @@ class Stream:
         else:
             loop.call_soon_threadsafe(deliver)
 
-    def history(self, after: int = 0, before: int | None = None, limit: int = 100) -> list[dict]:
+    def _events(self) -> list[dict]:
         if not self.path.exists():
             return []
-        events = [json.loads(line) for line in self.path.read_text().splitlines() if line.strip()]
-        events = [e for e in events if e["id"] > after and (before is None or e["id"] < before)]
+        return [json.loads(line) for line in self.path.read_text().splitlines() if line.strip()]
+
+    def cleared(self) -> int:
+        """The id of the last clear; the conversation the athlete sees starts after it."""
+        return max((e["id"] for e in self._events() if e["type"] == "clear"), default=0)
+
+    def history(self, after: int = 0, before: int | None = None, limit: int = 100, everything: bool = False) -> list[dict]:
+        events = self._events()
+        floor = 0 if everything else max((e["id"] for e in events if e["type"] == "clear"), default=0)
+        events = [e for e in events if e["id"] > max(after, floor) and (before is None or e["id"] < before)]
         return events[-limit:] if not after else events[:limit]
 
     def last(self, kind: str, **match) -> dict | None:
-        for event in reversed(self.history(limit=10**9)):
+        for event in reversed(self.history(limit=10**9, everything=True)):
             if event["type"] == kind and all(event.get(k) == v for k, v in match.items()):
                 return event
         return None

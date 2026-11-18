@@ -47,12 +47,12 @@ STATUS_BY_COMMAND = (
 STATUS_BY_PATH = (
     ("plan/", "Reading the plan…"), ("proposals/", "Reading a proposal…"), ("activities/", "Reading your runs…"),
     ("wellness/", "Reading your wellness data…"), ("athlete/memory.md", "Reading my notes about you…"),
-    ("athlete/", "Reading your profile…"), ("journal/", "Reading the journal…"), ("notes/", "Reading a review…"),
+    ("athlete/", "Reading your profile…"), ("journal/", "Reading the journal…"), ("notes/", "Reading a review…"), ("checkins/", "Reading how you have been…"),
     ("reports/", "Reading a report…"), ("GUIDE.md", "Checking the guide…"),
 )
 WRITE_STATUS = (
     ("athlete/memory.md", "Updating my notes about you…"), ("journal/", "Writing the journal…"),
-    ("notes/", "Writing a review…"), ("settings.yaml", "Changing a setting…"),
+    ("notes/", "Writing a review…"), ("checkins/", "Noting how you feel…"), ("settings.yaml", "Changing a setting…"),
 )
 
 

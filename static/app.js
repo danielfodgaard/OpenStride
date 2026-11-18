@@ -1,11 +1,11 @@
 // The page: one stream to read, one box to write in. It draws what the server sends and computes nothing.
-import { LIVE, renderCard } from "./cards.js";
+import { LIVE, known, renderCard } from "./cards.js";
 import { amount, chip, dateText, el, timeText } from "./format.js";
 import { markdown } from "./md.js";
 
 const $ = (id) => document.getElementById(id);
 const events = $("events"), live = $("live"), streamBox = $("stream"), peek = $("peek"), drawer = $("drawer");
-const state = { first: null, last: 0, busy: false, files: [], liveCards: new Map(), source: null, retry: 1000, typing: null };
+const state = { first: null, last: 0, cleared: 0, busy: false, files: [], liveCards: new Map(), source: null, retry: 1000, typing: null };
 
 // --- talking to the server ---------------------------------------------------------------------
 async function api(path, options = {}) {
@@ -16,8 +16,6 @@ async function api(path, options = {}) {
     throw new Error("The server can't be reached.");
   }
   if (response.status === 401) { location.href = "/login"; throw new Error("Log in again."); }
-  const offline = response.headers.get("X-OpenStride-Offline") === "1";
-  setOffline(offline || Boolean(response.headers.get("X-OpenStride-Saved-At")) && !navigator.onLine);
   let body = null;
   try { body = await response.json(); } catch { /* no body */ }
   if (!response.ok) throw new Error(body?.detail || body?.error || `The server answered ${response.status}.`);
@@ -25,12 +23,6 @@ async function api(path, options = {}) {
 }
 
 const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-
-function setOffline(offline) {
-  const banner = $("offline-banner");
-  banner.hidden = !offline;
-  if (offline) banner.textContent = "Offline: showing what this device saved. Messages wait until the server is back.";
-}
 
 function toast(text) {
   const node = el("div", text, "toast");
@@ -89,7 +81,7 @@ function renderEvent(event) {
     for (const name of event.attachments || []) row.append(chip(name));
     return row;
   }
-  if (event.type === "card") return cardEvent(event, event.card, event.args, event.data);
+  if (event.type === "card") return known(event.card) ? cardEvent(event, event.card, event.args, event.data) : null;
   if (event.type === "proposal") return cardEvent(event, "proposal", { id: event.proposal_id });
   if (event.type === "notice") return el("p", event.text, `stream-note ${event.level || ""}`);
   if (event.type === "turn" && event.state === "failed") return el("p", event.error || "That turn failed.", "stream-note warning");
@@ -125,8 +117,9 @@ async function loadHistory() {
   events.replaceChildren();
   state.last = 0;
   state.first = null;
+  state.cleared = data.cleared || 0;
   for (const event of data.events) addEvent(event);
-  $("earlier").hidden = !(state.first && state.first > 1);
+  $("earlier").hidden = !(state.first && state.first > state.cleared + 1);
   setBusy(data.busy);
   if (!data.events.length) events.append(emptyState());
   scrollDown(true);
@@ -151,7 +144,7 @@ $("earlier").addEventListener("click", async () => {
   const data = await api(`/api/stream?limit=80&before=${state.first}`);
   const height = document.documentElement.scrollHeight;
   for (const event of data.events.reverse()) addEvent(event, { prepend: true });
-  $("earlier").hidden = !(state.first && state.first > 1) || !data.events.length;
+  $("earlier").hidden = !(state.first && state.first > state.cleared + 1) || !data.events.length;
   window.scrollTo({ top: document.documentElement.scrollHeight - height + window.scrollY });
 });
 
@@ -187,9 +180,9 @@ function connect() {
   state.source = source;
   source.addEventListener("open", async () => {
     state.retry = 1000;
-    setOffline(false);
     try {  // whatever was missed while the connection was down
       const data = await api(`/api/stream?after=${state.last}&limit=500`);
+      if ((data.cleared || 0) !== state.cleared) { await loadHistory(); return; }  // cleared while this page was away
       events.querySelector(".welcome")?.remove();
       for (const event of data.events) addEvent(event);
       setBusy(data.busy);
@@ -207,6 +200,7 @@ function connect() {
     if (event.state === "started") setBusy(true);
     else { addEvent(event); clearTyping(); }
   });
+  on("clear", () => loadHistory().catch(() => {}));
   on("busy", (event) => setBusy(event.busy));
   on("status", (event) => showTyping(event.text));
   on("delta", (event) => {
@@ -309,16 +303,16 @@ async function loadGlance() {
   try { data = await api("/api/glance"); } catch { return; }
   const box = $("glance");
   const tiles = [];
+  const today = data.sessions_today;
+  const first = today[0];
+  const label = !data.has_plan ? dateText(data.today) : !today.length ? "Rest day" : today.map((s) => s.title).join(" + ");
+  const state_ = first ? { done: "done", skipped: "skipped", replaced: "did something else" }[first.state] || amount(first) : "your day";
+  tiles.push(tile("Today", label, state_, () => ctx.peek("day", { date: "today" })));
   if (data.has_plan) {
-    const today = data.sessions_today;
-    const first = today[0];
-    const label = !today.length ? "Rest day" : today.map((s) => s.title).join(" + ");
-    const state_ = first ? { done: "done", skipped: "skipped", replaced: "did something else" }[first.state] || amount(first) : "";
-    tiles.push(tile("Today", label, state_, () => ctx.peek("week", { week: "this" })));
     if (data.next_hard) tiles.push(tile("Next key session", data.next_hard.title, dateText(data.next_hard.date), () => ctx.peek("session", { id: data.next_hard.id })));
-    if (data.week) tiles.push(tile(`Week ${data.week.week_number} of ${data.week.of}`, `${data.week.done_km} / ${data.week.planned_km} km`, `${data.week.sessions_done} of ${data.week.sessions_planned} sessions`, () => ctx.peek("volume", {})));
+    if (data.week) tiles.push(tile(`Week ${data.week.week_number} of ${data.week.of}`, `${data.week.done_km} / ${data.week.planned_km} km`, `${data.week.sessions_done} of ${data.week.sessions_planned} sessions`, () => ctx.peek("week", { week: "this" })));
   }
-  if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("fitness", {})));
+  if (data.form) tiles.push(tile("Form", String(data.form.value), `fitness ${data.form.fitness}`, () => ctx.peek("day", { date: "today" })));
   if (data.has_plan) tiles.push(tile("Race", data.days_to_race >= 0 ? `${data.days_to_race} days` : "Done", data.goal, () => ctx.peek("plan", {})));
   if (data.pending_proposals?.length) tiles.push(tile("Waiting for you", `${data.pending_proposals.length} proposal${data.pending_proposals.length > 1 ? "s" : ""}`, "to approve or reject", () => ctx.peek("proposal", { id: data.pending_proposals[0] })));
   $("plan-button").hidden = !data.has_plan;
@@ -429,6 +423,25 @@ async function loadDrawer() {
 
 $("plan-button").addEventListener("click", () => ctx.peek("plan", {}));
 
+// Starting over: the coach saves what matters first, then the page empties. Nothing in the data is removed.
+$("clear-button").addEventListener("click", () => {
+  const box = el("div", null, "card-body");
+  box.append(el("h3", "Clear the conversation?"));
+  box.append(el("p", "Your coach first saves what matters from this conversation to its notes, then starts fresh with an empty page. Your plan, your activities, the journal and each day's overview stay as they are."));
+  const actions = el("div", null, "actions");
+  const yes = el("button", "Save notes and clear", "primary"), no = el("button", "Cancel");
+  yes.type = no.type = "button";
+  no.addEventListener("click", () => peek.close());
+  yes.addEventListener("click", async () => {
+    yes.disabled = true;
+    try { await post("/api/conversation/clear"); setBusy(true); peek.close(); } catch (error) { toast(error.message); peek.close(); }
+  });
+  actions.append(yes, no);
+  box.append(actions);
+  peek.replaceChildren(box);
+  if (!peek.open) peek.showModal();
+});
+
 $("data-button").addEventListener("click", () => {
   drawer.hidden = !drawer.hidden;
   $("data-button").setAttribute("aria-expanded", String(!drawer.hidden));
@@ -436,7 +449,7 @@ $("data-button").addEventListener("click", () => {
   if (!drawer.hidden) loadDrawer().catch((error) => drawer.replaceChildren(el("p", error.message, "notice")));
 });
 
-// --- theme, service worker, start --------------------------------------------------------------
+// --- theme, start --------------------------------------------------------------
 const themeButton = $("theme-toggle");
 function showTheme() {
   const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -448,12 +461,9 @@ themeButton.addEventListener("click", () => {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   try { localStorage.setItem("openstride:theme", dark ? "dark" : "light"); } catch { /* private mode */ }
   showTheme();
-  refreshLive();  // charts take their colours when drawn
 });
 showTheme();
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-window.addEventListener("online", () => setOffline(false));
 
 loadHistory().catch((error) => events.replaceChildren(el("p", error.message, "notice"))).finally(connect);
 loadGlance();

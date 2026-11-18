@@ -3,14 +3,13 @@ workspace, the same way every time, and the page draws it. A card is built again
 so a week card always shows the plan as it stands.
 """
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from app import clock, matching, mirror, plan, workspace
+from app import clock, matching, mirror, plan, providers, workspace
+from app.hub import hub
 from app.models import PlanDoc
 
 HARD_TYPES = ("tempo", "intervals", "long", "race")
-CHART_POINTS = 500
-CHART_KINDS = ("line", "bar")
 
 
 class CardError(Exception):
@@ -59,7 +58,7 @@ def week_view(doc: PlanDoc, week, today: date, found: matching.Matching, by_key:
         "done_km": round(sum(row["distance_km"] or 0 for row in in_week if row["sport"] == "run"), 1),
         "sessions_planned": len(countable),
         "sessions_done": sum(s["state"] in ("done", "replaced") for s in countable),
-        "current": week.start_date <= today <= end,
+        "current": week.start_date <= today <= end, "future": week.start_date > today,
         "sessions": sessions, "unplanned": extra,
     }
 
@@ -106,28 +105,20 @@ def session_card(id: str = "", **_) -> dict:
     return session_view(session, today, matches(doc), {row["key"]: row for row in mirror.rows()}) | {"week_number": week.week_number if week else None}
 
 
-def chart_series(streams: dict) -> dict | None:
-    """The recording thinned for a chart: km, seconds, pace, heart rate, position, altitude, cadence per row."""
-    columns = streams.get("columns") or {}
-    times = columns.get("time_s") or []
-    if len(times) < 2:
-        return None
-    step = max(len(times) // CHART_POINTS, 1)
-    get = lambda name, i: (columns.get(name) or [None] * len(times))[i] if i < len(columns.get(name) or times) else None
-    rows = []
-    for i in range(0, len(times), step):
-        speed, distance = get("speed_mps", i), get("distance_m", i)
-        rows.append([
-            round(distance / 1000, 3) if distance is not None else None, times[i],
-            round(1000 / speed) if speed and speed >= 0.5 else None, get("hr", i), get("lat", i), get("lon", i),
-            get("altitude_m", i), get("cadence", i),
-        ])
-    return {"points": rows}
+def provider_link(kind: str, ident: str = "") -> dict | None:
+    """Where the provider shows this itself, with its own charts. OpenStride draws none."""
+    provider = providers.active()
+    url = provider.web_url(kind, ident) if provider is not None and hasattr(provider, "web_url") else ""
+    return {"url": url, "label": f"Open in {provider.name}"} if url else None
+
+
+def note_file(*parts: str) -> str:
+    path = workspace.root().joinpath(*parts)
+    return path.read_text() if path.exists() else ""
 
 
 def note_text(key: str, name: str) -> str:
-    path = workspace.root() / "notes" / key / name
-    return path.read_text() if path.exists() else ""
+    return note_file("notes", key, name)
 
 
 def activity_card(key: str = "", id: str = "", **_) -> dict:
@@ -139,17 +130,11 @@ def activity_card(key: str = "", id: str = "", **_) -> dict:
     found = matches(doc)
     session_id = found.by_activity.get(record["key"], "")
     session = doc.plan.session(session_id) if doc and session_id else None
-    series = None
-    if not record["partial"]:
-        try:
-            series = chart_series(mirror.streams(record["key"]))
-        except Exception:  # a chart is a nicety: the card still shows without it
-            series = None
     return {k: v for k, v in record.items() if k != "source"} | {
         "planned": session.model_dump(mode="json") if session else None,
         "review": note_text(record["key"], "review.md"),
         "athlete_note": note_text(record["key"], "athlete.md"),
-        "series": series,
+        "link": provider_link("activity", record.get("id") or ""),
     }
 
 
@@ -159,47 +144,71 @@ def activities_card(limit: int = 10, **_) -> dict:
     return {"activities": [activity_brief(row) | {"session_id": found.by_activity.get(row["key"], "")} for row in rows]}
 
 
-def fitness_card(**args) -> dict:
-    today = clock.today()
-    doc = plan.load()
-    start = args.get("from") or (doc.plan.weeks[0].start_date - timedelta(days=14) if doc else today - timedelta(days=90)).isoformat()
-    end = args.get("to") or today.isoformat()
-    days = [
-        {key: day.get(key) for key in ("date", "fitness", "fatigue", "form", "ramp")}
-        for day in mirror.wellness(str(start), str(end)) if day.get("fitness") is not None
-    ]
-    if not days:
-        raise CardError("There is no fitness data in wellness/ yet. Sync first, or the provider has none.")
-    return {"days": days, "race_date": doc.request.race_date.isoformat() if doc else None, "latest": days[-1]}
-
-
-def volume_card(**_) -> dict:
-    doc, today = need_plan(), clock.today()
-    found, by_key = matches(doc), {row["key"]: row for row in mirror.rows()}
-    weeks = []
+def phase_spans(doc: PlanDoc, today: date) -> list[dict]:
+    spans = []
     for week in doc.plan.weeks:
-        view = week_view(doc, week, today, found, by_key)
-        weeks.append({key: view[key] for key in ("week_number", "start_date", "phase", "planned_km", "done_km", "sessions_planned", "sessions_done", "current")} | {"future": week.start_date > today})
-    return {"weeks": weeks}
+        end = week.start_date + timedelta(days=6)
+        if spans and spans[-1]["phase"] == week.phase:
+            spans[-1] |= {"to_week": week.week_number, "end_date": end.isoformat()}
+        else:
+            spans.append({"phase": week.phase, "from_week": week.week_number, "to_week": week.week_number, "start_date": week.start_date.isoformat(), "end_date": end.isoformat()})
+    for span in spans:
+        span["current"] = span["start_date"] <= today.isoformat() <= span["end_date"]
+        span["past"] = span["end_date"] < today.isoformat()
+        span["planned_km"] = round(sum(w.planned_km for w in doc.plan.weeks if span["from_week"] <= w.week_number <= span["to_week"]), 1)
+    return spans
 
 
 def plan_card(**_) -> dict:
     doc, today = need_plan(), clock.today()
     found, by_key = matches(doc), {row["key"]: row for row in mirror.rows()}
     current = pick_week(doc, "this", today)
-    phases = []
-    for week in doc.plan.weeks:
-        if phases and phases[-1]["phase"] == week.phase:
-            phases[-1]["to_week"] = week.week_number
-        else:
-            phases.append({"phase": week.phase, "from_week": week.week_number, "to_week": week.week_number})
     return {
         "goal": doc.request.goal_description, "race_date": doc.request.race_date.isoformat(), "race_distance_km": doc.request.race_distance_km,
         "goal_time": doc.request.goal_time, "days_to_go": (doc.request.race_date - today).days, "summary": doc.plan.summary,
-        "warnings": doc.plan.warnings, "paces": doc.paces.model_dump(), "phases": phases, "weeks": len(doc.plan.weeks),
-        "this_week": week_view(doc, current, today, found, by_key),
+        "warnings": doc.plan.warnings, "paces": doc.paces.model_dump(), "phases": phase_spans(doc, today), "weeks": len(doc.plan.weeks),
+        "current_week": current.week_number if current.start_date <= today <= current.start_date + timedelta(days=6) else None,
         "all_weeks": [week_view(doc, week, today, found, by_key) for week in doc.plan.weeks],
         "versions": plan.history(limit=10),
+    }
+
+
+WELLNESS_SHOWN = ("sleep_h", "sleep_score", "resting_hr", "hrv", "readiness", "fitness", "fatigue", "form", "ramp", "weight_kg", "soreness", "tiredness", "stress", "mood", "motivation")
+COACH_STATUS = ("morning_brief", "wellness_signal")
+
+
+def local_day(iso: str) -> str:
+    """The athlete's calendar day of a stream event, whose time is kept in UTC."""
+    return datetime.fromisoformat(iso).astimezone().date().isoformat()
+
+
+def day_card(**args) -> dict:
+    """One day in one place: what the coach said that morning, what the athlete reported, what was planned and done."""
+    today = clock.today()
+    which = str(args.get("date") or "today")
+    try:
+        day = today if which == "today" else today - timedelta(days=1) if which == "yesterday" else date.fromisoformat(which)
+    except ValueError as error:
+        raise CardError("A day is YYYY-MM-DD, today or yesterday.") from error
+    iso = day.isoformat()
+    doc = plan.load()
+    found, by_key = matches(doc), {row["key"]: row for row in mirror.rows()}
+    sessions = [session_view(s, today, found, by_key) for s in doc.plan.sessions() if s.date == day] if doc else []
+    activities = [
+        activity_brief(row) | {"athlete_note": note_text(row["key"], "athlete.md"), "planned": bool(found.by_activity.get(row["key"]))}
+        for row in by_key.values() if row["date"] == iso
+    ]
+    wellness = next(iter(mirror.wellness(iso, iso)), {})
+    said = [e for e in hub.stream.history(limit=10**9, everything=True) if e["type"] == "message" and local_day(e["at"]) == iso]
+    return {
+        "date": iso, "is_today": day == today, "previous": (day - timedelta(days=1)).isoformat(),
+        "next": (day + timedelta(days=1)).isoformat() if day < today else None,
+        "sessions": sessions, "activities": activities,
+        "wellness": {key: wellness[key] for key in WELLNESS_SHOWN if wellness.get(key) is not None},
+        "wellness_comments": wellness.get("comments") or "",
+        "coach": [{"at": e["at"], "origin": e["origin"], "text": e["text"]} for e in said if e.get("role") == "coach" and e.get("origin") in COACH_STATUS],
+        "checkins": note_file("checkins", f"{iso}.md"),
+        "link": provider_link("wellness", iso),
     }
 
 
@@ -247,28 +256,6 @@ def table_card(data=None, **_) -> dict:
     return {"title": str(data.get("title") or ""), "columns": [str(c) for c in columns], "rows": rows, "note": str(data.get("note") or "")}
 
 
-def chart_card(data=None, **_) -> dict:
-    data = data or {}
-    series, x = data.get("series"), data.get("x")
-    usage = (
-        'A chart needs {"title": "...", "kind": "line" or "bar", "x": [labels or dates], "x_label": "", "y_label": "", '
-        '"series": [{"name": "...", "values": [numbers or null]}]} with every series as long as x.'
-    )
-    if data.get("kind") not in CHART_KINDS or not isinstance(x, list) or not x or not isinstance(series, list) or not series:
-        raise CardError(usage)
-    for item in series:
-        values = item.get("values") if isinstance(item, dict) else None
-        if not isinstance(values, list) or len(values) != len(x) or not all(v is None or isinstance(v, (int, float)) for v in values):
-            raise CardError(usage)
-    if len(x) > 1000 or len(series) > 6:
-        raise CardError("A chart card holds at most 1000 points and 6 series.")
-    return {
-        "title": str(data.get("title") or ""), "kind": data["kind"], "x": x, "x_label": str(data.get("x_label") or ""),
-        "y_label": str(data.get("y_label") or ""), "series": [{"name": str(s.get("name") or ""), "values": s["values"]} for s in series],
-        "note": str(data.get("note") or ""),
-    }
-
-
 def choice_card(data=None, **_) -> dict:
     data = data or {}
     options = data.get("options")
@@ -279,10 +266,10 @@ def choice_card(data=None, **_) -> dict:
 
 BUILDERS = {
     "week": week_card, "session": session_card, "activity": activity_card, "activities": activities_card,
-    "fitness": fitness_card, "volume": volume_card, "plan": plan_card, "proposal": proposal_card, "report": report_card,
-    "table": table_card, "chart": chart_card, "choice": choice_card,
+    "day": day_card, "plan": plan_card, "proposal": proposal_card, "report": report_card,
+    "table": table_card, "choice": choice_card,
 }
-STATIC = ("table", "chart", "choice")  # their data is what the agent computed, kept with the event
+STATIC = ("table", "choice")  # their data is what the agent computed, kept with the event
 
 
 def build(card: str, args: dict | None = None, data: dict | None = None) -> dict:

@@ -29,6 +29,6 @@ One activity in full is `activities/<key>.json`; its recording is fetched with `
 
 `report/report.md`: the answer in the first paragraph, then a short table or the key numbers, a chart if it shows something a number does not, then method and limits. Save scripts and derived tables in `report/`. Charts for the report: matplotlib, saved as PNG in `report/`, linked with a relative path.
 
-For the athlete's stream, at most two cards: `openstride show chart --from chart.json` (line or bar, up to 6 series and 1000 points) or `openstride show table --from table.json` (up to 200 rows). Title them with the finding, not the method.
+For the athlete's stream, at most two cards: `openstride show table --from table.json` (up to 200 rows). The stream draws no charts; a chart belongs in the report. Title them with the finding, not the method.
 
 Your last message summarises for the coach.

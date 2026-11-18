@@ -24,7 +24,7 @@ RECORDED = ("activities", "wellness", "athlete/profile.yaml")
 SERVER_ONLY = (".git", ".claude", ".gitignore", "GUIDE.md", "proposals", "reports")
 PROTECTED = GATED + RECORDED + SERVER_ONLY
 TRACKED_PROTECTED = tuple(p for p in PROTECTED if p != ".git")
-AUTHORED_DIRS = ("athlete", "notes", "journal", "journal/weeks", "scratch")
+AUTHORED_DIRS = ("athlete", "notes", "checkins", "journal", "journal/weeks", "scratch")
 # Empty placeholders the OS sandbox mounts over names it guards. They are not the athlete's data.
 SANDBOX_LITTER = (
     ".env", ".env.development", ".env.development.local", ".env.local", ".env.production", ".env.production.local", ".env.test",

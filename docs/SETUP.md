@@ -97,7 +97,7 @@ The server stays bound to localhost; only devices in your tailnet can reach it. 
 
 On a server without Tailscale installed, uncomment the `tailscale` service in `compose.yaml`, follow the notes there, and put `TS_AUTHKEY` in `.env`.
 
-The glance header, this week and the cards you opened stay readable offline. A message waits for the server.
+The app needs a connection to the server; nothing is kept on the phone.
 
 ## Password
 
@@ -112,7 +112,7 @@ The server refuses to listen beyond localhost with no password, because it holds
 | Setting | Default | |
 |---|---|---|
 | `triggers.new_activity`, `week_end`, `plan_end`, `calendar_drift` | on | A review when a run arrives, a look back when a week ends, a report after the race, a question when the calendar was edited |
-| `triggers.morning_brief`, `morning_brief_time` | off, 07:30 | Two or three sentences on the day |
+| `triggers.morning_brief`, `morning_brief_time` | off, 07:30 | The morning status on the day's overview: how you come into the day from the provider's numbers, and what the day asks |
 | `triggers.wellness_signal`, `block_review` | off | A question when resting HR, HRV, sleep or form departs from your own baseline; a computed review every four weeks |
 | `quiet_hours` | 21:30 to 07:00 | Everything but a new activity waits for morning |
 | `budget.monthly_usd` | 0 (no cap) | The agent's own check-ins pause when the month reaches it; it still answers you |

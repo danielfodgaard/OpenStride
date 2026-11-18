@@ -23,12 +23,12 @@ One run is one data point. Flag what is worth watching (heart rate high for the 
 ## Write
 
 - `notes/<key>/review.md`: a headline, one to four observations with real numbers, and flags if any. Short.
-- `notes/<key>/athlete.md` when they told you how it felt.
+- `notes/<key>/athlete.md` when they told you how it felt, and the same in a line of `checkins/<date>.md`.
 - A line in today's journal.
 - Your notes about the athlete, if this run taught you something lasting about how they respond.
 
 ## Say
 
-Two to four sentences for the athlete: did it do its job, the one number that shows it, and anything to watch. Show the activity card (`openstride show activity <key>`) when the shape of the run is the point. If something that matters is unknown, ask one question, such as how it felt, if they gave no RPE. For an unremarkable easy run, one or two sentences is right.
+Two to four sentences for the athlete: did it do its job, the one number that shows it, and anything to watch. Show the activity card (`openstride show activity <key>`) when the numbers or the laps are the point; it links to the provider's page for the charts. If something that matters is unknown, ask one question, such as how it felt, if they gave no RPE. For an unremarkable easy run, one or two sentences is right.
 
 For a strength or cross-training session there is little to analyse: note that it is done and whether it replaced what was planned.

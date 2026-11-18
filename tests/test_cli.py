@@ -178,7 +178,7 @@ def test_every_server_backed_command_sends_a_body_that_can_be_written(demo_ws, m
     table.write_text(json.dumps({"columns": ["a"], "rows": [[1]]}))
     for args in (
         ["analyse", "Is my easy pace drifting?", "--context", "asked today", "--web"], ["analyse", "--run", "2026-11-25T10-00_x", "--wait", "5"],
-        ["show", "week", "next"], ["show", "activity", "abc"], ["show", "fitness", "--since", "2026-11-01"], ["show", "table", "--from", str(table)],
+        ["show", "week", "next"], ["show", "activity", "abc"], ["show", "day", "yesterday"], ["show", "table", "--from", str(table)],
         ["ask", "Which day?", "--options", "Tue", "Wed"], ["plan", "draft", "--from", str(draft), "--rationale", "why"],
         ["source", "sync", "--since", "2026-11-01"], ["source", "streams", "abc"], ["source", "push", "--force"], ["source", "capabilities"],
         ["source", "wellness", "--set", "soreness=3", "--set", "comments=left calf"], ["source", "log", "--sport", "strength", "--minutes", "25", "--rpe", "5"],

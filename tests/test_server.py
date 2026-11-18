@@ -138,3 +138,14 @@ def test_the_server_refuses_to_listen_openly_without_a_password(monkeypatch):
     monkeypatch.setenv("OPENSTRIDE_PASSWORD", "x")
     config.reload()
     assert config.open_server_problem() is None
+
+
+def test_clearing_from_the_page_empties_the_stream_and_keeps_the_file(client):
+    events = say(client, "How is this week going?")
+    assert client.post("/api/conversation/clear").status_code == 200
+    after = settle(client)
+    data = client.get("/api/stream").json()
+    assert data["cleared"] > events[-1]["id"] and [e["type"] for e in after if e["type"] != "turn"] == ["notice"]
+    assert len(hub.stream.history(everything=True)) > len(after)
+    assert client.get("/api/card", params={"type": "day"}).json()["is_today"]
+    assert client.get("/api/card", params={"type": "volume"}).status_code == 404  # the app draws no charts of its own

@@ -16,6 +16,7 @@ from app.providers import base
 from app.providers.base import Capabilities, ProviderError
 
 BASE_URL = "https://intervals.icu/api/v1"
+WEB_URL = "https://intervals.icu"
 TIMEOUT_S = 30
 RETRY_AFTER_LIMIT_S = 5
 
@@ -218,6 +219,11 @@ class IntervalsIcu:
     @property
     def athlete_path(self) -> str:
         return f"/athlete/{self.athlete_id}"
+
+    def web_url(self, kind: str, ident: str = "") -> str:
+        if kind == "activity":
+            return f"{WEB_URL}/activities/{ident}" if ident else ""
+        return f"{WEB_URL}/fitness" if kind in ("fitness", "wellness") else ""
 
     def check(self) -> dict:
         raw = self.get(self.athlete_path)

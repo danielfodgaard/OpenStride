@@ -31,6 +31,9 @@ class Demo:
         self.folder = Path(folder or os.environ.get("OPENSTRIDE_DEMO_PROVIDER") or FIXTURES)
         self._store = store
 
+    def web_url(self, kind: str, ident: str = "") -> str:
+        return ""
+
     @property
     def store(self) -> Path:
         return self._store or workspace.state() / "demo_provider.json"
